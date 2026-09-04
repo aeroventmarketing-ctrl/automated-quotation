@@ -52,7 +52,20 @@ export interface CheckRead {
    * eight boxes.
    */
   dateBoxes?: string | null;
-  amount: number | null; // (f) the figure in the peso box
+  /**
+   * (f) the amount the check is for.
+   *
+   * Taken from the PESOS line where that can be read back as a number, and from
+   * the peso box only when it cannot — see `amountFigures`.
+   */
+  amount: number | null;
+  /**
+   * (f) what the PESO BOX said, kept whenever it differed from the words.
+   *
+   * Null when the two agreed (the usual case) or when the words could not be
+   * parsed. Present means a disagreement worth a person's eye.
+   */
+  amountFigures?: number | null;
   amountWords: string | null; // (g) the amount spelled out on the PESOS line
   bank: string | null;
   confidence: number | null; // 0..1 — how sure of the exact digits
@@ -163,6 +176,7 @@ function coerceRead(v: unknown): CheckRead | undefined {
     clearingYMD: str("clearingYMD"),
     dateBoxes: str("dateBoxes"),
     amount: typeof o.amount === "number" && Number.isFinite(o.amount) ? o.amount : null,
+    amountFigures: typeof o.amountFigures === "number" && Number.isFinite(o.amountFigures) ? o.amountFigures : null,
     amountWords: str("amountWords"),
     bank: str("bank"),
     confidence: typeof o.confidence === "number" ? o.confidence : null,
@@ -422,6 +436,19 @@ export function amountMatchesWords(amount: number | null, words: string | null, 
 /** Pesos as a person reads them, for a warning line they are meant to act on. */
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * Two amounts built from the very same digits — 2,081.25 and 2,018.25.
+ *
+ * A check written for the wrong amount lands on a round-ish number of its own;
+ * a MISREAD check lands on an anagram of the right one. Worth saying out loud on
+ * the warning, because the two call for different actions: one is a trip to the
+ * bank, the other is pressing Re-read.
+ */
+const sameDigits = (a: number, b: number): boolean => {
+  const key = (n: number) => n.toFixed(2).replace(/\D/g, "").split("").sort().join("");
+  return key(a) === key(b);
+};
+
 export interface CheckIssue {
   key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence";
   message: string;
@@ -470,12 +497,25 @@ export function checkIssues(opts: {
   if (r.payee && !sameCompany(r.payee, opts.supplierCompany)) {
     issues.push({ key: "payee", message: `Paid to "${r.payee}" but this PO is to ${opts.supplierCompany}.` });
   }
-  // (f) The figure against the PO's net.
+  // (f) The amount against the PO's net.
   if (r.amount != null && opts.netAmount > 0 && Math.abs(r.amount - opts.netAmount) > 0.01) {
-    issues.push({ key: "amount", message: `Check is for ${peso(r.amount)} but this PO's net is ${peso(opts.netAmount)}.` });
+    const hint = sameDigits(r.amount, opts.netAmount)
+      ? " The two are the same digits in a different order, which is how a misread looks — re-read the photo before treating it as a wrong check."
+      : "";
+    issues.push({ key: "amount", message: `Check is for ${peso(r.amount)} but this PO's net is ${peso(opts.netAmount)}.${hint}` });
   }
-  // (g) The check's own self-check: figures against words.
-  if (r.amount != null && r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
+  // (g) The check's own self-check — the peso box against the PESOS line.
+  //
+  // When the line could be read back as a number, the comparison is between two
+  // NUMBERS and the words have already won (see `amountFigures`); saying which
+  // figure was used is the useful part. When it could not, fall back to
+  // comparing spellings, which is all there is.
+  if (r.amountFigures != null && r.amount != null && Math.abs(r.amountFigures - r.amount) > 0.005) {
+    issues.push({
+      key: "words",
+      message: `The peso box reads ${peso(r.amountFigures)} but the words say ${peso(r.amount)}. The written amount governs on a check, so ${peso(r.amount)} was used.`,
+    });
+  } else if (r.amountFigures == null && r.amount != null && r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
     issues.push({ key: "words", message: `The amount in words doesn't match the figure — "${r.amountWords}".` });
   }
   // (c) The same check number must not already be recorded elsewhere.

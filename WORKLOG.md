@@ -1,3 +1,42 @@
+## 2026-09-04 · The amount comes off the PESOS line, not the peso box
+
+Owner, on a TOZEN PO: *"please check. Error in AI reading, Check and Net Amount is tally."*
+
+The check was for **₱2,081.25** and was read as **₱2,018.25** — the same digits, two of them swapped. The card
+then reported *"Check is for ₱2,018.25 but this PO's net is ₱2,081.25"*, accusing a check that was perfectly
+correct.
+
+### A transposition is invisible, so stop reading the number
+
+A photo of `2,081.25` can come back as `2,018.25` and nothing about the result looks wrong — no odd digit, no
+implausible total, nothing for a confidence score to catch. The words cannot fail that way: **EIGHTY-ONE** and
+**EIGHTEEN** are not a transposition of each other.
+
+So `pesoAmountFromWords` reads the PESOS line back as a number, and that is what the amount is taken from. The
+peso box is kept as `amountFigures` **only when the two disagreed** — its presence *is* the disagreement.
+
+The law had already settled this. Negotiable Instruments Law (Act 2031, sec. 17(c)): where the sum is written
+in both words and figures and the two differ, **the sum in words is the sum payable**. The check itself has
+always said so; we were reading the wrong half of it.
+
+The parser returns null on any word it does not recognise, rather than a partial total — a half-parsed amount
+is the one answer worse than none. It takes the line as checks actually print it: hyphens, "PESOS", the
+house-style "ONLY", asterisk filler, and a `25/100`, `00/100` or `NO/100` tail. A round-trip test drives every
+amount our voucher speller can produce back through it, so the two can never drift apart.
+
+### Two warnings that now say something useful
+
+- **Figures vs words:** *"The peso box reads ₱2,018.25 but the words say ₱2,081.25. The written amount governs
+  on a check, so ₱2,081.25 was used."* Previously this only ever said the two "don't match".
+- **Amount vs PO net:** when the two are *the same digits in a different order*, the warning says so and points
+  at Re-read — because a misread and a wrong payment call for different actions, and only one of them is a trip
+  to the bank.
+
+The prompt was tightened to match: read the peso box one digit at a time, left to right, and don't "recognise"
+a familiar-looking number and write it from memory.
+
+Ten new tests, 310 pass. **The TOZEN check on file still carries the old figure — press Re-read.**
+
 ## 2026-09-04 · 10-04-2026 is October 4th — the check date stops being a judgement call
 
 Owner: *"date error in check reading. When reading check date, 10-04-2026 means October 4, 2026. Update the AI

@@ -12,7 +12,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { canAttachCheck, checkAttachableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
-import { pesoAmountInWords } from "@/lib/amount-words";
+import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
 import { COMPANY } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -40,6 +40,12 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
  *    reconciled by the model. A check carries its own cross-check on its face;
  *    the system compares the two itself, so a misread digit shows up as a
  *    disagreement instead of a confident wrong answer.
+ *
+ * Neither the date nor the amount is left to the model's arithmetic. It
+ * transcribes what is printed — the eight DATE-box digits, the PESOS line — and
+ * both are turned into values HERE, where the rules are rules: MM DD YYYY for
+ * the date, and for the amount the written line over the peso box, because that
+ * is the one a transposed digit cannot quietly corrupt.
  */
 const SYSTEM = `You read a photo of a PHILIPPINE COMPANY CHECK (cheque) issued by AEROVENT FANS & BLOWERS MANUFACTURING to pay a supplier.
 
@@ -54,12 +60,12 @@ The fields on the check, and exactly what each one means:
   - "1 0 1 7 2 0 2 6" is 17 OCTOBER 2026.
   Return the eight digits themselves in "dateDigits", exactly as they sit in the boxes left to right and with their leading zeros (e.g. "10042026"), AND the same date as YYYY-MM-DD in "date". If the date is not in eight boxes (handwritten free-hand, or partly illegible), set dateDigits to null and fill in only what you are sure of.
   THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed.
-- AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37".
+- AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37". Read it ONE DIGIT AT A TIME, left to right, and keep them in that order. Do not "recognise" a familiar-looking number and write it from memory: "2,081.25" and "2,018.25" differ by two digits changing places, and a check for the wrong one is a real payment to a supplier.
 - AMOUNT IN WORDS — the line above "PESOS", spelled out, e.g. "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100". Return it VERBATIM as printed, including however the line is closed. On these checks a whole-peso amount ends with the word "ONLY" ("TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY") where other checks would write "AND 00/100" — do NOT convert one into the other, and do not drop a trailing "ONLY", asterisks or filler characters. Copy the line.
 
 CRITICAL RULES:
 - NEVER swap the month and the day. A Philippine company check is MONTH first. If you find yourself reasoning about which number "looks more like a day", stop: the box order decides, and the digits you put in "dateDigits" are what will be used.
-- Read the amount in figures and the amount in words INDEPENDENTLY. Do NOT correct one to match the other, and do NOT compute either from the other. If they disagree, return both exactly as printed and add a warning — the disagreement is the useful signal.
+- Read the amount in figures and the amount in words INDEPENDENTLY. Do NOT correct one to match the other, and do NOT compute either from the other. If they disagree, return both exactly as printed and add a warning — the disagreement is the useful signal, and the PESOS line is what will be used (on a check the written amount governs), so transcribe that line with particular care.
 - The MICR line along the bottom (the machine-readable digits between symbols) repeats the check number, the routing number and the account number. Use it to CONFIRM the check number and account number you read from the printed fields; if the two disagree, trust the printed field and add a warning.
 - IGNORE anything handwritten in the margins, any paper clip, stamp, staple or annotation lying on top of the check, and any other document visible behind or beside it.
 - If this image is NOT a check (a deposit slip, a receipt, an invoice, a voucher), set isCheck=false, leave the fields null, and say so in a warning.
@@ -178,6 +184,19 @@ export async function POST(req: NextRequest) {
       ? [`Date boxes read ${boxes} = ${fromBoxes} (MM DD YYYY); the model wrote ${modelDate}. Using the boxes.`]
       : [];
 
+    // The amount, likewise, is taken from the line that cannot be transposed.
+    // A photo of "2,081.25" comes back as "2,018.25" if two digits change
+    // places and nothing about the result looks wrong; "EIGHTY-ONE" does not
+    // turn into "EIGHTEEN". The law says the same — under the Negotiable
+    // Instruments Law (Act 2031, sec. 17(c)) the sum in WORDS is the sum
+    // payable when the two disagree.
+    const figures = r.amount ?? null;
+    const fromWords = pesoAmountFromWords(r.amountWords ?? null);
+    const disagree = fromWords != null && figures != null && Math.abs(fromWords - figures) > 0.005;
+    const amountWarnings = disagree
+      ? [`Peso box read ${figures}, the words read ${fromWords}. The written amount governs, so the words were used.`]
+      : [];
+
     const read: CheckRead = {
       accountNo: r.accountNo ?? null,
       accountName: r.accountName ?? null,
@@ -186,11 +205,13 @@ export async function POST(req: NextRequest) {
       // Boxes win; the model's own date only stands when there were no boxes to read.
       clearingYMD: fromBoxes ?? modelDate,
       dateBoxes: boxes,
-      amount: r.amount ?? null,
+      amount: fromWords ?? figures,
+      // Kept only when the two disagreed — its presence IS the disagreement.
+      amountFigures: disagree ? figures : null,
       amountWords: r.amountWords ?? null,
       bank: r.bank ?? null,
       confidence: typeof r.confidence === "number" ? r.confidence : null,
-      warnings: [...(r.warnings ?? []), ...dateWarnings, ...(r.isCheck ? [] : ["This image doesn't look like a check."])],
+      warnings: [...(r.warnings ?? []), ...dateWarnings, ...amountWarnings, ...(r.isCheck ? [] : ["This image doesn't look like a check."])],
       issues: [], // filled in below, once the read is cross-examined
       readByName: user.name,
       readAt: new Date().toISOString(),

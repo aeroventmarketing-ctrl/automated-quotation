@@ -194,6 +194,7 @@ const PRACTICE: CheckRead = {
   dateBoxes: "10172026",
   amount: 20827.37,
   amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100",
+  amountFigures: null,
   bank: "BDO",
   confidence: 0.95,
   warnings: [],
@@ -293,6 +294,38 @@ describe("what the read is cross-examined against", () => {
   it("flags figures and words that disagree — a digit misread, or a bad check", () => {
     const read = { ...PRACTICE, amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SIX AND 37/100" };
     expect(ok({ read }).map((i) => i.key)).toContain("words");
+  });
+
+  /**
+   * The owner's TOZEN PO: *"please check. Error in AI reading, Check and Net
+   * Amount is tally."* The check was for ₱2,081.25 and the peso box came back
+   * read as ₱2,018.25 — the same digits, two of them swapped.
+   */
+  it("takes the amount from the words and says which figure it used", () => {
+    const read = {
+      ...PRACTICE,
+      payee: "TOZEN PHILIPPINES INC.",
+      amount: 2081.25, // from the words, as the route now sets it
+      amountFigures: 2018.25, // what the peso box appeared to say
+      amountWords: "TWO THOUSAND EIGHTY-ONE AND 25/100",
+    };
+    const issues = ok({ read, netAmount: 2081.25, supplierCompany: "TOZEN PHILIPPINES INC." });
+    // No amount issue: the check and the PO's net DO tally, which was the point.
+    expect(issues.map((i) => i.key)).toEqual(["words"]);
+    expect(issues[0].message).toBe(
+      "The peso box reads ₱2,018.25 but the words say ₱2,081.25. The written amount governs on a check, so ₱2,081.25 was used.",
+    );
+  });
+
+  it("names a transposition for what it is, instead of accusing the check", () => {
+    // Same digits, different order — that is a misread, not a wrong payment,
+    // and the two call for different actions.
+    const [issue] = ok({ read: { ...PRACTICE, amount: 2018.25 }, netAmount: 2081.25 });
+    expect(issue.message).toContain("same digits in a different order");
+    expect(issue.message).toContain("re-read the photo");
+    // A genuinely different amount gets no such excuse.
+    const [plain] = ok({ read: { ...PRACTICE, amount: 5000 }, netAmount: 2081.25 });
+    expect(plain.message).toBe("Check is for ₱5,000.00 but this PO's net is ₱2,081.25.");
   });
 
   it("flags a check drawn on an account that isn't ours", () => {
