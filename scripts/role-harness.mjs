@@ -217,6 +217,32 @@ async function seed() {
     lines: [{ description: "GI SHEET 24GA", qty: 10, unitPrice: 850 }],
     ewtPct: 1,
   });
+  // A handful of read checks with real clearing dates, so the Check Monitoring
+  // register has something to search, sort and group.
+  const checkDoc = (no, ymd, amount) => ({
+    path: `purchases/x/${no}.jpg`, name: `${no}.jpg`, uploadedAt: "", uploadedByName: "Michelle Cotura",
+    read: {
+      accountNo: "003718007033", accountName: "AEROVENT FANS AND BLOWERS MANUFACTURING",
+      checkNo: no, payee: "HARNESS STEEL CORP", clearingYMD: ymd, dateBoxes: null,
+      amount, amountFigures: amount, amountFromWords: amount, amountWords: "", bank: "BDO",
+      confidence: 0.95, warnings: [], issues: [], readByName: "Michelle Cotura", readAt: "",
+    },
+  });
+  for (const [no, ymd, amt, company] of [
+    ["0000486901", "2026-09-10", 28344.64, "HARNESS STEEL CORP"],
+    ["0000486902", "2026-10-02", 2836.94, "WIDGET SUPPLY INC"],
+    ["0000486903", "2026-10-04", 2160.54, "WIDGET SUPPLY INC"],
+  ]) {
+    await p.purchaseRequest.create({ data: {
+      kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+      note: `HARNESS-CHK-${no}`, status: "CASH_RELEASED",
+      po: { ...poFor(`HARNESS-CHK-${no}`), supplier: { company } },
+      chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+      voucherCheckDocs: [checkDoc(no, ymd, amt)],
+      createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+    } });
+  }
+
   for (const [status, poNo] of [["CASH_RELEASED", "HARNESS-LIVE"], ["COMPLETED", "HARNESS-DONE"]]) {
     await p.purchaseRequest.create({ data: {
       // A DEPARTMENT requisition, not a replenishment: replenishment rows render

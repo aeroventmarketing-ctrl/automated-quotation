@@ -1,3 +1,50 @@
+## 2026-09-04 · The register gets a search box, sortable columns and grouping
+
+Owner, once the register passed fifty rows: *"add a search bar, sort and group by ascending and descending.
+Make the default arrangement by clearing date, top most is the soonest to clear."*
+
+### The default is unchanged, and now it is written down
+
+`DEFAULT_CHECK_SORT` is clearing date, ascending — the soonest at the top, which is what the register already
+did. It is a named constant with a test on it now, so sorting cannot quietly change what a fresh page shows.
+
+### Sort
+
+Every column but Remarks (free text with no order worth having) is a header you can click; click again to turn
+it round, and only the ACTIVE column shows an arrow — an arrow on every header is an arrow nobody reads. A new
+column starts ascending, except **Amount**, which starts biggest-first because that is the question being asked.
+
+Two rules a table this shape needs, both pinned:
+
+- **A row with nothing to sort by sinks, in both directions.** An undated check and a PO whose check is not yet
+  written have no day; floating them to the top of a descending sort would bury the dated rows the screen
+  exists to watch.
+- **Ties break on the PO number**, so the order is repeatable rather than whatever the input happened to be.
+
+Check numbers sort by the digits that identify them, so padding never decides the order, and money sorts as
+money — "2,836.94" before "28,344.64" only if these are numbers.
+
+### Search
+
+One box, every term must match: *"tozen 486731"* is one check, not every TOZEN row plus every 486731 row. It
+matches company, PO number, check number **padded or not** (`0000486726` and `486726` find the same row),
+amount with or without its commas, status, remarks, dates and who cleared it. A count and a total sit under the
+box, and a search that finds nothing says *"Nothing in Upcoming matches …"* rather than "no checks are waiting
+to clear" — the second sends someone hunting a bug that is not there.
+
+### Group
+
+None (default) · Company · Status · Clearing month, each group headed with its count and **what it is worth**.
+Groups appear in the order their first row does, so grouping never fights the sort: group by company on a
+register sorted by clearing date and the company clearing soonest is still on top.
+
+Verified by driving the real page: default order soonest-first with the undated row last, reversed on a second
+click, Amount opening biggest-first, `486903` finding its padded check, the no-match line, and grouping by
+company showing 3 checks · ₱45,192.86. The sort arrow was escaping into the next column — a flex arrow will not
+wrap with the words beside it — so it is inline now, and the header boxes were measured to prove it.
+
+Nineteen new tests, 356 pass.
+
 ## 2026-09-04 · Accounting can attach a check to a completed PO — but not delete one
 
 Owner, asked after the harness showed Accounting stopped where the admin and the Payment Approver were not:
