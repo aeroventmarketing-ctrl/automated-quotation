@@ -190,6 +190,9 @@ export async function POST(req: NextRequest) {
     // turn into "EIGHTEEN". The law says the same — under the Negotiable
     // Instruments Law (Act 2031, sec. 17(c)) the sum in WORDS is the sum
     // payable when the two disagree.
+    // All three are kept apart — the peso box, the words, and (on the card) the
+    // PO's net — so `checkIssues` can say WHICH pair disagrees rather than that
+    // "the amounts don't match".
     const figures = r.amount ?? null;
     const fromWords = pesoAmountFromWords(r.amountWords ?? null);
     const disagree = fromWords != null && figures != null && Math.abs(fromWords - figures) > 0.005;
@@ -206,8 +209,8 @@ export async function POST(req: NextRequest) {
       clearingYMD: fromBoxes ?? modelDate,
       dateBoxes: boxes,
       amount: fromWords ?? figures,
-      // Kept only when the two disagreed — its presence IS the disagreement.
-      amountFigures: disagree ? figures : null,
+      amountFigures: figures,
+      amountFromWords: fromWords,
       amountWords: r.amountWords ?? null,
       bank: r.bank ?? null,
       confidence: typeof r.confidence === "number" ? r.confidence : null,

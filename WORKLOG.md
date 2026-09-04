@@ -1,3 +1,45 @@
+## 2026-09-04 · Three numbers, one diagnosis — the check's figure, its words, and the PO's net
+
+Owner: *"look at the check peso amount, word amount and PO net. All must tally. If not tallied, inform the user
+of the problem and cause."*
+
+Three numbers that should all be the same number: the **peso box**, the **PESOS line**, and the PO's **net**.
+They were being compared in two separate tests that each reported half a story — *"Check is for X but this PO's
+net is Y"* and *"the amount in words doesn't match the figure"* — so a card could show both and name neither
+cause.
+
+`checkAmountTally` now looks at all three together, because **which pair disagrees is the diagnosis**. The same
+three numbers mean four different things, and each one calls for a different action:
+
+| box | words | net | what the card now says |
+| --- | --- | --- | --- |
+| = | = | = | nothing |
+| = | = | ≠ | *"The check agrees with itself, so the amount written is not this PO's — either it was written for the wrong amount, or this photo belongs to a different PO."* |
+| ≠ | = | = | *"Cause: the figure on the check is wrong, or was misread. The written amount governs on a check, so ₱X was used."* |
+| = | ≠ | = | *"Cause: the amount in words is wrong, or was misread. **A bank pays the WORDS** — if the check really says ₱Y, it must be voided and rewritten."* |
+| ≠ | ≠ | ≠ | *"Nothing tallies… the check disagrees with itself AND with the PO. Re-read the photo first; if it reads the same, the check itself is wrong."* |
+
+Row four is the one worth having built this for. The figure looks right, the PO looks right, and it is the
+easiest of all of these to wave through — but the bank pays the written line, so the supplier gets the wrong
+money and nobody finds out until it clears.
+
+Where two of the numbers are **the same digits in a different order**, the message says so and points at
+Re-read: that is what a misread looks like, and it is not a trip to the bank.
+
+### Half a check is never a clean bill
+
+If only one of the two amounts could be read, the card says which one was missing rather than silently
+comparing the survivor to the PO and calling it agreement.
+
+### The three are now stored apart
+
+`amountFigures` (the peso box) and `amountFromWords` (the PESOS line as a number) are both kept, with `amount` —
+the figure the register and the cash position quote — being the words where they parse. Reads stored before
+this keep the checks they can support; nothing on file needed changing.
+
+One issue is raised, never a pile: the card keys its warnings by kind, and two amount warnings would collide.
+Fifteen new tests, 316 pass.
+
 ## 2026-09-04 · The amount comes off the PESOS line, not the peso box
 
 Owner, on a TOZEN PO: *"please check. Error in AI reading, Check and Net Amount is tally."*
