@@ -144,12 +144,13 @@ describe("moving a check's date", () => {
 describe("the monitoring list", () => {
   const helpers = {
     coerceDocs: (v: unknown) => v as CheckDoc[],
-    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null } | null,
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
   };
-  const pr = (id: string, docs: CheckDoc[]) => ({
+  const pr = (id: string, docs: CheckDoc[], over: { status?: string; net?: number } = {}) => ({
     id, quotationId: null,
-    po: { poNumber: `PO-${id}`, supplierCompany: "POWERLINK", date: "2026-08-01" },
+    po: { poNumber: `PO-${id}`, supplierCompany: "POWERLINK", date: "2026-08-01", net: over.net ?? 0 },
     voucherCheckDocs: docs,
+    status: over.status ?? "CASH_RELEASED",
   });
 
   const rows = buildCheckWatch([
@@ -190,5 +191,79 @@ describe("the monitoring list", () => {
     const [row] = buildCheckWatch([pr("g", [due("2026-09-20", { path: "g1" })])], TODAY, helpers);
     expect(row.originalYMD).toBeNull();
     expect(row.moves).toBe(0);
+  });
+});
+
+
+/**
+ * The owner: *"september 3 and september 4 PO not showing in check monitoring."*
+ *
+ * Nothing was hiding them — a row WAS a check photo, so a PO nobody had
+ * photographed had no row to show. Their answer: list those too, as
+ * **"Check not attached"** — the *For Payment* line from their own register.
+ */
+describe("POs that owe a check but have none attached", () => {
+  const TODAY = "2026-09-04";
+  const helpers = {
+    coerceDocs: (v: unknown) => (v as CheckDoc[]) ?? [],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+    expectsCheck: () => true,
+  };
+  const pr = (id: string, docs: CheckDoc[], net = 28344.64) => ({
+    id, quotationId: null,
+    po: { poNumber: `PO-${id}`, supplierCompany: "TKL STEEL CORPORATION", date: "2026-09-03", net },
+    voucherCheckDocs: docs,
+    status: "CASH_RELEASED",
+  });
+
+  it("gives a payable PO with no photo a row of its own", () => {
+    const [row] = buildCheckWatch([pr("648", [])], TODAY, helpers);
+    expect(row.state).toBe("awaiting");
+    expect(row.statusLabel).toBe("For Payment"); // the owner's own register word
+    expect(row.poDate).toBe("2026-09-03");
+    expect(row.supplier).toBe("TKL STEEL CORPORATION");
+    // The PO's NET, because that is what the check will be written for.
+    expect(row.amount).toBe(28344.64);
+    // …and nothing it cannot honestly claim.
+    expect(row.checkNo).toBeNull();
+    expect(row.clearingYMD).toBeNull();
+    expect(row.daysLeft).toBeNull();
+    expect(row.path).toBe(""); // no photo to open
+  });
+
+  it("owes money but cannot be overdue, and never pushes a task at the admin", () => {
+    const rows = buildCheckWatch([pr("648", [])], TODAY, helpers);
+    const s = checkWatchSummary(rows);
+    // Accounts Payable — yes: the money is owed.
+    expect(s.openAmount).toBe(28344.64);
+    expect(s.open).toBe(1);
+    // Outstanding Check — no: nothing can clear until a check is written.
+    expect(s.firstPriorityAmount).toBe(0);
+    expect(s.overdue).toBe(0);
+    expect(s.attention).toBe(0);
+    expect(s.undated).toBe(0); // an undated CHECK is a different thing entirely
+    expect(notifiesAdmin(rows[0].state)).toBe(false);
+  });
+
+  it("disappears the moment a photo is attached — never both rows at once", () => {
+    const withDoc = buildCheckWatch([pr("648", [due("2026-10-04", { path: "p" })])], TODAY, helpers);
+    expect(withDoc).toHaveLength(1);
+    expect(withDoc[0].state).not.toBe("awaiting");
+    expect(withDoc[0].path).toBe("p");
+  });
+
+  it("stays out when no check is expected — a cash supplier, or a PO not yet signed", () => {
+    expect(buildCheckWatch([pr("648", [])], TODAY, { ...helpers, expectsCheck: () => false })).toEqual([]);
+    // …and callers that never opt in keep the old register exactly.
+    expect(buildCheckWatch([pr("648", [])], TODAY, { coerceDocs: helpers.coerceDocs, poOf: helpers.poOf })).toEqual([]);
+  });
+
+  it("sorts after the dated checks, with the undated ones", () => {
+    const rows = buildCheckWatch(
+      [pr("648", []), pr("640", [due("2026-09-10", { path: "x" })])],
+      TODAY,
+      helpers,
+    );
+    expect(rows.map((r) => r.state)).toEqual(["scheduled", "awaiting"]);
   });
 });

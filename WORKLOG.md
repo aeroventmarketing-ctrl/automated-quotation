@@ -1,3 +1,41 @@
+## 2026-09-04 · A PO on the register before its check is written
+
+Owner: *"september 3 and september 4 PO not showing in check monitoring."*
+
+Nothing was hiding them. The register had no date filter, no status filter and no slicing — it listed **one row
+per attached check photo**, so a PO nobody had photographed had no row to be shown. Asked, the owner chose to
+list those too, as **"Check not attached"**.
+
+### The *For Payment* row
+
+A PO past *Voucher & Check Signed*, to a supplier who gives us terms, with no photo attached, now appears with
+its PO date, supplier, PO number and the PO's **NET** — what the check will be written for. And nothing it
+cannot honestly claim: no check number, no clearing date, no photo link. Its status reads **For Payment**,
+which is the owner's own word for it — their register's legend is `Pending · For Payment · Check Clearing ·
+Finished`, and three of those four now appear on this screen.
+
+It counts where it should and nowhere else:
+
+| | included? | |
+| --- | --- | --- |
+| **Accounts Payable** | ✓ | the money is owed |
+| **Outstanding Check** | ✗ | nothing can clear until a check exists |
+| overdue / needs attention | ✗ | there is no date to be late for |
+| the admin's task feed | ✗ | nothing to confirm or reschedule |
+
+Attaching the photo replaces the row rather than adding a second one — asserted, because two rows for one PO
+would double it in Accounts Payable.
+
+### One loader, three screens
+
+The Check Monitoring page, the Management Dashboard tile and My Dashboard's overdue-check task each built this
+list themselves. A tile reading "7" beside a register listing twelve is the kind of disagreement nobody can
+debug from the outside, so the query, the supplier-terms lookup and the row builder moved into
+`loadCheckRegister` — once. Whether *For Payment* rows appear is now part of that shared answer, not a per-page
+choice.
+
+Five new tests, 330 pass. The role harness was run over every screen: no permission moved.
+
 ## 2026-09-04 · An admin may re-read a check at any stage
 
 Owner, asked after two TKL checks were found stranded: *"Admin may re-read anytime."*

@@ -1,11 +1,10 @@
-import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Card, CardContent } from "@/components/ui/card";
-import { coerceCheckDocs, canAttachCheck } from "@/lib/voucher-check";
-import { coercePurchaseOrder } from "@/lib/purchase-order";
-import { buildCheckWatch, checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
+import { canAttachCheck } from "@/lib/voucher-check";
+import { checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
+import { loadCheckRegister } from "@/lib/check-register";
 import { PH_TIME_ZONE } from "@/lib/utils";
 import { getCashPosition, computeCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
 import { getReceivablesOutstanding } from "@/lib/receivables";
@@ -44,19 +43,8 @@ export default async function ChecksPage() {
 
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
-  // Every PO that carries a check photo. A check clears long after its PO is
-  // finished, so no status filter here — a COMPLETED PO's check still clears.
-  const prs = await prisma.purchaseRequest
-    .findMany({ select: { id: true, quotationId: true, po: true, voucherCheckDocs: true } })
-    .catch(() => []);
+  const rows = await loadCheckRegister(todayYMD);
 
-  const rows = buildCheckWatch(prs, todayYMD, {
-    coerceDocs: coerceCheckDocs,
-    poOf: (v) => {
-      const po = coercePurchaseOrder(v);
-      return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
-    },
-  });
   const summary = checkWatchSummary(rows);
   // The cash position sits under the register and is driven by it: First
   // Priority and Total Payables are the register's own totals, never re-derived.
@@ -77,15 +65,17 @@ export default async function ChecksPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Check monitoring</h1>
         <p className="text-sm text-muted-foreground">
-          Every check issued to a supplier, by the day it clears. Checks needing attention are those clearing within{" "}
-          {CHECK_NOTICE_DAYS} days, today, or already past without being cleared.
+          Every check issued to a supplier, by the day it clears — plus the POs still <em>for payment</em>, whose
+          check has not been written yet. Checks needing attention are those clearing within {CHECK_NOTICE_DAYS}{" "}
+          days, today, or already past without being cleared.
         </p>
       </div>
 
       {rows.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No checks are being monitored yet. A check appears here once its photo is attached to a purchase order and read.
+            Nothing to monitor yet. A purchase order appears here once it is due to be paid by check, and fills in
+            with its number, amount and clearing date once the photo of that check is attached and read.
           </CardContent>
         </Card>
       ) : (

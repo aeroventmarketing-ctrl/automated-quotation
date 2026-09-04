@@ -493,7 +493,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         coerceDocs: coerceCheckDocs,
         poOf: (v) => {
           const po = coercePurchaseOrder(v);
-          return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
+          // `net` is unused here (this feed only pushes OVERDUE checks, which
+          // always carry a read amount) but the shape is shared with the register.
+          return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null, net: poTotals(po).net } : null;
         },
       });
       for (const row of watch) {

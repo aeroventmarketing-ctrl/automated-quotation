@@ -37,7 +37,14 @@ export type CheckWatchState =
   | "due" // clears today
   | "soon" // within CHECK_NOTICE_DAYS — this is what the admin is notified about
   | "scheduled" // further out
-  | "undated"; // the check was never read, or its date couldn't be made out
+  | "undated" // the check was never read, or its date couldn't be made out
+  /**
+   * No check photo is attached at all, but this PO is payable by check — the
+   * owner's *"For Payment"*. Its money is owed and belongs in Accounts Payable;
+   * nothing can clear until somebody writes and photographs the check, so it is
+   * NOT First Priority and has no date to be overdue against.
+   */
+  | "awaiting";
 
 /** Whole days from `fromYMD` to `toYMD`. Negative when `toYMD` is in the past. */
 export function daysBetweenYMD(fromYMD: string, toYMD: string): number {
@@ -86,19 +93,25 @@ export const CHECK_STATE_LABEL: Record<CheckWatchState, string> = {
   soon: "Clearing soon",
   scheduled: "Scheduled",
   undated: "No clearing date read",
+  awaiting: "Check not attached",
 };
 
 /**
  * The owner's own status vocabulary, taken from the legend at the foot of their
  * register (`Pending · For Payment · Check Clearing · Finished`).
  *
- * This screen only ever holds the last two: a row exists here because a check
- * exists, so it is either still clearing or finished. *Pending* and *For
- * Payment* describe a PO before any check is written, which is a payables
- * question, not a check one.
+ * Three of the four appear here. A row usually exists because a check exists, so
+ * it is *Check Clearing* or *Finished*; since the owner asked for payable POs
+ * with no check yet — *"september 3 and september 4 PO not showing"* — a row can
+ * also be *For Payment*. Only *Pending* stays out: a PO that has not reached the
+ * signing step has no payment to watch.
  */
-export function registerStatus(state: CheckWatchState): "Check Clearing" | "Finished" {
-  return state === "cleared" ? "Finished" : "Check Clearing";
+export function registerStatus(state: CheckWatchState): "For Payment" | "Check Clearing" | "Finished" {
+  if (state === "cleared") return "Finished";
+  // The owner's own word for a PO that is due but whose check is not yet
+  // written — their register's legend reads `Pending · For Payment · Check
+  // Clearing · Finished`, and this is the second of those.
+  return state === "awaiting" ? "For Payment" : "Check Clearing";
 }
 
 /**
@@ -150,6 +163,8 @@ export interface CheckWatchSource {
   quotationId: string | null;
   po: unknown;
   voucherCheckDocs: unknown;
+  /** The PO's stage — decides whether a missing check is yet expected. */
+  status?: string;
 }
 
 export function buildCheckWatch(
@@ -157,13 +172,42 @@ export function buildCheckWatch(
   todayYMD: string,
   helpers: {
     coerceDocs: (v: unknown) => CheckDoc[];
-  poOf: (v: unknown) => { poNumber: string; supplierCompany: string; date: string | null } | null;
+  poOf: (v: unknown) => { poNumber: string; supplierCompany: string; date: string | null; net: number } | null;
+    /**
+     * Is a check expected on this PO but not yet attached? Injected rather than
+     * derived here, because it needs the supplier's terms flag and the PO's
+     * stage — see `checkExpected`. Omit and the register stays what it was: one
+     * row per attached photo.
+     */
+    expectsCheck?: (pr: CheckWatchSource, supplierCompany: string) => boolean;
   },
 ): CheckWatchRow[] {
   const rows: CheckWatchRow[] = [];
   for (const pr of prs) {
     const po = helpers.poOf(pr.po);
-    for (const doc of helpers.coerceDocs(pr.voucherCheckDocs)) {
+    const docs = helpers.coerceDocs(pr.voucherCheckDocs);
+
+    // A payable PO with no photo yet — the owner's *"For Payment"* row. It
+    // carries the PO's NET, because that is what the check will be written for,
+    // and nothing else: there is no number, no date and no photo to open.
+    if (docs.length === 0) {
+      if (po && helpers.expectsCheck?.(pr, po.supplierCompany)) {
+        const poDate = po.date ? po.date.slice(0, 10) : null;
+        rows.push({
+          prId: pr.id, path: "", fileName: "",
+          poDate, poNumber: po.poNumber, supplier: po.supplierCompany, orderId: pr.quotationId,
+          checkNo: null, amount: po.net, clearingYMD: null, originalYMD: null,
+          moves: 0, lastMoveReason: null, daysLeft: null,
+          state: "awaiting", clearedOn: null, clearedByName: null,
+          statusLabel: registerStatus("awaiting"),
+          form: formOfPayment(poDate, null),
+          remarks: null,
+        });
+      }
+      continue;
+    }
+
+    for (const doc of docs) {
       const due = effectiveClearingYMD(doc);
       const original = doc.read?.clearingYMD ?? null;
       const moves = doc.reschedules?.length ?? 0;
