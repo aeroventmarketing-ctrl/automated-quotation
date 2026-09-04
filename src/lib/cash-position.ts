@@ -68,7 +68,7 @@ export const EMPTY_CASH_POSITION: CashPositionInput = {
  * | Dispensable Cash | **Available Funds** |
  * | Total Payables | **Accounts Payable** |
  * | Cash / Gcash / Checking | **Expected Collections** |
- * | Deficit | **Funding Shortfall** |
+ * | Deficit | **Funding Shortfall** (sign inverted — see the field) |
  *
  * The bank-only and all-in lines first both landed on *Available Cash Balance*;
  * the owner resolved the collision by renaming the bank-only one to **Available
@@ -92,13 +92,24 @@ export interface CashPosition extends CashPositionInput {
   dispensableCash: number;
   /** Rule 7 — every check issued and not yet cleared. */
   totalPayables: number;
-  /** Rule 8 — Total Payables − Dispensable Cash. Positive means short. */
-  deficit: number;
+  /**
+   * **Funding Shortfall** = Available Funds − Accounts Payable.
+   *
+   * The owner corrected the direction: *"Correct computation should be,
+   * Available funds less accounts payables = funding shortfall."* That inverts
+   * the sign of the old `deficit`, so the field was renamed with it — a
+   * "deficit" of +379,531 meaning a surplus is the kind of name that outlives
+   * the person who understood it.
+   *
+   * **Positive is good**: money left over once every issued check is honoured.
+   * Negative is the gap still to be funded.
+   */
+  fundingShortfall: number;
 }
 
 /**
- * Rules 1, 3, 5, 6 and 8, given the two figures the register supplies and the
- * four the owner types.
+ * Rules 1, 3, 5, 6 and 8, given the figures the register supplies and the ones
+ * the owner types.
  *
  * `firstPriority` and `totalPayables` come from the check watch, so the panel and
  * the table above it can never disagree.
@@ -123,7 +134,8 @@ export function computeCashPosition(
     // for "Dispensable Cash" should find it.
     dispensableCash: remainingCash,
     totalPayables: round2(totals.totalPayables),
-    deficit: round2(totals.totalPayables - remainingCash),
+    // Available Funds − Accounts Payable, in that order: positive = a surplus.
+    fundingShortfall: round2(remainingCash - totals.totalPayables),
   };
 }
 

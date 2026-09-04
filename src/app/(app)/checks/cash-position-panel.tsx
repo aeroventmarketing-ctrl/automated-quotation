@@ -35,6 +35,12 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
   });
 
   const peso = (n: number) => formatCurrency(n, "PHP");
+  /**
+   * A figure that can go either way, with its sign in front — the owner's
+   * *"Put a + or - indicator"*. A true minus sign, not a hyphen, and the amount
+   * itself unsigned so the two never read as "₱-−123".
+   */
+  const signedPeso = (n: number) => `${n > 0 ? "+" : n < 0 ? "\u2212" : ""}${peso(Math.abs(n))}`;
 
   async function save() {
     setBusy(true);
@@ -54,15 +60,26 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
     }
   }
 
-  /** One line of the sheet. `tone` mirrors the owner's own highlighting. */
-  const Row = ({ label, value, tone, strong, indent }: {
-    label: string; value: number; tone?: string; strong?: boolean; indent?: boolean;
-  }) => (
-    <div className={`flex items-baseline justify-between gap-4 rounded px-2 py-1 ${tone ?? ""}`}>
-      <span className={`${strong ? "font-semibold" : ""} ${indent ? "pl-3 text-muted-foreground" : ""}`}>{label}</span>
-      <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{peso(value)}</span>
-    </div>
-  );
+  /**
+   * One line of the sheet. `tone` mirrors the owner's own highlighting.
+   *
+   * `signed` marks the figures that can genuinely go either way: they carry a
+   * leading + or −, and are highlighted **green above zero, red below** — the
+   * owner's rule. The rows that can only ever be positive (Cash in Bank, the
+   * totals from the register) are left plain, because a "+" on every line
+   * teaches the eye to stop seeing it.
+   */
+  const Row = ({ label, value, tone, strong, indent, signed }: {
+    label: string; value: number; tone?: string; strong?: boolean; indent?: boolean; signed?: boolean;
+  }) => {
+    const signTone = value > 0 ? "bg-emerald-100 text-emerald-900" : value < 0 ? "bg-destructive/10 text-destructive" : "";
+    return (
+      <div className={`flex items-baseline justify-between gap-4 rounded px-2 py-1 ${(signed ? signTone : tone) ?? ""}`}>
+        <span className={`${strong ? "font-semibold" : ""} ${indent ? "pl-3 text-muted-foreground" : ""}`}>{label}</span>
+        <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{signed ? signedPeso(value) : peso(value)}</span>
+      </div>
+    );
+  };
 
   const Field = ({ label, k }: { label: string; k: keyof typeof f }) => (
     <label className="flex items-center justify-between gap-3 px-2 py-1">
@@ -95,7 +112,7 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
         {editing ? (
           <>
             <Field label="Cash in Bank" k="cob" />
-            <Row label="Available Bank Balance" value={Number(f.cob) - pos.firstPriority} tone="bg-orange-100 text-orange-900" strong />
+            <Row label="Available Bank Balance" value={Number(f.cob) - pos.firstPriority} strong signed />
             <Field label="Cash on Hand" k="coh" />
             {/* Receivables is linked, not typed — shown here so the running
                 total the owner is editing against still adds up. */}
@@ -111,21 +128,18 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
           <>
             <Row label="Cash in Bank" value={pos.cob} />
             {/* Rule 3 — Cash in Bank less what clears now. */}
-            <Row label="Available Bank Balance" value={pos.remainingCob} tone="bg-orange-100 text-orange-900" strong />
+            <Row label="Available Bank Balance" value={pos.remainingCob} strong signed />
             <Row label="Cash on Hand" value={pos.coh} />
             <Row label="Receivables" value={pos.receivables} />
             <Row label="Expected Collections" value={pos.cashGcashChecking} />
             {/* Rules 5 and 6 — the same figure under two of the owner's names. */}
-            <Row label="Available Cash Balance" value={pos.remainingCash} />
-            <Row label="Available Funds" value={pos.dispensableCash} strong />
+            <Row label="Available Cash Balance" value={pos.remainingCash} signed />
+            <Row label="Available Funds" value={pos.dispensableCash} strong signed />
             {/* Rules 7 and 8. */}
             <Row label="Accounts Payable" value={pos.totalPayables} />
-            <Row
-              label="Funding Shortfall"
-              value={pos.deficit}
-              strong
-              tone={pos.deficit > 0 ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700"}
-            />
+            {/* Available Funds − Accounts Payable: positive is money left over
+                once every issued check is honoured, negative is the gap. */}
+            <Row label="Funding Shortfall" value={pos.fundingShortfall} strong signed />
           </>
         )}
       </CardContent>

@@ -29,8 +29,14 @@ describe("the cash position, on the owner's own numbers", () => {
     expect(pos.dispensableCash).toBe(pos.remainingCash);
   });
 
-  it("rule 8 — Deficit is Total Payables less Dispensable Cash", () => {
-    expect(pos.deficit).toBe(1612908.69);
+  /**
+   * The owner corrected the direction: *"Correct computation should be, Available
+   * funds less accounts payables = funding shortfall."* Positive is a surplus;
+   * negative is the gap still to be funded. On their own screenshot's figures
+   * that is a shortfall, so it reads negative.
+   */
+  it("Funding Shortfall is Available Funds less Accounts Payable", () => {
+    expect(pos.fundingShortfall).toBe(-1612908.69);
   });
 
   it("adds Cash on Hand, the linked Receivables and Cash/Gcash into Available Cash Balance", () => {
@@ -39,7 +45,7 @@ describe("the cash position, on the owner's own numbers", () => {
       { firstPriority: 22538.94, totalPayables: 1712027.87, receivables: 2500.5 },
     );
     expect(withCash.remainingCash).toBe(107619.93); // 99,119.18 + 8,500.75
-    expect(withCash.deficit).toBe(1604407.94);
+    expect(withCash.fundingShortfall).toBe(-1604407.94);
   });
 
   /**
@@ -62,9 +68,14 @@ describe("the cash position, on the owner's own numbers", () => {
     expect(short.dispensableCash).toBe(-12538.94);
   });
 
-  it("reports a surplus as a negative deficit rather than hiding it", () => {
+  it("reads POSITIVE when there is money left over once every check is honoured", () => {
     const flush = computeCashPosition(input({ cob: 500000 }), { firstPriority: 0, totalPayables: 100000, receivables: 0 });
-    expect(flush.deficit).toBe(-400000);
+    expect(flush.fundingShortfall).toBe(400000);
+  });
+
+  it("reads NEGATIVE when the funds do not cover the payables", () => {
+    const short = computeCashPosition(input({ cob: 10000 }), { firstPriority: 0, totalPayables: 100000, receivables: 0 });
+    expect(short.fundingShortfall).toBe(-90000);
   });
 });
 
@@ -126,7 +137,7 @@ describe("the two figures the register supplies", () => {
     expect(pos.firstPriority).toBe(23000);
     expect(pos.remainingCob).toBe(27000);
     expect(pos.totalPayables).toBe(50000);
-    expect(pos.deficit).toBe(23000);
+    expect(pos.fundingShortfall).toBe(-23000);
   });
 });
 
