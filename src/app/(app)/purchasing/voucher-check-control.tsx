@@ -6,7 +6,7 @@ import { Banknote, AlertTriangle, ScanLine, CheckCircle2 } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatDate } from "@/lib/utils";
-import { checkMissing, formatCheckNo, type CheckDoc } from "@/lib/voucher-check";
+import { checkAmountAgreed, checkMissing, formatCheckNo, type CheckDoc } from "@/lib/voucher-check";
 import type { PRStatus } from "@/lib/purchasing";
 import { attachVoucherCheck, removeVoucherCheck } from "../orders/actions";
 
@@ -39,6 +39,7 @@ export function VoucherCheckControl({
   supplierGivesTerms,
   canAttach,
   canView,
+  netAmount,
 }: {
   prId: string;
   docs: CheckDoc[];
@@ -53,6 +54,12 @@ export function VoucherCheckControl({
   canAttach: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
+  /**
+   * The PO's NET — the third figure in the tally. Omitted where the caller has
+   * no PO to compare against, in which case the confirmation is simply not
+   * shown; a green "tallies" with nothing behind it would be worse than none.
+   */
+  netAmount?: number;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -175,6 +182,7 @@ export function VoucherCheckControl({
       {docs.map((d) => {
         const r = d.read;
         const reading = busy === `read:${d.path}`;
+        const agreed = checkAmountAgreed(r, netAmount ?? 0);
         return (
           <span key={d.path} className="inline-flex flex-col items-start gap-0.5 text-xs">
             <span className="inline-flex flex-wrap items-center gap-2">
@@ -217,6 +225,13 @@ export function VoucherCheckControl({
                 <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {i.message}
               </span>
             ))}
+            {/* …and, when the three figures agree, said out loud. Silence used to
+                mean both "they tally" and "nobody looked". */}
+            {agreed && (
+              <span className="inline-flex items-start gap-1 text-emerald-700">
+                <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" /> {agreed}
+              </span>
+            )}
           </span>
         );
       })}

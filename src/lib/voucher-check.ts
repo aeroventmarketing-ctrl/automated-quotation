@@ -562,6 +562,29 @@ export function checkAmountTally(opts: {
 }
 
 /**
+ * The other half of the tally — the owner's *"if it tallies, show a message that
+ * it tally."*
+ *
+ * An absence of warnings is not the same as a confirmation. Nothing on the card
+ * distinguished *"the three agree"* from *"nobody checked"*, and those are the
+ * two things a person releasing money most needs to tell apart.
+ *
+ * Returns the line to show in green, or null when there is nothing to confirm:
+ * a half-read check, no PO net to compare against, or a disagreement (which
+ * `checkAmountTally` reports instead).
+ */
+export function checkAmountAgreed(read: CheckRead | undefined, net: number): string | null {
+  if (!read) return null;
+  const figures = read.amountFigures;
+  const words = read.amountFromWords;
+  if (figures == null || words == null || !(net > 0)) return null;
+  // Deliberately the SAME function that reports the problems: a green line the
+  // amber line disagrees with would be worse than no green line at all.
+  if (checkAmountTally({ figures, words, net })) return null;
+  return `Tallies — the check's figure, its amount in words and this PO's net are all ${peso(net)}.`;
+}
+
+/**
  * Everything wrong with a check photo, given what the PO says it should be.
  * An empty list means the read agrees with the PO on every point we can test.
  */

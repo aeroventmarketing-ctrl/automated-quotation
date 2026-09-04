@@ -5,7 +5,7 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
-  clearingFromDateBoxes,
+  clearingFromDateBoxes, checkAmountAgreed,
   type CheckRead,
 } from "./voucher-check";
 
@@ -327,8 +327,46 @@ describe("what the read is cross-examined against", () => {
    * misread, a wrongly written check, or the wrong photo on the wrong PO, and
    * they call for three different actions.
    */
-  it("tallies all three, and says nothing when they agree", () => {
+  it("tallies all three, and raises no warning when they agree", () => {
     expect(ok({ read: readFor(2081.25, 2081.25), netAmount: 2081.25 })).toEqual([]);
+  });
+
+  /**
+   * The owner: *"If it tallies, show a message that it tally."* An absence of
+   * warnings used to mean both "the three agree" and "nobody looked", and those
+   * are the two things a person releasing money most needs to tell apart.
+   */
+  it("says so out loud when the three tally", () => {
+    expect(checkAmountAgreed(readFor(2081.25, 2081.25), 2081.25)).toBe(
+      "Tallies — the check's figure, its amount in words and this PO's net are all ₱2,081.25.",
+    );
+  });
+
+  it("never confirms what it did not actually check", () => {
+    // A disagreement — the amber line says why; a green one must not appear too.
+    expect(checkAmountAgreed(readFor(2018.25, 2081.25), 2081.25)).toBeNull();
+    // Half a check read.
+    expect(checkAmountAgreed(readFor(2081.25, null), 2081.25)).toBeNull();
+    expect(checkAmountAgreed(readFor(null, 2081.25), 2081.25)).toBeNull();
+    // No PO net to compare against, and no read at all.
+    expect(checkAmountAgreed(readFor(2081.25, 2081.25), 0)).toBeNull();
+    expect(checkAmountAgreed(undefined, 2081.25)).toBeNull();
+    // A read stored before the three figures were kept apart: nothing to confirm.
+    expect(checkAmountAgreed({ ...PRACTICE, amountFigures: null, amountFromWords: null }, 20827.37)).toBeNull();
+  });
+
+  it("agrees with the warnings — exactly one of the two ever shows", () => {
+    // The green line and the amber line come from the same comparison, so they
+    // can never contradict each other on screen.
+    for (const [figures, words, net] of [
+      [2081.25, 2081.25, 2081.25], [2018.25, 2081.25, 2081.25], [2081.25, 2810.25, 2081.25],
+      [5000, 5000, 2081.25], [1000, 2000, 3000], [2081.25, 2081.25, 0],
+    ] as Array<[number, number, number]>) {
+      const read = readFor(figures, words);
+      const amber = ok({ read, netAmount: net }).some((i) => i.key === "amount");
+      const green = checkAmountAgreed(read, net) != null;
+      expect(amber && green, `${figures}/${words}/${net}`).toBe(false);
+    }
   });
 
   it("blames the check, not the PO, when the check agrees with itself", () => {

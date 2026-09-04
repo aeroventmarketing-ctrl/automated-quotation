@@ -1,3 +1,31 @@
+## 2026-09-04 · A check that tallies now says so
+
+Owner: *"If it tallies, show a message that it tally."*
+
+The three-way tally only ever spoke when something was wrong. Silence meant two different things — *the figure,
+the words and the PO's net all agree* and *nobody has looked at this yet* — and those are precisely the two a
+person releasing money needs to tell apart.
+
+So when all three agree the card now says, in green beside a tick:
+
+> **Tallies — the check's figure, its amount in words and this PO's net are all ₱2,081.25.**
+
+`checkAmountAgreed` is built on **the same comparison** that raises the warnings, not a second one written to
+match. A green line that could contradict the amber line above it would be worse than no green line at all, and
+a test walks six figure/words/net combinations asserting that exactly one of the two ever appears.
+
+It stays quiet where there is nothing to confirm: a half-read check, a PO with no net to compare against, or a
+read stored before the three figures were kept apart. Confirming a check nobody actually checked is the one
+failure this feature must not have.
+
+The PO's net is passed into the control from both places it renders — the order page's purchasing chain and the
+combined-PO card — so the third figure is the same one printed beside it on screen.
+
+Three new tests, 319 pass.
+
+**The green line appears on checks read from now on.** A check already on file has no separate figure and words
+recorded, so press Re-read to get one.
+
 ## 2026-09-04 · Three numbers, one diagnosis — the check's figure, its words, and the PO's net
 
 Owner: *"look at the check peso amount, word amount and PO net. All must tally. If not tallied, inform the user
