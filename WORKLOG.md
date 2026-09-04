@@ -1,3 +1,31 @@
+## 2026-09-04 · An admin can delete a check photo
+
+Owner, on a completed PO whose check had been read wrongly: *"add an option to delete the uploaded file."*
+
+The trash icon was missing because deleting followed the ATTACH window, which closes at COMPLETED. So a wrong
+photo on a finished PO was permanent — a worse record than no photo at all, since it reads as evidence.
+
+`checkRemovableAt` matches the re-read decision made an hour earlier: **an admin may delete at any stage**,
+everyone else keeps exactly the attach window.
+
+| | attach | re-read | **delete** |
+| --- | --- | --- | --- |
+| Accounting · Payment Approver · admin, PO live | ✓ | ✓ | ✓ |
+| Accounting · Payment Approver, PO completed | ✗ | ✗ | ✗ |
+| **Admin, PO completed** | ✗ | ✓ | **✓** |
+
+**Attaching stays shut**, and a test says so for every status: replacing a photo on a completed PO is a
+different power from removing a wrong one, and the owner's *"uploading is disabled"* ruling is untouched.
+
+`checkRemovableAt` is kept as its own function rather than an alias of `checkReadableAt`, though the two agree
+today — re-reading is harmless and deleting destroys the only copy of what was attached, so they must be free
+to diverge without one silently dragging the other along.
+
+Enforced on the SERVER, not by hiding the icon: `removeVoucherCheck` checks the same rule, because a rule the UI
+alone enforces is the exact shape of bug the capability-grid note in CLAUDE.md was written about.
+
+Four new tests, 332 pass. Role harness run over every screen: no permission moved.
+
 ## 2026-09-04 · A PO on the register before its check is written
 
 Owner: *"september 3 and september 4 PO not showing in check monitoring."*

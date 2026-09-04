@@ -385,8 +385,32 @@ export function checkReadableAt(
   // read at all, which is how two TKL checks ended up stranded reading
   // "Check number not read" with no button left to try again.
   //
-  // The owner approved exactly this, and no more: *"Admin may re-read anytime"*,
-  // with attaching and removing untouched.
+  // The owner approved exactly this: *"Admin may re-read anytime"* — and later,
+  // on the same grounds, deleting (see `checkRemovableAt`). ATTACHING is the one
+  // that stays shut: their ruling was that uploading stops at Budgeted.
+  if (opts?.admin) return true;
+  return checkAttachableAt(status, ctx);
+}
+
+/**
+ * May this check photo be DELETED?
+ *
+ * Same shape as reading, different reason. The owner asked for it looking at a
+ * completed PO whose check had been read wrongly: *"add an option to delete the
+ * uploaded file."* Attaching is what their earlier ruling closed at COMPLETED —
+ * so a wrong photo on a finished PO was permanent, which is a worse record than
+ * no photo.
+ *
+ * Kept separate from `checkReadableAt` on purpose, though the two agree today:
+ * re-reading is harmless and deleting destroys the only copy of what was
+ * attached, so they should be free to diverge without one silently dragging the
+ * other with it.
+ */
+export function checkRemovableAt(
+  status: PRStatus,
+  ctx?: { isDept?: boolean; poApproved?: boolean },
+  opts?: { admin?: boolean },
+): boolean {
   if (opts?.admin) return true;
   return checkAttachableAt(status, ctx);
 }

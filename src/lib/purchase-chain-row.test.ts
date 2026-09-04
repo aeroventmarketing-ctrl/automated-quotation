@@ -42,14 +42,19 @@ describe("the check flags the row hands to the screen", () => {
    * COMPLETED POs, unread, with no Re-read button — because reading shared the
    * attach window. Their answer: *"Admin may re-read anytime."*
    */
-  it("gives an admin Re-read on a completed PO, and nobody else", () => {
+  it("gives an admin Re-read and Delete on a completed PO, and nobody else", () => {
     const admin = row("COMPLETED", { admin: true, canAttachCheck: true });
     expect(admin.canReadCheck).toBe(true);
-    // …without giving them the attach or remove controls back.
+    // *"add an option to delete the uploaded file"* — a wrong photo on a
+    // finished PO was otherwise permanent.
+    expect(admin.canRemoveCheck).toBe(true);
+    // …without giving them ATTACHING back: replacing a photo on a completed PO
+    // is a different power, and the owner's Budgeted-only rule still holds.
     expect(admin.canAttachCheck).toBe(false);
 
     const accounting = row("COMPLETED", { admin: false, canAttachCheck: true });
     expect(accounting.canReadCheck).toBe(false);
+    expect(accounting.canRemoveCheck).toBe(false);
     expect(accounting.canAttachCheck).toBe(false);
   });
 
@@ -58,6 +63,7 @@ describe("the check flags the row hands to the screen", () => {
       const r = row(status, { admin: false, canAttachCheck: true });
       expect(r.canAttachCheck, status).toBe(true);
       expect(r.canReadCheck, status).toBe(true);
+      expect(r.canRemoveCheck, status).toBe(true);
     }
   });
 
@@ -66,6 +72,7 @@ describe("the check flags the row hands to the screen", () => {
     // same as being one of Accounting / Payment Approver / admin.
     const r = row("COMPLETED", { admin: true, canAttachCheck: false });
     expect(r.canReadCheck).toBe(false);
+    expect(r.canRemoveCheck).toBe(false);
     expect(r.canAttachCheck).toBe(false);
   });
 });
