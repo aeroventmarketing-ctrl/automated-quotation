@@ -18,7 +18,7 @@
  *    the Cleared tab on its due date — it waits to be told.
  */
 import type { CheckDoc } from "@/lib/voucher-check";
-import { effectiveClearingYMD } from "@/lib/voucher-check";
+import { clearingFromDateBoxes, effectiveClearingYMD } from "@/lib/voucher-check";
 
 /**
  * How far ahead a check reads as *Clearing soon* on screen.
@@ -146,6 +146,21 @@ export interface CheckWatchRow {
   /** Why it was last moved (typically insufficient funds). */
   lastMoveReason: string | null;
   daysLeft: number | null;
+  /**
+   * Did this clearing date come from somewhere trustworthy?
+   *
+   * TRUE when it was assembled from the check's own eight DATE boxes, or when a
+   * person set it — a rescheduled date, or the day someone recorded the check as
+   * cleared.
+   *
+   * FALSE when the date is the model's own written answer, unchecked against the
+   * boxes. That happens two ways, and they look identical on screen: a read
+   * taken before the boxes were transcribed at all, and a read where the model
+   * could not make the boxes out and its own date stood by default. Both need a
+   * person's eye, which is why the register says so rather than presenting the
+   * date as fact.
+   */
+  dateVerified: boolean;
   state: CheckWatchState;
   clearedOn: string | null;
   clearedByName: string | null;
@@ -198,6 +213,8 @@ export function buildCheckWatch(
           poDate, poNumber: po.poNumber, supplier: po.supplierCompany, orderId: pr.quotationId,
           checkNo: null, amount: po.net, clearingYMD: null, originalYMD: null,
           moves: 0, lastMoveReason: null, daysLeft: null,
+          // No check, so no date to doubt.
+          dateVerified: true,
           state: "awaiting", clearedOn: null, clearedByName: null,
           statusLabel: registerStatus("awaiting"),
           form: formOfPayment(poDate, null),
@@ -228,6 +245,9 @@ export function buildCheckWatch(
         moves,
         lastMoveReason: moves ? doc.reschedules![moves - 1].reason || null : null,
         daysLeft: due ? daysBetweenYMD(todayYMD, due) : null,
+        // A human-set date (moved, or recorded as cleared) is as good as the
+        // boxes; anything else has to match what the boxes actually said.
+        dateVerified: !!doc.cleared || moves > 0 || (!!due && clearingFromDateBoxes(doc.read?.dateBoxes) === due),
         state,
         clearedOn: doc.cleared?.on ?? null,
         clearedByName: doc.cleared?.byName ?? null,
@@ -256,6 +276,12 @@ export interface CheckWatchSummary {
   open: number;
   /** Of those, the ones the admin is being told about (≤3 days, today, or past). */
   attention: number;
+  /**
+   * Open checks carrying a date that was never confirmed against the check's own
+   * date boxes — see `CheckWatchRow.dateVerified`. The number a person needs in
+   * order to know how much of the register to go and check.
+   */
+  unverifiedDates: number;
   overdue: number;
   cleared: number;
   undated: number;
@@ -281,6 +307,7 @@ export function checkWatchSummary(rows: CheckWatchRow[]): CheckWatchSummary {
   return {
     open: open.length,
     attention: open.filter((r) => needsAttention(r.state)).length,
+    unverifiedDates: open.filter((r) => r.clearingYMD && !r.dateVerified).length,
     overdue: open.filter((r) => r.state === "overdue").length,
     cleared: rows.length - open.length,
     undated: open.filter((r) => r.state === "undated").length,

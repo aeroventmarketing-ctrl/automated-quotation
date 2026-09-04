@@ -1,3 +1,55 @@
+## 2026-09-04 · A date nobody confirmed stops looking like one that was
+
+Owner, on a check plainly reading `1 0 1 7 2 0 2 6`: *"error in reading check 10 17 2026 is october 17, 2026."*
+The register showed **Jul 17, 2026 · 49 days ago**, in red, overdue.
+
+Not a month/day swap — a different month entirely, and the fix from this morning could not have produced it.
+That fix builds the date from the eight DATE-box digits. This date never came from them.
+
+### The gap the fix left behind
+
+`clearingYMD: fromBoxes ?? modelDate`. When the boxes cannot be transcribed, the model's own written date stands
+**unchecked** — the exact thing that proved unreliable — and nothing on screen said so. Two ways in, identical
+on screen:
+
+- a read taken before the digits were transcribed at all (everything read before today), and
+- a read where the model did not transcribe them and its own answer stood by default.
+
+A register of fifty rows, any of which might be wrong, and no way to tell which.
+
+### So the register says which
+
+`dateVerified` on every row, computed live so it covers reads already on file:
+
+| the date came from | verified |
+| --- | --- |
+| the check's own eight DATE boxes | ✓ |
+| a person — rescheduled, or recorded as cleared | ✓ |
+| the model's written answer, unchecked | **✗** |
+| stored digits that CONTRADICT the stored date | **✗** |
+
+Unverified rows carry an italic *unconfirmed* under the date, and a banner counts them: *"4 of these clearing
+dates were never confirmed against the check's own date boxes — they are marked unconfirmed below. Open the PO
+and press Re-read to settle each one against the photo."* That is the number a person needs: how much of the
+register to go and check.
+
+A human-set date counts as confirmed. Someone who moved a date or recorded a clearing looked at the check; the
+boxes have nothing to add.
+
+The PO card says the same thing at the moment of reading, so a new read that could not make the boxes out
+declares itself rather than presenting a guess as a fact.
+
+### And the prompt stopped inviting it
+
+The old wording — *"if the date is not in eight boxes… set dateDigits to null"* — offered null as an easy out.
+It now says to fill the digits in whenever the date is visible at all, and that a date given without them is
+recorded as unconfirmed and has to be checked by hand.
+
+Verified on the running app with a row seeded in exactly the owner's state — Jul 17, 49 days ago, no digits
+behind it. It shows *unconfirmed*; the rows whose dates came from their boxes show nothing.
+
+Six new tests, 369 pass. The role harness reports no permission moved.
+
 ## 2026-09-04 · The pages are fast again, and ask before they fetch
 
 Owner, after the intervals were slowed to stop a $512 egress bill: *"is there a way we can restore the previous
