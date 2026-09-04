@@ -1,3 +1,45 @@
+## 2026-09-04 · A failing page stops being a white screen
+
+Owner, on production `/checks`: *"error in aeroerp"* — Next's bare fallback, *"Application error: a server-side
+exception has occurred… Digest: 4118784689"*. No heading, no navigation, no way back but the browser's Back
+button, and nothing to act on.
+
+### What it was NOT
+
+Worth writing down, because the obvious suspects were all cleared:
+
+- **Not a code change.** The last commit to touch `/checks` was #492, and the owner used the page successfully
+  after it (their fifty-one-row screenshot carries the *For Payment* wording it introduced). #493 and #494 do
+  not touch that path, and the search/sort work was not deployed.
+- **Not a data shape.** A production build was stood up against a seeded database and attacked with eight
+  malformed purchase orders — `po` as a string, null `lines`, a `lines` array containing null, a date reading
+  "N/A", a missing supplier, non-numeric prices, `1e400`, and a check doc whose read has a junk date, a
+  reschedule to "garbage" and `issues` as a string. The register rendered all thirteen rows: no crash, no
+  "Invalid Date", no "NaN".
+
+So the cause is in their environment or their data and is not visible from here. What IS fixable is that it
+told them nothing.
+
+### The floor under every page
+
+`src/app/(app)/error.tsx` — the app had **no error boundary anywhere**, so any server-side failure on any screen
+produced that same white page. Now a failure keeps the shell: the nav still works, the rest of the app is still
+reachable, the page can be retried without a reload, and the digest is presented as the thing to quote rather
+than as an epitaph.
+
+**Verified by forcing a real failure** in a production build and loading it in a browser — which mattered,
+because `curl` shows only `<html id="__next_error__">`: on a server-component error Next serves a minimal shell
+and the boundary renders after hydration. Testing it the quick way would have "proved" it did not work.
+
+### Two smaller things found on the way
+
+- `loadCheckRegister` reads every purchase order in the system, including ones whose JSON predates the current
+  shape. One unreadable PO now drops its own row and logs, instead of taking fifty good ones down with it.
+- `formatDate` had no invalid-date guard, though `formatDateTime` beside it always had one. It rendered the
+  literal words **"Invalid Date"** into a table cell; it now reads "—", like every other missing date.
+
+356 tests pass.
+
 ## 2026-09-04 · The register gets a search box, sortable columns and grouping
 
 Owner, once the register passed fifty rows: *"add a search bar, sort and group by ascending and descending.

@@ -37,6 +37,10 @@ export const PH_TIME_ZONE = "Asia/Manila";
 export function formatDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
+  // Same guard as `formatDateTime` below. Without it an unparseable value —
+  // a hand-typed PO date, a half-read clearing date — renders the literal
+  // words "Invalid Date" in the middle of a table.
+  if (Number.isNaN(date.getTime())) return "—";
   return date.toLocaleDateString("en-PH", {
     year: "numeric",
     month: "short",

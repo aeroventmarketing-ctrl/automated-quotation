@@ -35,16 +35,34 @@ export async function loadCheckRegister(todayYMD: string): Promise<CheckWatchRow
 
   return buildCheckWatch(prs, todayYMD, {
     coerceDocs: coerceCheckDocs,
+    /**
+     * One unreadable PO must not take the register down with it.
+     *
+     * This runs over EVERY purchase request in the system, including ones whose
+     * `po` JSON predates the current shape. A register of fifty checks is worth
+     * far more with one row missing than it is as a white error screen — and
+     * the row that dropped out is still on its own PO, where it can be seen.
+     */
     poOf: (v) => {
-      const po = coercePurchaseOrder(v);
-      return po
-        ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null, net: poTotals(po).net }
-        : null;
+      try {
+        const po = coercePurchaseOrder(v);
+        return po
+          ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null, net: poTotals(po).net }
+          : null;
+      } catch (e) {
+        console.error("check register: unreadable PO", e);
+        return null;
+      }
     },
     // The owner's *"For Payment"* rows: due to be paid by check, no photo yet.
     // `checkExpected` is the same rule the PO card uses for its "Check not
     // attached" badge, so the two can't disagree about which POs owe a check.
-    expectsCheck: (pr, company) =>
-      checkExpected({ supplierGivesTerms: givesTerms(company), status: pr.status as PRStatus }),
+    expectsCheck: (pr, company) => {
+      try {
+        return checkExpected({ supplierGivesTerms: givesTerms(company), status: pr.status as PRStatus });
+      } catch {
+        return false; // an unknown status is not a reason to lose the screen
+      }
+    },
   });
 }
