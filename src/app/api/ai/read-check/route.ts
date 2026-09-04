@@ -123,11 +123,11 @@ export async function POST(req: NextRequest) {
   if (!checkReadableAt(
     pr.status as PRStatus,
     { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) },
-    { admin, paymentApprover: roles.includes("payment_approver") },
+    { admin, paymentApprover: roles.includes("payment_approver"), accounting: roles.includes("accounting") },
   )) {
     return NextResponse.json({
       error: pr.status === "COMPLETED"
-        ? "This purchase order is completed — only an admin or the Payment Approver can re-read its check now."
+        ? "This purchase order is completed — only Accounting, the Payment Approver or an admin can re-read its check now."
         : "A check can only be read once the voucher & check are signed (the Budgeted tab).",
     }, { status: 409 });
   }

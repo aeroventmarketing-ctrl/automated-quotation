@@ -2522,7 +2522,11 @@ async function checkActor(): Promise<CheckActor> {
   const user = await getCurrentUser();
   if (!user) return {};
   const assignments = await getWorkflowRoles();
-  return { admin: isAdmin(user), paymentApprover: userHasWorkflowRole(assignments, user.id, "payment_approver") };
+  return {
+    admin: isAdmin(user),
+    paymentApprover: userHasWorkflowRole(assignments, user.id, "payment_approver"),
+    accounting: userHasWorkflowRole(assignments, user.id, "accounting"),
+  };
 }
 
 async function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): Promise<string | null> {
@@ -2533,7 +2537,7 @@ async function checkWindowError(pr: { status: string; chainLog: unknown; kind?: 
   );
   if (attachable) return null;
   return pr.status === "COMPLETED"
-    ? "This purchase order is completed — only an admin or the Payment Approver can attach its check now."
+    ? "This purchase order is completed — only Accounting, the Payment Approver or an admin can attach its check now."
     : "A check can only be attached once the voucher & check are signed (the Budgeted tab).";
 }
 

@@ -197,46 +197,61 @@ describe("when a check may be attached", () => {
    * later change to any one cell has to be looked at against the rest.
    */
   it("is the whole attach/read/delete policy, for every status", () => {
-    const ACTORS: Array<[string, { admin?: boolean; paymentApprover?: boolean } | undefined]> = [
-      ["Accounting", undefined],
+    type Actor = { admin?: boolean; paymentApprover?: boolean; accounting?: boolean };
+    const ACTORS: Array<[string, Actor | undefined]> = [
+      ["nobody in particular", undefined],
+      ["Accounting", { accounting: true }],
       ["Payment Approver", { paymentApprover: true }],
       ["admin", { admin: true }],
     ];
 
     for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
       const signed = statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED");
-      for (const [who, actor] of ACTORS) {
-        const reach = !!actor; // Payment Approver or admin
+      const done = status === "COMPLETED";
+      for (const [who, a] of ACTORS) {
         const where = `${who} @ ${status}`;
 
-        // ATTACH — the signed span; COMPLETED only for the two who reach it.
-        expect(checkAttachableAt(status, undefined, actor), `attach ${where}`)
-          .toBe(signed && (status !== "COMPLETED" || reach));
+        // ATTACH — the signed span. On a COMPLETED PO, all three named roles.
+        const mayAttach = signed && (!done || !!a?.admin || !!a?.paymentApprover || !!a?.accounting);
+        expect(checkAttachableAt(status, undefined, a), `attach ${where}`).toBe(mayAttach);
 
-        // DELETE follows attach, except an admin reaches everywhere.
-        expect(checkRemovableAt(status, undefined, actor), `delete ${where}`)
-          .toBe(actor?.admin ? true : signed && (status !== "COMPLETED" || reach));
+        // READ follows attach, except an admin reaches everywhere.
+        expect(checkReadableAt(status, undefined, a), `read ${where}`).toBe(a?.admin ? true : mayAttach);
 
-        // READ, likewise.
-        expect(checkReadableAt(status, undefined, actor), `read ${where}`)
-          .toBe(actor?.admin ? true : signed && (status !== "COMPLETED" || reach));
+        // DELETE parts company with attach on a COMPLETED PO — *"Attach only,
+        // not delete."* Accounting may put the right photo on; only the two who
+        // sign for the money may take one off.
+        expect(checkRemovableAt(status, undefined, a), `delete ${where}`)
+          .toBe(a?.admin ? true : signed && (!done || !!a?.paymentApprover));
       }
     }
   });
 
+  it("lets Accounting correct a completed PO's check but not erase one", () => {
+    const acct = { accounting: true };
+    expect(checkAttachableAt("COMPLETED", undefined, acct)).toBe(true);
+    expect(checkReadableAt("COMPLETED", undefined, acct)).toBe(true);
+    // The one cell that differs, and the reason this is a separate rule.
+    expect(checkRemovableAt("COMPLETED", undefined, acct)).toBe(false);
+    // While the PO is live they keep everything, as they always have.
+    expect(checkRemovableAt("CASH_RELEASED", undefined, acct)).toBe(true);
+  });
+
   it("does not move the EARLY end for anyone", () => {
-    // No check has been signed yet, or ever will be. A button there could only
+    // No check has been signed yet, or ever will be. A control there could only
     // record a payment that does not exist.
     for (const status of ["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "REJECTED", "CANCELLED"] as PRStatus[]) {
-      expect(checkAttachableAt(status, undefined, { admin: true }), status).toBe(false);
-      expect(checkAttachableAt(status, undefined, { paymentApprover: true }), status).toBe(false);
+      for (const a of [{ admin: true }, { paymentApprover: true }, { accounting: true }]) {
+        expect(checkAttachableAt(status, undefined, a), `${JSON.stringify(a)} @ ${status}`).toBe(false);
+        expect(checkRemovableAt(status, undefined, a), `${JSON.stringify(a)} @ ${status}`).toBe(!!(a as { admin?: boolean }).admin);
+      }
     }
   });
 
-  it("leaves Accounting exactly where the owner first put them", () => {
+  it("leaves everyone UNNAMED exactly where the owner first put them", () => {
     // *"attaching check must be active only on purchasing budgeted tab… Checks
     // can always be viewed in completed department PO but uploading is
-    // disabled."* Unchanged by any of the widenings above.
+    // disabled."* Still the rule for anyone the widenings did not name.
     for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
       const tabOf = statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED");
       expect(checkAttachableAt(status), status).toBe(tabOf && status !== "COMPLETED");

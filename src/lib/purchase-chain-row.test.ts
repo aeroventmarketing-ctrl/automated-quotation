@@ -26,7 +26,7 @@ const pr = (status: PRStatus): PurchaseRequestLike => ({
   plantApprovedByName: null, plantApprovedAt: null,
 });
 
-const row = (status: PRStatus, opts: { admin: boolean; canAttachCheck: boolean; paymentApprover?: boolean }) =>
+const row = (status: PRStatus, opts: { admin: boolean; canAttachCheck: boolean; paymentApprover?: boolean; accounting?: boolean }) =>
   buildPurchaseChainRow(pr(status), {
     canManagePO: false,
     namesForRole: () => [],
@@ -34,6 +34,7 @@ const row = (status: PRStatus, opts: { admin: boolean; canAttachCheck: boolean; 
     admin: opts.admin,
     canAttachCheck: opts.canAttachCheck,
     paymentApprover: opts.paymentApprover,
+    accounting: opts.accounting,
     givesTerms: () => true,
   });
 
@@ -55,11 +56,20 @@ describe("the check flags the row hands to the screen", () => {
     }
   });
 
-  it("leaves Accounting with nothing on a completed PO, as first ruled", () => {
-    const accounting = row("COMPLETED", { admin: false, canAttachCheck: true });
-    expect(accounting.canAttachCheck).toBe(false);
-    expect(accounting.canReadCheck).toBe(false);
-    expect(accounting.canRemoveCheck).toBe(false);
+  it("gives Accounting attach and re-read on a completed PO, but not delete", () => {
+    // *"Attach only, not delete."* Putting the right photo on is a correction;
+    // taking the only copy off a finished PO is the destructive half.
+    const acct = row("COMPLETED", { admin: false, accounting: true, canAttachCheck: true });
+    expect(acct.canAttachCheck).toBe(true);
+    expect(acct.canReadCheck).toBe(true);
+    expect(acct.canRemoveCheck).toBe(false);
+  });
+
+  it("gives a role the check rules do not name nothing at all on a completed PO", () => {
+    const other = row("COMPLETED", { admin: false, canAttachCheck: true });
+    expect(other.canAttachCheck).toBe(false);
+    expect(other.canReadCheck).toBe(false);
+    expect(other.canRemoveCheck).toBe(false);
   });
 
   it("still gives both to the people who could always attach, while the PO is live", () => {
