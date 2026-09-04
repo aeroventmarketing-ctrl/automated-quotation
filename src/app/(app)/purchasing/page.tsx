@@ -18,7 +18,7 @@ import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt } from "@/lib/voucher-check";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
@@ -278,6 +278,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         // The role may attach one AND this PO is in the window where a check can
         // be attached (Budgeted, not yet completed) — see `checkAttachableAt`.
         canAttachCheck: canAttachCheckHere && checkAttachableAt(status, { isDept: bIsDept, poApproved: isPoApproved(anchor.chainLog) }),
+        // Wider: an admin may re-read a check at any stage — see `checkReadableAt`.
+        canReadCheck: canAttachCheckHere && checkReadableAt(status, { isDept: bIsDept, poApproved: isPoApproved(anchor.chainLog) }, { admin }),
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",

@@ -374,6 +374,23 @@ export function checkExpected(opts: { supplierGivesTerms: boolean; status: PRSta
  * excluded — which is what the owner asked for, and the PO they were looking at
  * when they asked was a completed one.
  */
+export function checkReadableAt(
+  status: PRStatus,
+  ctx?: { isDept?: boolean; poApproved?: boolean },
+  opts?: { admin?: boolean },
+): boolean {
+  // An admin, at any stage. Reading a check moves no money and advances no
+  // step — it fills in what the photo already says. Sharing the ATTACH window
+  // meant a check that failed to read before its PO completed could never be
+  // read at all, which is how two TKL checks ended up stranded reading
+  // "Check number not read" with no button left to try again.
+  //
+  // The owner approved exactly this, and no more: *"Admin may re-read anytime"*,
+  // with attaching and removing untouched.
+  if (opts?.admin) return true;
+  return checkAttachableAt(status, ctx);
+}
+
 export function checkAttachableAt(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): boolean {
   if (status === "COMPLETED") return false;
   if (statusBucket(status, ctx) !== "approved") return false;

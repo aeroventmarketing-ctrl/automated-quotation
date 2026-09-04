@@ -9,7 +9,7 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { checkReadSchema } from "@/lib/ai/schemas";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck, checkAttachableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
+import { canAttachCheck, checkReadableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
@@ -117,12 +117,13 @@ export async function POST(req: NextRequest) {
     select: { id: true, po: true, quotationId: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
   });
   if (!pr) return NextResponse.json({ error: "Purchase order not found" }, { status: 404 });
-  // Reading writes the result onto the PO, so it lives in the same window as
-  // attaching: Budgeted, and not once the PO is completed.
-  if (!checkAttachableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) })) {
+  // Reading follows the ATTACH window for everyone except an admin, who may
+  // re-read at any stage — reading fills in what the photo says and moves no
+  // money. See `checkReadableAt`.
+  if (!checkReadableAt(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }, { admin })) {
     return NextResponse.json({
       error: pr.status === "COMPLETED"
-        ? "This purchase order is completed — its check can be viewed but no longer changed."
+        ? "This purchase order is completed — only an admin can re-read its check now."
         : "A check can only be read once the voucher & check are signed (the Budgeted tab).",
     }, { status: 409 });
   }

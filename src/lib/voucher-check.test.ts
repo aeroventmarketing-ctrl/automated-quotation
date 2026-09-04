@@ -5,7 +5,7 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
-  clearingFromDateBoxes, checkAmountAgreed,
+  clearingFromDateBoxes, checkAmountAgreed, checkReadableAt,
   type CheckRead,
 } from "./voucher-check";
 
@@ -143,6 +143,33 @@ describe("when a check may be attached", () => {
     // "pending" until `poApproved`, and it has no check either way.
     expect(checkAttachableAt("APPROVED", { isDept: true, poApproved: false })).toBe(false);
     expect(checkAttachableAt("APPROVED", { isDept: true, poApproved: true })).toBe(false);
+  });
+
+  /**
+   * The owner, asked directly after two checks were stranded unread on completed
+   * POs: *"Admin may re-read anytime."* Reading fills in what the photo already
+   * says — it moves no money and advances no step — so it is the one thing that
+   * outlives the attach window.
+   *
+   * Attaching and removing are NOT widened, and the grid below says so for every
+   * status at once.
+   */
+  it("lets an admin re-read at any stage, and nobody else past Budgeted", () => {
+    for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
+      // Admin: always.
+      expect(checkReadableAt(status, undefined, { admin: true }), `admin @ ${status}`).toBe(true);
+      // Everyone else: exactly the attach window, unchanged.
+      expect(checkReadableAt(status, undefined, { admin: false }), `non-admin @ ${status}`).toBe(checkAttachableAt(status));
+      expect(checkReadableAt(status), `no opts @ ${status}`).toBe(checkAttachableAt(status));
+      // Attaching is untouched by any of this.
+      expect(checkAttachableAt(status), `attach @ ${status}`).toBe(status !== "COMPLETED" && checkAttachableAt(status));
+    }
+  });
+
+  it("re-opens exactly the case that was stuck — a completed PO", () => {
+    expect(checkAttachableAt("COMPLETED")).toBe(false);
+    expect(checkReadableAt("COMPLETED", undefined, { admin: false })).toBe(false);
+    expect(checkReadableAt("COMPLETED", undefined, { admin: true })).toBe(true);
   });
 
   it("does not change whether a check is EXPECTED — only whether it can be attached", () => {

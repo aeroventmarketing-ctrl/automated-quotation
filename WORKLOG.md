@@ -1,3 +1,26 @@
+## 2026-09-04 · An admin may re-read a check at any stage
+
+Owner, asked after two TKL checks were found stranded: *"Admin may re-read anytime."*
+
+Reading a check moves no money and advances no step — it fills in what the photo already says. It had been
+sharing the ATTACH window anyway, so a check whose read failed before its PO completed could never be read at
+all. `checkReadableAt` splits the two:
+
+| | attach / remove | run the AI read |
+| --- | --- | --- |
+| Accounting · Payment Approver · admin, PO live (Budgeted) | ✓ | ✓ |
+| Accounting · Payment Approver, PO **completed** | ✗ | ✗ |
+| **Admin, PO completed** | ✗ | **✓** |
+
+Attaching and removing are untouched — the owner's earlier ruling (*"attaching check must be active only on
+purchasing budgeted tab"*) still holds exactly as written.
+
+The rule is asserted for **every status at once**, and separately at the row builder — because the rule being
+right and the button being wired to it are two different things, and it was the second kind that stranded these
+checks. The role harness was run over every screen: no other permission moved.
+
+Five new tests, 325 pass.
+
 ## 2026-09-04 · A failed read now leaves a note behind
 
 Owner: *"AI check reading not functioning please check."* — two TKL Steel checks reading **"Check number not
