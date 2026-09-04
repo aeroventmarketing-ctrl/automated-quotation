@@ -61,7 +61,10 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // window for a check: *"allow admin and payment approver to attach copy of
   // check."*
   const isPaymentApprover = viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver");
-  const checkActor = { admin, paymentApprover: isPaymentApprover };
+  // The ROLE itself, not `canAct` — that reads true for an admin and would make
+  // every admin look like Accounting to the check rules.
+  const isAccounting = viewer != null && userHasWorkflowRole(assignments, viewer.id, "accounting");
+  const checkActor = { admin, paymentApprover: isPaymentApprover, accounting: isAccounting };
   const canAttachCheckHere = canAttachCheck({
     admin,
     workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r)),
@@ -333,7 +336,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         const rows = unbatched
           .filter((pr) => pr.quotationId === qid)
           .map((pr) =>
-            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, paymentApprover: isPaymentApprover, givesTerms }),
+            buildPurchaseChainRow(pr, { mrfNo: mrfNoOf(qid, pr.mrfId), canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, paymentApprover: isPaymentApprover, accounting: isAccounting, givesTerms }),
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
@@ -361,6 +364,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       voucherNo: voucherNoByPr.get(pr.id) ?? null,
       canAttachCheck: canAttachCheckHere,
       paymentApprover: isPaymentApprover,
+      accounting: isAccounting,
       givesTerms,
     });
     // Order-linked (bought-in supplier) requisitions carry a quotationId and are
@@ -396,7 +400,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const stock = stockIds.length ? await prisma.stockItem.findMany({ where: { id: { in: stockIds } }, select: { id: true, sku: true, unit: true } }) : [];
       const stockById = new Map(stock.map((s) => [s.id, s]));
       replenRows = prs.map((pr) =>
-        buildPurchaseChainRow(pr, { mrfNo: null, canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, paymentApprover: isPaymentApprover, givesTerms }),
+        buildPurchaseChainRow(pr, { mrfNo: null, canManagePO, canCancel: canCancelPr(pr), canDelete: canDeleteStatus(pr.status), namesForRole, canAct, admin, voucherNo: voucherNoByPr.get(pr.id) ?? null, canAttachCheck: canAttachCheckHere, paymentApprover: isPaymentApprover, accounting: isAccounting, givesTerms }),
       );
       // Ready to receive = the receive step is available (PLANT_APPROVED) and the
       // viewer is the Warehouse/admin who can post it into stock.

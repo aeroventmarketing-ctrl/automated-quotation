@@ -104,6 +104,8 @@ const PROBES = [
     doneRow: (t) => t.includes("HARNESS-DONE"),
     doneAttach: (t) => near(t, "HARNESS-DONE", /Attach check|Add check/),
     doneBadge: (t) => near(t, "HARNESS-DONE", /Check not attached/),
+    // Whether the AMBER "no photo ever attached" reminder is all they get.
+    doneViewOnly: (t) => near(t, "HARNESS-DONE", /Check not attached/) && !near(t, "HARNESS-DONE", /Attach check|Add check/),
   } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),

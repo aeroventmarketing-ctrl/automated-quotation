@@ -389,9 +389,20 @@ export function checkExpected(opts: { supplierGivesTerms: boolean; status: PRSta
 export interface CheckActor {
   admin?: boolean;
   paymentApprover?: boolean;
+  /** Holds the Accounting workflow role — the people who handle checks daily. */
+  accounting?: boolean;
 }
 
-const elevated = (a?: CheckActor): boolean => !!a?.admin || !!a?.paymentApprover;
+/**
+ * The span in which a check exists at all: signed, and not thrown away.
+ *
+ * Everything below starts here, and NOTHING widens it. Pending, Approved,
+ * Rejected and Cancelled stay shut for every actor including an admin: no check
+ * has been signed yet, or ever will be, so a control there could only record a
+ * payment that does not exist.
+ */
+const signedSpan = (status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): boolean =>
+  statusBucket(status, ctx) === "approved" && prMainIndex(status) >= prMainIndex(CHECK_EXPECTED_FROM);
 
 export function checkReadableAt(
   status: PRStatus,
@@ -431,7 +442,14 @@ export function checkRemovableAt(
   opts?: CheckActor,
 ): boolean {
   if (opts?.admin) return true;
-  return checkAttachableAt(status, ctx, opts);
+  if (!signedSpan(status, ctx)) return false;
+  if (status !== "COMPLETED") return true;
+  // On a COMPLETED PO this deliberately parts company with attaching. The owner
+  // opened attaching to Accounting and kept deleting back: *"Attach only, not
+  // delete."* Putting the right photo on is a correction; removing the only copy
+  // of one from a finished PO is the destructive half, and stays with the two
+  // who sign for the money.
+  return !!opts?.paymentApprover;
 }
 
 export function checkAttachableAt(
@@ -439,18 +457,15 @@ export function checkAttachableAt(
   ctx?: { isDept?: boolean; poApproved?: boolean },
   actor?: CheckActor,
 ): boolean {
-  if (statusBucket(status, ctx) !== "approved") return false;
-  if (prMainIndex(status) < prMainIndex(CHECK_EXPECTED_FROM)) return false;
-  // COMPLETED is the one the owner reopened, and only for two people:
-  // *"allow admin and payment approver to attach copy of check."* For everyone
-  // else a finished PO stays view-only, exactly as ruled before.
+  if (!signedSpan(status, ctx)) return false;
+  if (status !== "COMPLETED") return true;
+  // COMPLETED is the corner the owner reopened, in two goes: first *"allow admin
+  // and payment approver to attach copy of check"*, then Accounting as well
+  // once the harness showed them stopped there — they are the role that handles
+  // the checks daily, so the restriction mostly made work for the owner.
   //
-  // The EARLIER end does not move for anyone. Pending, Approved, Rejected and
-  // Cancelled are excluded by the two lines above because no check has been
-  // signed yet (or ever will be) — a button there could only create a record of
-  // a payment that does not exist.
-  if (status === "COMPLETED") return elevated(actor);
-  return true;
+  // Every OTHER role still sees a completed PO's check and cannot touch it.
+  return !!actor?.admin || !!actor?.paymentApprover || !!actor?.accounting;
 }
 
 /** Expected, and not there — the condition the amber badge and the notification key on. */

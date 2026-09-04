@@ -371,12 +371,14 @@ export function buildPurchaseChainRow(
      * reach over a check outlives the Budgeted window — see `CheckActor`.
      */
     paymentApprover?: boolean;
+    /** …and whether they hold the Accounting role. Part of the same `CheckActor`. */
+    accounting?: boolean;
     /** Does this PO's supplier give us terms? Looked up by company name. */
     givesTerms?: (company: string | undefined) => boolean;
   },
 ): PurchaseChainRow {
   const status = pr.status as PRStatus;
-  const checkActor = { admin: ctx.admin, paymentApprover: ctx.paymentApprover };
+  const checkActor = { admin: ctx.admin, paymentApprover: ctx.paymentApprover, accounting: ctx.accounting };
   const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
   const trail = buildPurchaseTrail(pr);
   const returns = buildReturnViews(pr);

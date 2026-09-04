@@ -1,3 +1,35 @@
+## 2026-09-04 · Accounting can attach a check to a completed PO — but not delete one
+
+Owner, asked after the harness showed Accounting stopped where the admin and the Payment Approver were not:
+**"Attach only, not delete."**
+
+Putting the right photo on a finished PO is a correction. Taking the only copy off one is the destructive half,
+and it stays with the two people who sign for the money.
+
+| on a COMPLETED PO | attach | re-read | delete |
+| --- | --- | --- | --- |
+| **Accounting** | **✓** | **✓** | **✗** |
+| Payment Approver | ✓ | ✓ | ✓ |
+| admin | ✓ | ✓ | ✓ |
+| anyone else | ✗ | ✗ | ✗ |
+
+While the PO is live, Accounting keeps all three, as they always have.
+
+### Deleting stops following attaching
+
+The two rules had been the same expression twice, which was fine while they agreed and would have quietly
+carried Accounting along the moment they did not. `checkRemovableAt` now states its own case, with the reason
+in the comment — the one cell where the two differ is the whole point of it being a separate function.
+
+The span in which a check exists at all — signed, not thrown away — is now one named `signedSpan` that both
+rules start from, so widening either can never reach Pending, Approved, Rejected or Cancelled. A test walks
+**three powers × four actors × every status**, and a second one pins the single cell that differs.
+
+Verified on the real screen: Michelle Cotura (Accounting) now has the button on a completed PO; the Purchaser
+still sees the badge alone; Warehouse sees neither.
+
+Five new tests, 337 pass.
+
 ## 2026-09-04 · The role harness gains Accounting, and a check probe
 
 Owner: *"accounting role cannot upload check. Check other allowed role if same error shows."*
