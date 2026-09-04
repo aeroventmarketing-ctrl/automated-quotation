@@ -1,3 +1,112 @@
+## 2026-09-04 · A check that tallies now says so
+
+Owner: *"If it tallies, show a message that it tally."*
+
+The three-way tally only ever spoke when something was wrong. Silence meant two different things — *the figure,
+the words and the PO's net all agree* and *nobody has looked at this yet* — and those are precisely the two a
+person releasing money needs to tell apart.
+
+So when all three agree the card now says, in green beside a tick:
+
+> **Tallies — the check's figure, its amount in words and this PO's net are all ₱2,081.25.**
+
+`checkAmountAgreed` is built on **the same comparison** that raises the warnings, not a second one written to
+match. A green line that could contradict the amber line above it would be worse than no green line at all, and
+a test walks six figure/words/net combinations asserting that exactly one of the two ever appears.
+
+It stays quiet where there is nothing to confirm: a half-read check, a PO with no net to compare against, or a
+read stored before the three figures were kept apart. Confirming a check nobody actually checked is the one
+failure this feature must not have.
+
+The PO's net is passed into the control from both places it renders — the order page's purchasing chain and the
+combined-PO card — so the third figure is the same one printed beside it on screen.
+
+Three new tests, 319 pass.
+
+**The green line appears on checks read from now on.** A check already on file has no separate figure and words
+recorded, so press Re-read to get one.
+
+## 2026-09-04 · Three numbers, one diagnosis — the check's figure, its words, and the PO's net
+
+Owner: *"look at the check peso amount, word amount and PO net. All must tally. If not tallied, inform the user
+of the problem and cause."*
+
+Three numbers that should all be the same number: the **peso box**, the **PESOS line**, and the PO's **net**.
+They were being compared in two separate tests that each reported half a story — *"Check is for X but this PO's
+net is Y"* and *"the amount in words doesn't match the figure"* — so a card could show both and name neither
+cause.
+
+`checkAmountTally` now looks at all three together, because **which pair disagrees is the diagnosis**. The same
+three numbers mean four different things, and each one calls for a different action:
+
+| box | words | net | what the card now says |
+| --- | --- | --- | --- |
+| = | = | = | nothing |
+| = | = | ≠ | *"The check agrees with itself, so the amount written is not this PO's — either it was written for the wrong amount, or this photo belongs to a different PO."* |
+| ≠ | = | = | *"Cause: the figure on the check is wrong, or was misread. The written amount governs on a check, so ₱X was used."* |
+| = | ≠ | = | *"Cause: the amount in words is wrong, or was misread. **A bank pays the WORDS** — if the check really says ₱Y, it must be voided and rewritten."* |
+| ≠ | ≠ | ≠ | *"Nothing tallies… the check disagrees with itself AND with the PO. Re-read the photo first; if it reads the same, the check itself is wrong."* |
+
+Row four is the one worth having built this for. The figure looks right, the PO looks right, and it is the
+easiest of all of these to wave through — but the bank pays the written line, so the supplier gets the wrong
+money and nobody finds out until it clears.
+
+Where two of the numbers are **the same digits in a different order**, the message says so and points at
+Re-read: that is what a misread looks like, and it is not a trip to the bank.
+
+### Half a check is never a clean bill
+
+If only one of the two amounts could be read, the card says which one was missing rather than silently
+comparing the survivor to the PO and calling it agreement.
+
+### The three are now stored apart
+
+`amountFigures` (the peso box) and `amountFromWords` (the PESOS line as a number) are both kept, with `amount` —
+the figure the register and the cash position quote — being the words where they parse. Reads stored before
+this keep the checks they can support; nothing on file needed changing.
+
+One issue is raised, never a pile: the card keys its warnings by kind, and two amount warnings would collide.
+Fifteen new tests, 316 pass.
+
+## 2026-09-04 · The amount comes off the PESOS line, not the peso box
+
+Owner, on a TOZEN PO: *"please check. Error in AI reading, Check and Net Amount is tally."*
+
+The check was for **₱2,081.25** and was read as **₱2,018.25** — the same digits, two of them swapped. The card
+then reported *"Check is for ₱2,018.25 but this PO's net is ₱2,081.25"*, accusing a check that was perfectly
+correct.
+
+### A transposition is invisible, so stop reading the number
+
+A photo of `2,081.25` can come back as `2,018.25` and nothing about the result looks wrong — no odd digit, no
+implausible total, nothing for a confidence score to catch. The words cannot fail that way: **EIGHTY-ONE** and
+**EIGHTEEN** are not a transposition of each other.
+
+So `pesoAmountFromWords` reads the PESOS line back as a number, and that is what the amount is taken from. The
+peso box is kept as `amountFigures` **only when the two disagreed** — its presence *is* the disagreement.
+
+The law had already settled this. Negotiable Instruments Law (Act 2031, sec. 17(c)): where the sum is written
+in both words and figures and the two differ, **the sum in words is the sum payable**. The check itself has
+always said so; we were reading the wrong half of it.
+
+The parser returns null on any word it does not recognise, rather than a partial total — a half-parsed amount
+is the one answer worse than none. It takes the line as checks actually print it: hyphens, "PESOS", the
+house-style "ONLY", asterisk filler, and a `25/100`, `00/100` or `NO/100` tail. A round-trip test drives every
+amount our voucher speller can produce back through it, so the two can never drift apart.
+
+### Two warnings that now say something useful
+
+- **Figures vs words:** *"The peso box reads ₱2,018.25 but the words say ₱2,081.25. The written amount governs
+  on a check, so ₱2,081.25 was used."* Previously this only ever said the two "don't match".
+- **Amount vs PO net:** when the two are *the same digits in a different order*, the warning says so and points
+  at Re-read — because a misread and a wrong payment call for different actions, and only one of them is a trip
+  to the bank.
+
+The prompt was tightened to match: read the peso box one digit at a time, left to right, and don't "recognise"
+a familiar-looking number and write it from memory.
+
+Ten new tests, 310 pass. **The TOZEN check on file still carries the old figure — press Re-read.**
+
 ## 2026-09-04 · 10-04-2026 is October 4th — the check date stops being a judgement call
 
 Owner: *"date error in check reading. When reading check date, 10-04-2026 means October 4, 2026. Update the AI

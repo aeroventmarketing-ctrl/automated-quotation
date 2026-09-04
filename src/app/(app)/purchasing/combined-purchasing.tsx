@@ -476,6 +476,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             supplierGivesTerms={batch.supplierGivesTerms}
             canAttach={batch.canAttachCheck}
             canView={showSupplier}
+            netAmount={totals.net}
           />
         </div>
       </div>

@@ -573,6 +573,7 @@ export function PurchasingChain({
                       supplierGivesTerms={!!r.supplierGivesTerms}
                       canAttach={!readOnly && !!r.canAttachCheck}
                       canView={showSupplier}
+                      netAmount={r.po ? poTotals(r.po).net : undefined}
                     />
                   </div>
                   {/* Once approved, only an admin may edit the PO. */}

@@ -52,7 +52,18 @@ export interface CheckRead {
    * eight boxes.
    */
   dateBoxes?: string | null;
-  amount: number | null; // (f) the figure in the peso box
+  /**
+   * (f) the amount the check is for — `amountFromWords ?? amountFigures`.
+   *
+   * The written line wins, because that is what a bank pays when the two halves
+   * of a check disagree. This is the figure the register and the cash position
+   * quote.
+   */
+  amount: number | null;
+  /** (f) the PESO BOX on its own, as read. Null if the photo didn't give it up. */
+  amountFigures?: number | null;
+  /** (g) the PESOS LINE on its own, read back as a number. Null if unparseable. */
+  amountFromWords?: number | null;
   amountWords: string | null; // (g) the amount spelled out on the PESOS line
   bank: string | null;
   confidence: number | null; // 0..1 — how sure of the exact digits
@@ -163,6 +174,8 @@ function coerceRead(v: unknown): CheckRead | undefined {
     clearingYMD: str("clearingYMD"),
     dateBoxes: str("dateBoxes"),
     amount: typeof o.amount === "number" && Number.isFinite(o.amount) ? o.amount : null,
+    amountFigures: typeof o.amountFigures === "number" && Number.isFinite(o.amountFigures) ? o.amountFigures : null,
+    amountFromWords: typeof o.amountFromWords === "number" && Number.isFinite(o.amountFromWords) ? o.amountFromWords : null,
     amountWords: str("amountWords"),
     bank: str("bank"),
     confidence: typeof o.confidence === "number" ? o.confidence : null,
@@ -422,9 +435,153 @@ export function amountMatchesWords(amount: number | null, words: string | null, 
 /** Pesos as a person reads them, for a warning line they are meant to act on. */
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+/**
+ * Two amounts built from the very same digits — 2,081.25 and 2,018.25.
+ *
+ * A check written for the wrong amount lands on a round-ish number of its own;
+ * a MISREAD check lands on an anagram of the right one. Worth saying out loud on
+ * the warning, because the two call for different actions: one is a trip to the
+ * bank, the other is pressing Re-read.
+ */
+const sameDigits = (a: number, b: number): boolean => {
+  const key = (n: number) => n.toFixed(2).replace(/\D/g, "").split("").sort().join("");
+  return key(a) === key(b);
+};
+
 export interface CheckIssue {
   key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence";
   message: string;
+}
+
+/**
+ * The three-way tally the owner asked for: *"look at the check peso amount, word
+ * amount and PO net. All must tally. If not tallied, inform the user of the
+ * problem and cause."*
+ *
+ * Three numbers that should all be the same number:
+ *
+ *  - **the peso box** — the figure the check is written for;
+ *  - **the PESOS line** — the same amount spelled out, and the one a bank pays
+ *    when the two differ (Negotiable Instruments Law, Act 2031, sec. 17(c));
+ *  - **the PO's net** — what we owe this supplier after the EWT we withhold.
+ *
+ * WHICH PAIR disagrees is the whole diagnosis, so each case gets its own
+ * sentence rather than one generic "amounts don't match":
+ *
+ * | box | words | net | what it means |
+ * | --- | --- | --- | --- |
+ * | = | = | = | nothing to say |
+ * | = | = | ≠ | the check is consistent but is not this PO's amount |
+ * | ≠ | = | = | the FIGURE is wrong or misread — the bank pays the words |
+ * | = | ≠ | = | the WORDS are wrong or misread — and the bank pays those |
+ * | ≠ | ≠ | ≠ | the check disagrees with itself and with the PO |
+ *
+ * Returns null when they tally, or when there is nothing to compare.
+ */
+export function checkAmountTally(opts: {
+  /** The peso box, as read. Null if the photo didn't give it up. */
+  figures: number | null | undefined;
+  /** The PESOS line read back as a number. Null if it couldn't be parsed. */
+  words: number | null | undefined;
+  /** The PO's net. Zero or negative means there is nothing to tally against. */
+  net: number;
+}): CheckIssue | null {
+  const { figures, words } = opts;
+  const net = opts.net > 0 ? opts.net : null;
+  const same = (a: number | null | undefined, b: number | null | undefined) =>
+    a != null && b != null && Math.abs(a - b) <= 0.01;
+  // A misread lands on an anagram of the right answer; a wrongly written check
+  // does not. Saying which one this looks like saves a trip to the bank.
+  const hint = (a: number, b: number) =>
+    sameDigits(a, b) ? " Those are the same digits in a different order, which is what a misread looks like — press Re-read before treating it as a wrong check." : "";
+
+  // Nothing was legible. Say that, rather than reporting a false agreement.
+  if (figures == null && words == null) {
+    return { key: "amount", message: "The amount couldn't be read from this photo — neither the peso box nor the words. Re-read it, or check the figures against the check by hand." };
+  }
+
+  // Only one half of the check could be read. Compare what there is, and say
+  // which half is missing so nobody reads silence as a clean bill.
+  if (figures == null || words == null) {
+    const got = figures ?? (words as number);
+    const present = figures != null ? "peso box" : "words";
+    const missing = figures != null ? "words" : "peso box";
+    const half = `Only the ${present} could be read (${peso(got)}); the ${missing} couldn't.`;
+    if (net == null) return { key: "amount", message: half };
+    return same(got, net)
+      ? { key: "amount", message: `${half} It matches this PO's net, but the check's own cross-check couldn't be confirmed.` }
+      : { key: "amount", message: `${half} It does not match this PO's net of ${peso(net)}.${hint(got, net)}` };
+  }
+
+  const boxVsWords = same(figures, words);
+
+  // No PO net to judge against — all we can do is the check's own cross-check.
+  if (net == null) {
+    return boxVsWords ? null : {
+      key: "amount",
+      message: `The check disagrees with itself: the peso box reads ${peso(figures)} but the words read ${peso(words)}. Cause: one of the two was written or read wrongly. The written amount governs on a check, so ${peso(words)} was used.${hint(figures, words)}`,
+    };
+  }
+
+  const boxVsNet = same(figures, net);
+  const wordsVsNet = same(words, net);
+  if (boxVsWords && boxVsNet) return null; // all three tally
+
+  // The check agrees with itself but not with the PO. The check is not at
+  // fault; either it is for the wrong amount, or it is on the wrong PO.
+  if (boxVsWords) {
+    return {
+      key: "amount",
+      message: `The check is for ${peso(figures)} but this PO's net is ${peso(net)}. The check agrees with itself, so the amount written is not this PO's — either it was written for the wrong amount, or this photo belongs to a different PO.${hint(figures, net)}`,
+    };
+  }
+
+  // The words agree with the PO; the figure is the odd one out.
+  if (wordsVsNet) {
+    return {
+      key: "amount",
+      message: `The peso box reads ${peso(figures)}, but the words and this PO's net both read ${peso(words)}. Cause: the figure on the check is wrong, or was misread. The written amount governs on a check, so ${peso(words)} was used.${hint(figures, words)}`,
+    };
+  }
+
+  // The figure agrees with the PO — but the bank pays the WORDS, so this is the
+  // expensive one, and it is not fixed by pressing Re-read if the check really
+  // says that.
+  if (boxVsNet) {
+    return {
+      key: "amount",
+      message: `The peso box and this PO's net both read ${peso(figures)}, but the words read ${peso(words)}. Cause: the amount in words is wrong, or was misread. A bank pays the WORDS — if the check really says ${peso(words)}, it must be voided and rewritten.${hint(figures, words)}`,
+    };
+  }
+
+  // Nothing agrees with anything.
+  return {
+    key: "amount",
+    message: `Nothing tallies: the peso box reads ${peso(figures)}, the words read ${peso(words)}, and this PO's net is ${peso(net)}. Cause: the check disagrees with itself AND with the PO. Re-read the photo first; if it reads the same, the check itself is wrong.`,
+  };
+}
+
+/**
+ * The other half of the tally — the owner's *"if it tallies, show a message that
+ * it tally."*
+ *
+ * An absence of warnings is not the same as a confirmation. Nothing on the card
+ * distinguished *"the three agree"* from *"nobody checked"*, and those are the
+ * two things a person releasing money most needs to tell apart.
+ *
+ * Returns the line to show in green, or null when there is nothing to confirm:
+ * a half-read check, no PO net to compare against, or a disagreement (which
+ * `checkAmountTally` reports instead).
+ */
+export function checkAmountAgreed(read: CheckRead | undefined, net: number): string | null {
+  if (!read) return null;
+  const figures = read.amountFigures;
+  const words = read.amountFromWords;
+  if (figures == null || words == null || !(net > 0)) return null;
+  // Deliberately the SAME function that reports the problems: a green line the
+  // amber line disagrees with would be worse than no green line at all.
+  if (checkAmountTally({ figures, words, net })) return null;
+  return `Tallies — the check's figure, its amount in words and this PO's net are all ${peso(net)}.`;
 }
 
 /**
@@ -470,13 +627,23 @@ export function checkIssues(opts: {
   if (r.payee && !sameCompany(r.payee, opts.supplierCompany)) {
     issues.push({ key: "payee", message: `Paid to "${r.payee}" but this PO is to ${opts.supplierCompany}.` });
   }
-  // (f) The figure against the PO's net.
-  if (r.amount != null && opts.netAmount > 0 && Math.abs(r.amount - opts.netAmount) > 0.01) {
-    issues.push({ key: "amount", message: `Check is for ${peso(r.amount)} but this PO's net is ${peso(opts.netAmount)}.` });
-  }
-  // (g) The check's own self-check: figures against words.
-  if (r.amount != null && r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
-    issues.push({ key: "words", message: `The amount in words doesn't match the figure — "${r.amountWords}".` });
+  // (f) and (g) — the peso box, the PESOS line and the PO's net, all three at
+  // once. One issue, because "which pair disagrees" is a single diagnosis.
+  if (r.amountFigures != null || r.amountFromWords != null) {
+    const tally = checkAmountTally({ figures: r.amountFigures, words: r.amountFromWords, net: opts.netAmount });
+    if (tally) issues.push(tally);
+  } else if (r.amount != null) {
+    // A read stored before the three figures were kept apart. All it has is one
+    // amount and the verbatim line, so it gets the checks it can support.
+    if (opts.netAmount > 0 && Math.abs(r.amount - opts.netAmount) > 0.01) {
+      const hint = sameDigits(r.amount, opts.netAmount)
+        ? " Those are the same digits in a different order, which is what a misread looks like — press Re-read before treating it as a wrong check."
+        : "";
+      issues.push({ key: "amount", message: `Check is for ${peso(r.amount)} but this PO's net is ${peso(opts.netAmount)}.${hint}` });
+    }
+    if (r.amountWords && !amountMatchesWords(r.amount, r.amountWords, opts.inWords)) {
+      issues.push({ key: "words", message: `The amount in words doesn't match the figure — "${r.amountWords}".` });
+    }
   }
   // (c) The same check number must not already be recorded elsewhere.
   if (r.checkNo) {

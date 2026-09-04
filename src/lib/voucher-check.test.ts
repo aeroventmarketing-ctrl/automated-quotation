@@ -5,7 +5,7 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
-  clearingFromDateBoxes,
+  clearingFromDateBoxes, checkAmountAgreed,
   type CheckRead,
 } from "./voucher-check";
 
@@ -194,6 +194,8 @@ const PRACTICE: CheckRead = {
   dateBoxes: "10172026",
   amount: 20827.37,
   amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100",
+  amountFigures: 20827.37,
+  amountFromWords: 20827.37,
   bank: "BDO",
   confidence: 0.95,
   warnings: [],
@@ -202,6 +204,20 @@ const PRACTICE: CheckRead = {
   readAt: "2026-09-03T01:00:00.000Z",
 };
 const OURS = "AEROVENT FANS & BLOWERS MANUFACTURING";
+
+/**
+ * A check read whose peso box and PESOS line say what you tell them to. The
+ * amount that gets USED is the words, so the three are set together — a fixture
+ * that sets one and leaves the others stale is how a green test lies.
+ */
+const readFor = (figures: number | null, words: number | null, over: Partial<CheckRead> = {}): CheckRead => ({
+  ...PRACTICE,
+  amountFigures: figures,
+  amountFromWords: words,
+  amount: words ?? figures,
+  amountWords: words == null ? null : pesoAmountInWords(words),
+  ...over,
+});
 const ok = (over: Partial<Parameters<typeof checkIssues>[0]> = {}) =>
   checkIssues({
     read: PRACTICE,
@@ -278,21 +294,137 @@ describe("what the read is cross-examined against", () => {
   // EWT supplier's check as a mismatch.
   it("judges the check against the PO's NET, not its gross total", () => {
     const withEwt = { netAmount: 2160.54, supplierCompany: "TOZEN PHILIPPINES INC." };
-    const forNet = { ...PRACTICE, amount: 2160.54, amountWords: "TWO THOUSAND ONE HUNDRED SIXTY AND 54/100", payee: "TOZEN PHILIPPINES INC." };
+    const forNet = readFor(2160.54, 2160.54, { payee: "TOZEN PHILIPPINES INC." });
     expect(ok({ ...withEwt, read: forNet })).toEqual([]);
     // The same check written for the gross is the error this is here to catch.
-    const forGross = { ...forNet, amount: 2180, amountWords: "TWO THOUSAND ONE HUNDRED EIGHTY AND 00/100" };
+    const forGross = readFor(2180, 2180, { payee: "TOZEN PHILIPPINES INC." });
     expect(ok({ ...withEwt, read: forGross }).map((i) => i.key)).toEqual(["amount"]);
   });
 
   it("says which two figures disagree, in pesos a person can read", () => {
     const [issue] = ok({ netAmount: 2160.54 });
-    expect(issue.message).toBe("Check is for ₱20,827.37 but this PO's net is ₱2,160.54.");
+    expect(issue.message).toBe(
+      "The check is for ₱20,827.37 but this PO's net is ₱2,160.54. The check agrees with itself, so the amount written is not this PO's — either it was written for the wrong amount, or this photo belongs to a different PO.",
+    );
   });
 
-  it("flags figures and words that disagree — a digit misread, or a bad check", () => {
-    const read = { ...PRACTICE, amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SIX AND 37/100" };
-    expect(ok({ read }).map((i) => i.key)).toContain("words");
+  it("names a transposition for what it is, instead of accusing the check", () => {
+    // Same digits, different order — that is a misread, not a wrong payment,
+    // and the two call for different actions.
+    const [issue] = ok({ read: readFor(2018.25, 2018.25), netAmount: 2081.25 });
+    expect(issue.message).toContain("same digits in a different order");
+    expect(issue.message).toContain("Re-read");
+    // A genuinely different amount gets no such excuse.
+    const [plain] = ok({ read: readFor(5000, 5000), netAmount: 2081.25 });
+    expect(plain.message).not.toContain("same digits");
+  });
+
+  /**
+   * The owner: *"look at the check peso amount, word amount and PO net. All must
+   * tally. If not tallied, inform the user of the problem and cause."*
+   *
+   * WHICH pair disagrees is the diagnosis — the same three numbers can mean a
+   * misread, a wrongly written check, or the wrong photo on the wrong PO, and
+   * they call for three different actions.
+   */
+  it("tallies all three, and raises no warning when they agree", () => {
+    expect(ok({ read: readFor(2081.25, 2081.25), netAmount: 2081.25 })).toEqual([]);
+  });
+
+  /**
+   * The owner: *"If it tallies, show a message that it tally."* An absence of
+   * warnings used to mean both "the three agree" and "nobody looked", and those
+   * are the two things a person releasing money most needs to tell apart.
+   */
+  it("says so out loud when the three tally", () => {
+    expect(checkAmountAgreed(readFor(2081.25, 2081.25), 2081.25)).toBe(
+      "Tallies — the check's figure, its amount in words and this PO's net are all ₱2,081.25.",
+    );
+  });
+
+  it("never confirms what it did not actually check", () => {
+    // A disagreement — the amber line says why; a green one must not appear too.
+    expect(checkAmountAgreed(readFor(2018.25, 2081.25), 2081.25)).toBeNull();
+    // Half a check read.
+    expect(checkAmountAgreed(readFor(2081.25, null), 2081.25)).toBeNull();
+    expect(checkAmountAgreed(readFor(null, 2081.25), 2081.25)).toBeNull();
+    // No PO net to compare against, and no read at all.
+    expect(checkAmountAgreed(readFor(2081.25, 2081.25), 0)).toBeNull();
+    expect(checkAmountAgreed(undefined, 2081.25)).toBeNull();
+    // A read stored before the three figures were kept apart: nothing to confirm.
+    expect(checkAmountAgreed({ ...PRACTICE, amountFigures: null, amountFromWords: null }, 20827.37)).toBeNull();
+  });
+
+  it("agrees with the warnings — exactly one of the two ever shows", () => {
+    // The green line and the amber line come from the same comparison, so they
+    // can never contradict each other on screen.
+    for (const [figures, words, net] of [
+      [2081.25, 2081.25, 2081.25], [2018.25, 2081.25, 2081.25], [2081.25, 2810.25, 2081.25],
+      [5000, 5000, 2081.25], [1000, 2000, 3000], [2081.25, 2081.25, 0],
+    ] as Array<[number, number, number]>) {
+      const read = readFor(figures, words);
+      const amber = ok({ read, netAmount: net }).some((i) => i.key === "amount");
+      const green = checkAmountAgreed(read, net) != null;
+      expect(amber && green, `${figures}/${words}/${net}`).toBe(false);
+    }
+  });
+
+  it("blames the check, not the PO, when the check agrees with itself", () => {
+    const [issue] = ok({ read: readFor(5000, 5000), netAmount: 2081.25 });
+    expect(issue.message).toContain("The check is for ₱5,000.00 but this PO's net is ₱2,081.25.");
+    expect(issue.message).toContain("written for the wrong amount, or this photo belongs to a different PO");
+  });
+
+  it("blames the FIGURE when the words and the PO net agree", () => {
+    const [issue] = ok({ read: readFor(2018.25, 2081.25), netAmount: 2081.25 });
+    expect(issue.message).toContain("The peso box reads ₱2,018.25, but the words and this PO's net both read ₱2,081.25.");
+    expect(issue.message).toContain("the figure on the check is wrong, or was misread");
+    expect(issue.message).toContain("₱2,081.25 was used");
+  });
+
+  /**
+   * The expensive one. The figure looks right and the PO looks right, so it is
+   * the easiest to wave through — but a bank pays the WORDS, so if the check
+   * really is written that way the supplier gets the wrong money.
+   */
+  it("blames the WORDS when the figure and the PO net agree — and says the bank pays the words", () => {
+    const [issue] = ok({ read: readFor(2081.25, 2810.25), netAmount: 2081.25 });
+    expect(issue.message).toContain("the words read ₱2,810.25");
+    expect(issue.message).toContain("A bank pays the WORDS");
+    expect(issue.message).toContain("voided and rewritten");
+  });
+
+  it("says so plainly when nothing agrees with anything", () => {
+    const [issue] = ok({ read: readFor(1000, 2000), netAmount: 3000 });
+    expect(issue.message).toContain("Nothing tallies");
+    expect(issue.message).toContain("disagrees with itself AND with the PO");
+  });
+
+  it("never reports a clean bill when only half the check could be read", () => {
+    const noWords = ok({ read: readFor(2081.25, null), netAmount: 2081.25 });
+    expect(noWords[0].message).toContain("Only the peso box could be read");
+    expect(noWords[0].message).toContain("the check's own cross-check couldn't be confirmed");
+
+    const noFigure = ok({ read: readFor(null, 2081.25), netAmount: 2081.25 });
+    expect(noFigure[0].message).toContain("Only the words could be read");
+
+    // …and a half-read check that does not match the PO says both things.
+    const wrong = ok({ read: readFor(2081.25, null), netAmount: 5000 });
+    expect(wrong[0].message).toContain("does not match this PO's net of ₱5,000.00");
+  });
+
+  it("raises exactly one amount issue, never a pile of them", () => {
+    // The card renders issues keyed by `key`; two amount issues would collide.
+    const issues = ok({ read: readFor(1000, 2000), netAmount: 3000 });
+    expect(issues.filter((i) => i.key === "amount" || i.key === "words")).toHaveLength(1);
+  });
+
+  it("still checks a read stored before the three figures were kept apart", () => {
+    // amountFigures / amountFromWords absent — the old shape, still on file.
+    const legacy = { ...PRACTICE, amountFigures: null, amountFromWords: null };
+    expect(ok({ read: legacy, netAmount: 2160.54 }).map((i) => i.key)).toContain("amount");
+    expect(ok({ read: { ...legacy, amountWords: "TWENTY THOUSAND EIGHT HUNDRED TWENTY SIX AND 37/100" } }).map((i) => i.key)).toContain("words");
+    expect(ok({ read: legacy })).toEqual([]);
   });
 
   it("flags a check drawn on an account that isn't ours", () => {
