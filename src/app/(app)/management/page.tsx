@@ -604,7 +604,7 @@ export default async function ManagementPage() {
   return (
     <div className="space-y-6">
       {/* Gentler interval than the operational pages — the P&L is query-heavy. */}
-      <AutoRefresh seconds={30} />
+      <AutoRefresh seconds={60} />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>

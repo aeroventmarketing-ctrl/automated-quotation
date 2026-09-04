@@ -1,3 +1,145 @@
+## 2026-09-04 · /orders was 2.1 TB a month
+
+Measured on the owner's own database, after a $512 Supabase egress bill and an outage that took every page down
+at once:
+
+| page | refresh | rows | per refresh | GB/month |
+| --- | --- | --- | --- | --- |
+| **`/orders`** | **8s** | **1,142** | **3,177 kB** | **2,108** |
+| `/purchasing` | 8s | 58 | 92 kB | 61 |
+| `/purchasing` (dept) | 8s | 56 | 42 kB | 28 |
+| `/management` register | 30s | 605 | 82 kB | 15 |
+| `/checks` register | 60s | 605 | 82 kB | 7 |
+
+`AutoRefresh` defaults to **8 seconds** — 450 full server renders an hour, per open tab, each re-running the
+page's queries. Nine pages took that default, including the two heaviest. `/orders` alone accounted for 95% of
+the projection, and the figure is understated: `pg_column_size` counted only the Quotation rows, while the page
+also joined in each one's inquiry, customer, preparer and items.
+
+At six tabs over eight hours that is ~2.2 TB a month, against a bill implying ~5.7 TB — the right order of
+magnitude once more tabs, longer hours and the uncounted joins are allowed for. **The estimate and the invoice
+agree**, and the same query rate against Micro compute is what took the app down.
+
+### The interval is a bill
+
+The list pages come off the default; the two DETAIL pages keep it. That line is deliberate: an order or a
+quotation being built is a single-record read where someone is genuinely waiting on a colleague's button, while
+a list page re-reads a whole table to show numbers that change a few times a day.
+
+`/orders` 120s · `/purchasing` 120s · `/my-dashboard`, `/requisitions`, `/cash-requests`, `/management`,
+`/checks` 60s · `/calendar` 300s. The component already refreshes the instant a tab regains focus and pauses
+while it is hidden, so nothing feels staler than it did.
+
+`/orders` alone: **2,108 GB → ~140 GB** a month.
+
+### …and so is a SELECT
+
+`/orders` has no `WHERE` clause because "is this a confirmed sale" lives inside the `classification` JSON, so
+every quotation is read and filtered in memory. That is survivable. Reading every COLUMN of every one is not.
+
+It now selects only what the list renders — dropping `terms` and `notes` (long per-quotation text),
+`headerUnits`, the template/approver keys, and the whole `User` and `Customer` rows behind `preparedBy` and
+`customer`, of which the page uses one field each. `classification` stays; it carries the sale record and the
+order workflow the list is built from.
+
+**Proved identical**: the rendered list before and after is byte-for-byte the same — 17 orders, ₱11,822,358.40
+value, ₱11,460,000.00 collected, ₱362,358.40 outstanding.
+
+The remaining, larger win is left alone deliberately: filtering confirmed sales in SQL rather than in memory
+would cut 1,142 rows to the few dozen that are orders, but it decides WHICH orders the list shows, and that is
+Phase 1. It needs the owner's word.
+
+356 tests pass; the role harness reports no permission moved.
+
+## 2026-09-04 · A failing page stops being a white screen
+
+Owner, on production `/checks`: *"error in aeroerp"* — Next's bare fallback, *"Application error: a server-side
+exception has occurred… Digest: 4118784689"*. No heading, no navigation, no way back but the browser's Back
+button, and nothing to act on.
+
+### What it was NOT
+
+Worth writing down, because the obvious suspects were all cleared:
+
+- **Not a code change.** The last commit to touch `/checks` was #492, and the owner used the page successfully
+  after it (their fifty-one-row screenshot carries the *For Payment* wording it introduced). #493 and #494 do
+  not touch that path, and the search/sort work was not deployed.
+- **Not a data shape.** A production build was stood up against a seeded database and attacked with eight
+  malformed purchase orders — `po` as a string, null `lines`, a `lines` array containing null, a date reading
+  "N/A", a missing supplier, non-numeric prices, `1e400`, and a check doc whose read has a junk date, a
+  reschedule to "garbage" and `issues` as a string. The register rendered all thirteen rows: no crash, no
+  "Invalid Date", no "NaN".
+
+So the cause is in their environment or their data and is not visible from here. What IS fixable is that it
+told them nothing.
+
+### The floor under every page
+
+`src/app/(app)/error.tsx` — the app had **no error boundary anywhere**, so any server-side failure on any screen
+produced that same white page. Now a failure keeps the shell: the nav still works, the rest of the app is still
+reachable, the page can be retried without a reload, and the digest is presented as the thing to quote rather
+than as an epitaph.
+
+**Verified by forcing a real failure** in a production build and loading it in a browser — which mattered,
+because `curl` shows only `<html id="__next_error__">`: on a server-component error Next serves a minimal shell
+and the boundary renders after hydration. Testing it the quick way would have "proved" it did not work.
+
+### Two smaller things found on the way
+
+- `loadCheckRegister` reads every purchase order in the system, including ones whose JSON predates the current
+  shape. One unreadable PO now drops its own row and logs, instead of taking fifty good ones down with it.
+- `formatDate` had no invalid-date guard, though `formatDateTime` beside it always had one. It rendered the
+  literal words **"Invalid Date"** into a table cell; it now reads "—", like every other missing date.
+
+356 tests pass.
+
+## 2026-09-04 · The register gets a search box, sortable columns and grouping
+
+Owner, once the register passed fifty rows: *"add a search bar, sort and group by ascending and descending.
+Make the default arrangement by clearing date, top most is the soonest to clear."*
+
+### The default is unchanged, and now it is written down
+
+`DEFAULT_CHECK_SORT` is clearing date, ascending — the soonest at the top, which is what the register already
+did. It is a named constant with a test on it now, so sorting cannot quietly change what a fresh page shows.
+
+### Sort
+
+Every column but Remarks (free text with no order worth having) is a header you can click; click again to turn
+it round, and only the ACTIVE column shows an arrow — an arrow on every header is an arrow nobody reads. A new
+column starts ascending, except **Amount**, which starts biggest-first because that is the question being asked.
+
+Two rules a table this shape needs, both pinned:
+
+- **A row with nothing to sort by sinks, in both directions.** An undated check and a PO whose check is not yet
+  written have no day; floating them to the top of a descending sort would bury the dated rows the screen
+  exists to watch.
+- **Ties break on the PO number**, so the order is repeatable rather than whatever the input happened to be.
+
+Check numbers sort by the digits that identify them, so padding never decides the order, and money sorts as
+money — "2,836.94" before "28,344.64" only if these are numbers.
+
+### Search
+
+One box, every term must match: *"tozen 486731"* is one check, not every TOZEN row plus every 486731 row. It
+matches company, PO number, check number **padded or not** (`0000486726` and `486726` find the same row),
+amount with or without its commas, status, remarks, dates and who cleared it. A count and a total sit under the
+box, and a search that finds nothing says *"Nothing in Upcoming matches …"* rather than "no checks are waiting
+to clear" — the second sends someone hunting a bug that is not there.
+
+### Group
+
+None (default) · Company · Status · Clearing month, each group headed with its count and **what it is worth**.
+Groups appear in the order their first row does, so grouping never fights the sort: group by company on a
+register sorted by clearing date and the company clearing soonest is still on top.
+
+Verified by driving the real page: default order soonest-first with the undated row last, reversed on a second
+click, Amount opening biggest-first, `486903` finding its padded check, the no-match line, and grouping by
+company showing 3 checks · ₱45,192.86. The sort arrow was escaping into the next column — a flex arrow will not
+wrap with the words beside it — so it is inline now, and the header boxes were measured to prove it.
+
+Nineteen new tests, 356 pass.
+
 ## 2026-09-04 · Accounting can attach a check to a completed PO — but not delete one
 
 Owner, asked after the harness showed Accounting stopped where the admin and the Payment Approver were not:

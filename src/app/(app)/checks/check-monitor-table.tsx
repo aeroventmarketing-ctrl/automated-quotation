@@ -3,13 +3,17 @@
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, CalendarClock, CheckCircle2, Image as ImageIcon, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, Image as ImageIcon, Search, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { CHECK_STATE_LABEL, needsAttention, type CheckWatchRow, type CheckWatchSummary } from "@/lib/check-monitor";
 import { formatCheckNo } from "@/lib/voucher-check";
+import {
+  searchCheckRows, sortCheckRows, groupCheckRows, DEFAULT_CHECK_SORT, CHECK_GROUP_LABEL,
+  type CheckSortKey, type SortDir, type CheckGroupBy,
+} from "@/lib/check-register-view";
 import { markCheckCleared, rescheduleCheck, unclearCheck } from "../orders/actions";
 
 const TONE: Record<CheckWatchRow["state"], string> = {
@@ -58,11 +62,29 @@ export function CheckMonitor({
   const [form, setForm] = useState<{ key: string; kind: "clear" | "move" } | null>(null);
   const [dateVal, setDateVal] = useState(todayYMD);
   const [reason, setReason] = useState("");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<{ key: CheckSortKey; dir: SortDir }>(DEFAULT_CHECK_SORT);
+  const [groupBy, setGroupBy] = useState<CheckGroupBy>("none");
 
   const open = rows.filter((r) => r.state !== "cleared");
   const cleared = rows.filter((r) => r.state === "cleared");
-  const shown = tab === "open" ? open : cleared;
+  const tabRows = tab === "open" ? open : cleared;
+  // Search, then sort, then group — in that order, so a group's total counts only what
+  // survived the search and groups follow whatever the sort decided.
+  const shown = sortCheckRows(searchCheckRows(tabRows, query), sort.key, sort.dir);
+  const groups = groupCheckRows(shown, groupBy);
+  const colSpan = admin ? 10 : 9;
   const keyOf = (r: CheckWatchRow) => `${r.prId}:${r.path}`;
+
+  /**
+   * Click a column to sort by it; click it again to turn it round. A NEW column
+   * starts ascending — except the two money-and-time columns, where the question
+   * is almost always "which is biggest" / "which is furthest out".
+   */
+  const toggleSort = (key: CheckSortKey) =>
+    setSort((s) => (s.key === key
+      ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: key === "amount" ? "desc" : "asc" }));
 
   function openForm(r: CheckWatchRow, kind: "clear" | "move") {
     setForm({ key: keyOf(r), kind });
@@ -86,6 +108,32 @@ export function CheckMonitor({
       setBusy(null);
     }
   }
+
+  /**
+   * A column header you can sort by. The arrow shows only on the ACTIVE column —
+   * an arrow on every header is an arrow nobody reads.
+   */
+  const SortTh = ({ k, children, right }: { k: CheckSortKey; children: React.ReactNode; right?: boolean }) => {
+    const active = sort.key === k;
+    return (
+      <th className={`px-2 py-2 font-medium ${right ? "text-right" : ""}`}>
+        {/* Deliberately NOT a flex row: a flex arrow will not wrap with the
+            words beside it, so on a two-line header in a narrow column it
+            escaped into the next one. Inline, it follows the last word. */}
+        <button
+          type="button"
+          onClick={() => toggleSort(k)}
+          title={`Sort by ${String(children)}`}
+          className={`text-left hover:text-foreground ${active ? "font-semibold text-foreground" : ""} ${right ? "text-right" : ""}`}
+        >
+          {children}
+          {active && (sort.dir === "asc"
+            ? <ArrowUp className="ml-0.5 inline h-3 w-3 align-[-1px]" />
+            : <ArrowDown className="ml-0.5 inline h-3 w-3 align-[-1px]" />)}
+        </button>
+      </th>
+    );
+  };
 
   const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
     <div className={`rounded-md border px-3 py-2 ${tone ?? "bg-muted/30"}`}>
@@ -114,14 +162,48 @@ export function CheckMonitor({
             {label}
           </button>
         ))}
+
+        <div className="relative ml-auto">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setForm(null); }}
+            placeholder="Search the register…"
+            className="h-8 w-64 pl-7 text-sm"
+            aria-label="Search the register"
+          />
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          Group by
+          <select
+            value={groupBy}
+            onChange={(e) => setGroupBy(e.target.value as CheckGroupBy)}
+            className="h-8 rounded-md border bg-background px-2 text-xs"
+          >
+            {(Object.keys(CHECK_GROUP_LABEL) as CheckGroupBy[]).map((k) => (
+              <option key={k} value={k}>{CHECK_GROUP_LABEL[k]}</option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      {query.trim() && (
+        <p className="text-xs text-muted-foreground">
+          {shown.length} of {tabRows.length} {tabRows.length === 1 ? "row" : "rows"} match “{query.trim()}”
+          {shown.length > 0 && <> · {formatCurrency(shown.reduce((t, r) => t + (r.amount ?? 0), 0), "PHP")}</>}
+        </p>
+      )}
 
       {err && <p className="text-sm text-destructive">{err}</p>}
 
       {shown.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            {tab === "open" ? "No checks are waiting to clear." : "No checks have been cleared yet."}
+            {/* A search that found nothing is not an empty register, and saying
+                so sends someone looking for a bug that isn't there. */}
+            {query.trim()
+              ? `Nothing in ${tab === "open" ? "Upcoming" : "Cleared"} matches “${query.trim()}”.`
+              : tab === "open" ? "No checks are waiting to clear." : "No checks have been cleared yet."}
           </CardContent>
         </Card>
       ) : (
@@ -155,20 +237,36 @@ export function CheckMonitor({
                 {/* The owner's own register columns, in their order and their
                     wording: Date · Company · Purchase Order Number · Check No. ·
                     Amount · Date Paid/Cleared · Form of Payment · Status · Remarks. */}
-                <th className="px-2 py-2 font-medium">Date</th>
-                <th className="px-2 py-2 font-medium">Company</th>
-                <th className="px-2 py-2 font-medium">Purchase Order Number</th>
-                <th className="px-2 py-2 font-medium">Check No.</th>
-                <th className="px-2 py-2 text-right font-medium">Amount</th>
-                <th className="px-2 py-2 font-medium">Date Paid/Cleared</th>
-                <th className="px-2 py-2 font-medium">Form of Payment</th>
-                <th className="px-2 py-2 font-medium">Status</th>
+                <SortTh k="poDate">Date</SortTh>
+                <SortTh k="company">Company</SortTh>
+                <SortTh k="poNumber">Purchase Order Number</SortTh>
+                <SortTh k="checkNo">Check No.</SortTh>
+                <SortTh k="amount" right>Amount</SortTh>
+                <SortTh k="clearing">Date Paid/Cleared</SortTh>
+                <SortTh k="form">Form of Payment</SortTh>
+                <SortTh k="status">Status</SortTh>
+                {/* Remarks is free text with no order worth having. */}
                 <th className="px-2 py-2 font-medium">Remarks</th>
                 {admin && <th className="px-2 py-2 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {shown.map((r) => {
+              {groups.map((g) => (
+                <Fragment key={g.key}>
+              {/* A group heading, with what the group is worth — the figure a
+                  person reads a grouped register FOR. Absent when grouping is
+                  off, so the plain table is exactly what it always was. */}
+              {groupBy !== "none" && (
+                <tr className="border-b bg-muted/60">
+                  <td colSpan={colSpan} className="px-2 py-1.5 text-xs font-semibold">
+                    {g.label}
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      {g.rows.length} {g.rows.length === 1 ? "check" : "checks"} · {formatCurrency(g.total, "PHP")}
+                    </span>
+                  </td>
+                </tr>
+              )}
+              {g.rows.map((r) => {
                 const key = keyOf(r);
                 const openForm_ = form?.key === key ? form : null;
                 return (
@@ -285,7 +383,7 @@ export function CheckMonitor({
                       was cut off and the value read "10/17/202…". */}
                   {openForm_ && (
                     <tr className="border-b bg-muted/30 last:border-0">
-                      <td colSpan={admin ? 10 : 9} className="px-3 py-2">
+                      <td colSpan={colSpan} className="px-3 py-2">
                         <div className="flex flex-wrap items-end gap-3">
                           <label className="flex flex-col gap-1">
                             <span className="text-xs font-medium">
@@ -334,6 +432,8 @@ export function CheckMonitor({
                   </Fragment>
                 );
               })}
+                </Fragment>
+              ))}
             </tbody>
           </table>
         </div>
