@@ -417,7 +417,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={120} />
+      <AutoRefresh seconds={8} watch="purchasing" />
       <div>
         <h1 className="text-2xl font-bold">Purchasing</h1>
         <p className="text-sm text-muted-foreground">

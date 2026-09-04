@@ -1,3 +1,55 @@
+## 2026-09-04 · The pages are fast again, and ask before they fetch
+
+Owner, after the intervals were slowed to stop a $512 egress bill: *"is there a way we can restore the previous
+refresh rate while not consuming so much GB?"*
+
+Yes — because **the refresh rate was never the problem.** Refetching everything when nothing has changed is. At
+eight seconds a page refreshes 450 times an hour, of which perhaps five return different data; `/orders` was
+paying 3.2 MB for each of the other 445.
+
+So a tick is now a QUESTION, not an answer. `AutoRefresh` takes a `watch` scope and polls `/api/changes`, which
+returns `max(updatedAt)` and a row count per table — **24 bytes** — and only calls `router.refresh()` when that
+moves.
+
+| | before | after |
+| --- | --- | --- |
+| Checks for updates | every 8s | every 8s |
+| Cost of a check | 3.2 MB | **24 bytes** |
+| Full refresh | every 8s regardless | only when something changed |
+| A colleague's change appears | up to 8s later | **within 8s** |
+
+It is *faster* than the plain timer, not a compromise: a change shows up one poll after it is made rather than
+whenever the next scheduled render happens to land. `/orders`, `/purchasing`, `/checks`, `/requisitions`,
+`/cash-requests` and `/my-dashboard` are all back to 8 seconds; `/calendar` to 30.
+
+### Measured on the running app
+
+- **30 idle seconds: 3 polls, 72 bytes total, zero page refreshes.** The same 30 seconds before this cost about
+  four full renders — 12 MB.
+- One quotation touched → **exactly one** refresh, inside 8 seconds.
+- 20 quiet seconds after → zero.
+
+### It has to fail OPEN
+
+A watcher that silently stopped refreshing would leave someone staring at a stale screen believing it live —
+worse than refreshing too often. Three ways it can go wrong, all verified in a browser to fall back to the plain
+timer: the server cannot compute a token (`"?"`, which no real token can equal), the poll returns 500, and the
+poll never answers at all. Each gave 3 refreshes in 26 seconds — the old behaviour, exactly.
+
+`count` is in the token beside `max(updatedAt)` because a DELETE moves no timestamp: without it, a row could
+vanish from the database and stay on every screen until something unrelated changed.
+
+### One migration
+
+`0051_quotation_updated_at` — every other table already had an `updatedAt`; Quotation was the one that did not.
+Indexed, so `max()` stays a lookup rather than a scan.
+
+**`/management` deliberately keeps a plain 60s timer.** It reads counter sales, commissions and half a dozen
+other tables, and a scope that misses one would leave that panel stale without anyone noticing. A watcher is
+only safe where its scope is honest.
+
+Seven new tests, 363 pass. The role harness reports no permission moved.
+
 ## 2026-09-04 · /orders was 2.1 TB a month
 
 Measured on the owner's own database, after a $512 Supabase egress bill and an outage that took every page down

@@ -49,7 +49,7 @@ export default async function CalendarPage({ searchParams }: { searchParams?: Pr
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={300} />
+      <AutoRefresh seconds={30} watch="calendar" />
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Team Calendar</h1>
         <p className="text-sm text-muted-foreground">
