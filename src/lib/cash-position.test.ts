@@ -99,7 +99,7 @@ describe("the two figures the register supplies", () => {
   });
   const helpers = {
     coerceDocs: (v: unknown) => v as CheckDoc[],
-    poOf: () => ({ poNumber: "PO-1", supplierCompany: "Powerlink", date: "2026-07-01" }),
+    poOf: () => ({ poNumber: "PO-1", supplierCompany: "Powerlink", date: "2026-07-01", net: 0 }),
   };
   const pr = (id: string, docs: CheckDoc[]) => ({ id, quotationId: null, po: {}, voucherCheckDocs: docs });
 

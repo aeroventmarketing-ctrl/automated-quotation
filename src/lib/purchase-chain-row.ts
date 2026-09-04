@@ -16,7 +16,7 @@ import {
   type ReturnStage,
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, checkAttachableAt, checkReadableAt, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, type CheckDoc } from "@/lib/voucher-check";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
@@ -185,6 +185,8 @@ export interface PurchaseChainRow {
    * photo says. See `checkReadableAt`.
    */
   canReadCheck: boolean;
+  /** …and may DELETE the photo. Admin-wide, like reading — see `checkRemovableAt`. */
+  canRemoveCheck: boolean;
   canOverride: boolean; // admin escape hatch — roll the chain back
   priorStatuses: { key: string; label: string }[];
   // A warehouse/material requisition — the Plant Manager approves the request
@@ -436,6 +438,7 @@ export function buildPurchaseChainRow(
     // here so every screen that renders a chain row inherits the same answer.
     canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }),
     canReadCheck: (ctx.canAttachCheck ?? false) && checkReadableAt(status, { isDept, poApproved }, { admin: ctx.admin }),
+    canRemoveCheck: (ctx.canAttachCheck ?? false) && checkRemovableAt(status, { isDept, poApproved }, { admin: ctx.admin }),
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,

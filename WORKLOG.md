@@ -1,3 +1,69 @@
+## 2026-09-04 · An admin can delete a check photo
+
+Owner, on a completed PO whose check had been read wrongly: *"add an option to delete the uploaded file."*
+
+The trash icon was missing because deleting followed the ATTACH window, which closes at COMPLETED. So a wrong
+photo on a finished PO was permanent — a worse record than no photo at all, since it reads as evidence.
+
+`checkRemovableAt` matches the re-read decision made an hour earlier: **an admin may delete at any stage**,
+everyone else keeps exactly the attach window.
+
+| | attach | re-read | **delete** |
+| --- | --- | --- | --- |
+| Accounting · Payment Approver · admin, PO live | ✓ | ✓ | ✓ |
+| Accounting · Payment Approver, PO completed | ✗ | ✗ | ✗ |
+| **Admin, PO completed** | ✗ | ✓ | **✓** |
+
+**Attaching stays shut**, and a test says so for every status: replacing a photo on a completed PO is a
+different power from removing a wrong one, and the owner's *"uploading is disabled"* ruling is untouched.
+
+`checkRemovableAt` is kept as its own function rather than an alias of `checkReadableAt`, though the two agree
+today — re-reading is harmless and deleting destroys the only copy of what was attached, so they must be free
+to diverge without one silently dragging the other along.
+
+Enforced on the SERVER, not by hiding the icon: `removeVoucherCheck` checks the same rule, because a rule the UI
+alone enforces is the exact shape of bug the capability-grid note in CLAUDE.md was written about.
+
+Four new tests, 332 pass. Role harness run over every screen: no permission moved.
+
+## 2026-09-04 · A PO on the register before its check is written
+
+Owner: *"september 3 and september 4 PO not showing in check monitoring."*
+
+Nothing was hiding them. The register had no date filter, no status filter and no slicing — it listed **one row
+per attached check photo**, so a PO nobody had photographed had no row to be shown. Asked, the owner chose to
+list those too, as **"Check not attached"**.
+
+### The *For Payment* row
+
+A PO past *Voucher & Check Signed*, to a supplier who gives us terms, with no photo attached, now appears with
+its PO date, supplier, PO number and the PO's **NET** — what the check will be written for. And nothing it
+cannot honestly claim: no check number, no clearing date, no photo link. Its status reads **For Payment**,
+which is the owner's own word for it — their register's legend is `Pending · For Payment · Check Clearing ·
+Finished`, and three of those four now appear on this screen.
+
+It counts where it should and nowhere else:
+
+| | included? | |
+| --- | --- | --- |
+| **Accounts Payable** | ✓ | the money is owed |
+| **Outstanding Check** | ✗ | nothing can clear until a check exists |
+| overdue / needs attention | ✗ | there is no date to be late for |
+| the admin's task feed | ✗ | nothing to confirm or reschedule |
+
+Attaching the photo replaces the row rather than adding a second one — asserted, because two rows for one PO
+would double it in Accounts Payable.
+
+### One loader, three screens
+
+The Check Monitoring page, the Management Dashboard tile and My Dashboard's overdue-check task each built this
+list themselves. A tile reading "7" beside a register listing twelve is the kind of disagreement nobody can
+debug from the outside, so the query, the supplier-terms lookup and the row builder moved into
+`loadCheckRegister` — once. Whether *For Payment* rows appear is now part of that shared answer, not a per-page
+choice.
+
+Five new tests, 330 pass. The role harness was run over every screen: no permission moved.
+
 ## 2026-09-04 · An admin may re-read a check at any stage
 
 Owner, asked after two TKL checks were found stranded: *"Admin may re-read anytime."*

@@ -5,7 +5,7 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
-  clearingFromDateBoxes, checkAmountAgreed, checkReadableAt,
+  clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt,
   type CheckRead,
 } from "./voucher-check";
 
@@ -151,8 +151,8 @@ describe("when a check may be attached", () => {
    * says — it moves no money and advances no step — so it is the one thing that
    * outlives the attach window.
    *
-   * Attaching and removing are NOT widened, and the grid below says so for every
-   * status at once.
+   * ATTACHING is not widened — the owner's ruling that uploading stops at
+   * Budgeted still stands — and the grid below says so for every status at once.
    */
   it("lets an admin re-read at any stage, and nobody else past Budgeted", () => {
     for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
@@ -170,6 +170,31 @@ describe("when a check may be attached", () => {
     expect(checkAttachableAt("COMPLETED")).toBe(false);
     expect(checkReadableAt("COMPLETED", undefined, { admin: false })).toBe(false);
     expect(checkReadableAt("COMPLETED", undefined, { admin: true })).toBe(true);
+  });
+
+  /**
+   * The owner, looking at a completed PO whose check had been read wrongly:
+   * *"add an option to delete the uploaded file."* A wrong photo on a finished
+   * PO was permanent, which is a worse record than no photo at all.
+   */
+  it("lets an admin delete a check photo at any stage, and nobody else past Budgeted", () => {
+    for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
+      expect(checkRemovableAt(status, undefined, { admin: true }), `admin @ ${status}`).toBe(true);
+      expect(checkRemovableAt(status, undefined, { admin: false }), `non-admin @ ${status}`).toBe(checkAttachableAt(status));
+      expect(checkRemovableAt(status), `no opts @ ${status}`).toBe(checkAttachableAt(status));
+    }
+    expect(checkRemovableAt("COMPLETED", undefined, { admin: true })).toBe(true);
+    expect(checkRemovableAt("COMPLETED", undefined, { admin: false })).toBe(false);
+  });
+
+  it("does not let deleting drag ATTACHING open with it", () => {
+    // Deleting a wrong photo and uploading a new one are different powers. The
+    // owner's ruling on uploading — Budgeted only — is unchanged.
+    for (const status of [...PR_MAIN_ORDER, "REJECTED", "CANCELLED"] as PRStatus[]) {
+      expect(checkAttachableAt(status), status).toBe(
+        statusBucket(status) === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED") && status !== "COMPLETED",
+      );
+    }
   });
 
   it("does not change whether a check is EXPECTED — only whether it can be attached", () => {

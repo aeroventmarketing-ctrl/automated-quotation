@@ -88,6 +88,7 @@ export interface BatchCard {
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
   canAttachCheck: boolean;
   canReadCheck: boolean;
+  canRemoveCheck: boolean;
 }
 
 function todayInput(): string {
@@ -477,6 +478,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             supplierGivesTerms={batch.supplierGivesTerms}
             canAttach={batch.canAttachCheck}
             canRead={batch.canReadCheck}
+            canRemove={batch.canRemoveCheck}
             canView={showSupplier}
             netAmount={totals.net}
           />

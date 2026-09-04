@@ -19,11 +19,14 @@ const TONE: Record<CheckWatchRow["state"], string> = {
   scheduled: "border-border bg-muted/40 text-muted-foreground",
   cleared: "border-emerald-600/30 bg-emerald-50 text-emerald-700",
   undated: "border-border bg-muted/40 text-muted-foreground",
+  awaiting: "border-amber-500/40 bg-amber-50 text-amber-700",
 };
 
 /** "in 3 days" / "today" / "5 days ago" — the thing the eye actually wants. */
 function whenText(row: CheckWatchRow): string {
   if (row.state === "cleared") return row.clearedOn ? `cleared ${formatDate(row.clearedOn)}` : "cleared";
+  // No check has been written, so there is no date to be early or late for.
+  if (row.state === "awaiting") return "not yet issued";
   if (row.daysLeft == null) return "no date";
   if (row.daysLeft === 0) return "today";
   return row.daysLeft > 0 ? `in ${row.daysLeft} day${row.daysLeft === 1 ? "" : "s"}` : `${-row.daysLeft} day${row.daysLeft === -1 ? "" : "s"} ago`;
@@ -183,16 +186,21 @@ export function CheckMonitor({
                           quickest way to check the system against the paper.
                           Linked even when the number could not be read, because
                           that is exactly when someone wants to look. */}
-                      <a
-                        href={`/api/purchase-uploads/view?path=${encodeURIComponent(r.path)}&name=${encodeURIComponent(r.fileName)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="Open the photo of this check"
-                        className="inline-flex items-center gap-1 break-words text-primary underline-offset-2 hover:underline"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
-                        {formatCheckNo(r.checkNo) ?? <span className="italic">not read</span>}
-                      </a>
+                      {r.path ? (
+                        <a
+                          href={`/api/purchase-uploads/view?path=${encodeURIComponent(r.path)}&name=${encodeURIComponent(r.fileName)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open the photo of this check"
+                          className="inline-flex items-center gap-1 break-words text-primary underline-offset-2 hover:underline"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                          {formatCheckNo(r.checkNo) ?? <span className="italic">not read</span>}
+                        </a>
+                      ) : (
+                        // Nothing to open — no check has been written for this PO yet.
+                        <span className="italic text-muted-foreground">none yet</span>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
                     <td className="px-2 py-2">
@@ -225,7 +233,18 @@ export function CheckMonitor({
                     {admin && (
                       <td className="px-2 py-2">
                         <div className="flex flex-col items-stretch gap-1.5">
-                          {r.state === "cleared" ? (
+                          {r.state === "awaiting" ? (
+                            // Nothing to clear and no date to move — the only
+                            // move here is Accounting attaching the photo, on
+                            // the PO itself.
+                            <Link
+                              href={`/purchasing?req=${r.prId}`}
+                              className="rounded-md border px-2 py-1 text-center text-xs font-medium hover:bg-accent"
+                              title="Open this PO to attach the check"
+                            >
+                              Attach check
+                            </Link>
+                          ) : r.state === "cleared" ? (
                             <Button
                               size="sm"
                               variant="outline"

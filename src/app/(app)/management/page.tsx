@@ -8,7 +8,8 @@ import { coerceLiquidation, isLiquidated, liquidationVariance } from "@/lib/cash
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { payableTotal, round2 } from "@/lib/quote";
 import { getPrintedVouchers } from "@/lib/purchase-voucher";
-import { buildCheckWatch, checkWatchSummary } from "@/lib/check-monitor";
+import { checkWatchSummary } from "@/lib/check-monitor";
+import { loadCheckRegister } from "@/lib/check-register";
 import { coerceCheckDocs } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
@@ -568,16 +569,9 @@ export default async function ManagementPage() {
 
   // Check monitoring — every issued check by the day it clears. Kept beside the
   // commission tile because both are money leaving on a date, not on an event.
-  const checkPrs = await prisma.purchaseRequest
-    .findMany({ select: { id: true, quotationId: true, po: true, voucherCheckDocs: true } })
-    .catch(() => []);
-  const checkRows = buildCheckWatch(checkPrs, phToday, {
-    coerceDocs: coerceCheckDocs,
-    poOf: (v) => {
-      const po = coercePurchaseOrder(v);
-      return po ? { poNumber: po.poNumber, supplierCompany: po.supplier.company, date: po.date || null } : null;
-    },
-  });
+  // The SAME loader the register uses, so the tile and the page can never
+  // disagree about how many checks are outstanding or for how much.
+  const checkRows = await loadCheckRegister(phToday);
   const checks = checkWatchSummary(checkRows);
 
   const tiles = [

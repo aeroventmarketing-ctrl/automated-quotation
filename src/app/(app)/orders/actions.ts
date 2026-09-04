@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, effectiveClearingYMD, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, type CheckDoc } from "@/lib/voucher-check";
 import { saveCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
@@ -2529,6 +2529,23 @@ function checkWindowError(pr: { status: string; chainLog: unknown; kind?: string
     : "A check can only be attached once the voucher & check are signed (the Budgeted tab).";
 }
 
+/**
+ * The same window for DELETING a photo, widened for an admin — see
+ * `checkRemovableAt`. A wrong photo on a completed PO used to be permanent.
+ */
+async function checkRemoveWindowError(pr: { status: string; chainLog: unknown; kind?: string | null; mrfId?: string | null }): Promise<string | null> {
+  const user = await getCurrentUser();
+  const removable = checkRemovableAt(
+    pr.status as PRStatus,
+    { isDept: isDeptRequisition(pr as Parameters<typeof isDeptRequisition>[0]), poApproved: isPoApproved(pr.chainLog) },
+    { admin: !!user && isAdmin(user) },
+  );
+  if (removable) return null;
+  return pr.status === "COMPLETED"
+    ? "This purchase order is completed — only an admin can remove its check now."
+    : "A check can only be removed once the voucher & check are signed (the Budgeted tab).";
+}
+
 async function writeCheckDocs(purchaseRequestId: string, next: CheckDoc[]): Promise<void> {
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { quotationId: true } });
   await prisma.purchaseRequest.update({
@@ -2578,7 +2595,7 @@ export async function removeVoucherCheck(purchaseRequestId: string, path: string
     select: { id: true, voucherCheckDocs: true, status: true, chainLog: true, kind: true, mrfId: true },
   });
   if (!pr) return { error: "Purchase order not found." };
-  const closed = checkWindowError(pr);
+  const closed = await checkRemoveWindowError(pr);
   if (closed) return { error: closed };
   const cur = coerceCheckDocs(pr.voucherCheckDocs);
   await writeCheckDocs(purchaseRequestId, cur.filter((d) => d.path !== path));

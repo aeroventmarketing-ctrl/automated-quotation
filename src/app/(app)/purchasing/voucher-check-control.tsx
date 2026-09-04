@@ -39,6 +39,7 @@ export function VoucherCheckControl({
   supplierGivesTerms,
   canAttach,
   canRead,
+  canRemove,
   canView,
   netAmount,
 }: {
@@ -59,6 +60,12 @@ export function VoucherCheckControl({
    * photo already says. Defaults to `canAttach` for callers that don't say.
    */
   canRead?: boolean;
+  /**
+   * The viewer may DELETE the photo. Wider than `canAttach` in the same way
+   * reading is: an admin may remove a wrong photo from a completed PO, which
+   * would otherwise be a permanent mistake. Defaults to `canAttach`.
+   */
+  canRemove?: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
   /**
@@ -75,10 +82,11 @@ export function VoucherCheckControl({
   const [note, setNote] = useState<string | null>(null);
 
   const mayRead = canRead ?? canAttach;
+  const mayRemove = canRemove ?? canAttach;
   const missing = checkMissing({ supplierGivesTerms, status, docs });
   // Nothing attached and nothing expected — say nothing.
-  if (docs.length === 0 && !missing && !canAttach && !mayRead) return null;
-  if (!canView && !canAttach && !mayRead) return null;
+  if (docs.length === 0 && !missing && !canAttach && !mayRead && !mayRemove) return null;
+  if (!canView && !canAttach && !mayRead && !mayRemove) return null;
   // Read-only: the check, its number and its details still show — the owner's
   // *"checks can always be viewed"* — but nothing here can change them.
   const readOnly = !canAttach;
@@ -211,7 +219,7 @@ export function VoucherCheckControl({
                 base="/api/purchase-uploads"
                 size="xs"
                 busy={busy != null}
-                onRemove={canAttach ? () => remove(d.path, d.name) : undefined}
+                onRemove={mayRemove ? () => remove(d.path, d.name) : undefined}
               />
               {mayRead && (
                 <button
