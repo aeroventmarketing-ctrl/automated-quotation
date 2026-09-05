@@ -6,7 +6,11 @@ import { Banknote, AlertTriangle, ScanLine, CheckCircle2 } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatDate } from "@/lib/utils";
-import { checkAmountAgreed, checkMissing, formatCheckNo, printedClearingYMD, type CheckDoc } from "@/lib/voucher-check";
+import {
+  checkAmountAgreed, checkMissing, formatCheckNo, printedClearingYMD, checkReadsLeft,
+  type CheckDoc,
+} from "@/lib/voucher-check";
+import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import type { PRStatus } from "@/lib/purchasing";
 import { attachVoucherCheck, removeVoucherCheck } from "../orders/actions";
 
@@ -40,6 +44,7 @@ export function VoucherCheckControl({
   canAttach,
   canRead,
   canRemove,
+  unlimitedReads = false,
   canView,
   netAmount,
 }: {
@@ -66,6 +71,12 @@ export function VoucherCheckControl({
    * would otherwise be a permanent mistake. Defaults to `canAttach`.
    */
   canRemove?: boolean;
+  /**
+   * This viewer's AI reads are not counted — an admin or the Payment Approver.
+   * Everyone else gets `AI_CHECK_READ_LIMIT` tries per attached photo, and has
+   * to be told before the button disappears on them.
+   */
+  unlimitedReads?: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
   /**
@@ -202,6 +213,9 @@ export function VoucherCheckControl({
         // What the check says, a person's correction included — otherwise this
         // card goes on quoting the misread date the register has already fixed.
         const clears = printedClearingYMD(d);
+        // *"3 tries in every row or every attachment"* — this photo's, not the
+        // PO's. Null for the two who have no limit.
+        const left = checkReadsLeft(d, { unlimited: unlimitedReads });
         return (
           <span key={d.path} className="inline-flex flex-col items-start gap-0.5 text-xs">
             <span className="inline-flex flex-wrap items-center gap-2">
@@ -224,16 +238,26 @@ export function VoucherCheckControl({
                 busy={busy != null}
                 onRemove={mayRemove ? () => remove(d.path, d.name) : undefined}
               />
-              {mayRead && (
+              {mayRead && (left === null || left > 0) && (
                 <button
                   type="button"
                   disabled={busy != null}
                   onClick={() => reread(d.path)}
-                  title="Read this check again"
+                  title={left === null ? "Read this check again" : `Read this check again — ${left} of ${AI_CHECK_READ_LIMIT} tries left on this photo`}
                   className="inline-flex items-center gap-1 text-muted-foreground underline-offset-2 hover:text-primary hover:underline disabled:opacity-50"
                 >
                   <ScanLine className="h-3.5 w-3.5" /> {reading ? "Reading…" : r ? "Re-read" : "Read check"}
+                  {/* Counted down only once it has cost something: "3 tries
+                      left" on an untouched photo is noise on every row. */}
+                  {left !== null && left < AI_CHECK_READ_LIMIT && <span className="tabular-nums"> · {left} left</span>}
                 </button>
+              )}
+              {/* The button goes rather than sitting there dead, and says why —
+                  and who to ask, since two people can still read it. */}
+              {mayRead && left === 0 && (
+                <span className="text-muted-foreground" title={`This photo has had its ${AI_CHECK_READ_LIMIT} AI reads.`}>
+                  Read {AI_CHECK_READ_LIMIT} times — check it against the photo, or ask an admin / the Payment Approver
+                </span>
               )}
             </span>
             {r && (r.amount != null || clears || r.payee) && (

@@ -9,7 +9,11 @@ import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { checkReadSchema } from "@/lib/ai/schemas";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck, checkReadableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues, type CheckDoc, type CheckRead } from "@/lib/voucher-check";
+import {
+  canAttachCheck, checkReadableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues,
+  hasUnlimitedCheckReads, checkReadsUsed, canReadCheckAgain, nextCheckReadCount,
+  type CheckDoc, type CheckRead,
+} from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
@@ -159,13 +163,17 @@ export async function POST(req: NextRequest) {
 
   // The Payment Approver overrides the limit alongside the admin: they are the
   // one authorising the money, so they are never locked out of looking at it.
-  const unlimited = admin || roles.includes("payment_approver");
-  const reads = docs.reduce((n, d) => n + (d.read ? 1 : 0), 0);
-  if (!unlimited && reads >= AI_CHECK_READ_LIMIT) {
+  //
+  // The allowance is THIS PHOTO's — the owner's *"3 tries in every row or every
+  // attachment"*. It used to be the whole PO's, so a PO paid by two checks spent
+  // it on the first photo.
+  const unlimited = hasUnlimitedCheckReads({ admin, paymentApprover: roles.includes("payment_approver") });
+  const used = checkReadsUsed(target);
+  if (!canReadCheckAgain(target, { unlimited })) {
     return NextResponse.json({
-      error: `AI read limit reached (${AI_CHECK_READ_LIMIT} of ${AI_CHECK_READ_LIMIT} used for this PO). Check the figures against the check by hand — or ask an admin.`,
+      error: `This check has been read ${used} times (${AI_CHECK_READ_LIMIT} allowed per attachment). Check the figures against the photo by hand — or ask an admin or the Payment Approver, who can re-read it.`,
       limitReached: true,
-      reads,
+      reads: used,
       limit: AI_CHECK_READ_LIMIT,
     }, { status: 429 });
   }
@@ -290,11 +298,13 @@ export async function POST(req: NextRequest) {
     });
     read.issues = issues;
 
-    // A read that worked erases the note about the one that didn't.
+    // A read that worked erases the note about the one that didn't — and costs
+    // this photo a try, unless the reader has none to spend.
+    const spent = nextCheckReadCount(target, { unlimited });
     const next: CheckDoc[] = docs.map((d) => {
       if (d.path !== body.path) return d;
       const { readError: _cleared, ...rest } = d;
-      return { ...rest, read };
+      return { ...rest, read, readCount: spent };
     });
     await prisma.purchaseRequest.update({
       where: { id: pr.id },
@@ -304,8 +314,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       read,
       issues,
-      reads: unlimited ? reads : reads + 1,
+      reads: spent,
       limit: unlimited ? null : AI_CHECK_READ_LIMIT,
+      left: unlimited ? null : Math.max(0, AI_CHECK_READ_LIMIT - spent),
     });
   } catch (err) {
     console.error("read-check error", err);

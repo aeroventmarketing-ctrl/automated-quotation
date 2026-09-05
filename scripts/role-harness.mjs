@@ -108,6 +108,23 @@ const PROBES = [
     doneViewOnly: (t) => near(t, "HARNESS-DONE", /Check not attached/) && !near(t, "HARNESS-DONE", /Attach check|Add check/),
   } },
   /**
+   * The AI read allowance — *"3 tries in every row or every attachment.
+   * Admin/payment approved still allowed unlimited number of tries."*
+   *
+   * Anchored to each PHOTO's own file name, because the whole change is that one
+   * attachment running out leaves the other alone: page-wide, "is there a
+   * Re-read button" would answer yes for a PO with one spent photo and one
+   * fresh, which is exactly the case that used to be broken.
+   */
+  { path: "/purchasing", label: "tries", checks: {
+    // The spent photo: no button, and a line saying why.
+    spentBtn: (t) => near(t, "SPENT.jpg", /Re-read|Read check/, 150),
+    spentTold: (t) => near(t, "SPENT.jpg", /Read 3 times/, 150),
+    // The one with tries left: button, and the count beside it.
+    leftBtn: (t) => near(t, "LEFT2.jpg", /Re-read/, 150),
+    leftCount: (t) => near(t, "LEFT2.jpg", /· 2 left/, 150),
+  } },
+  /**
    * The due date of purchase — *"purchaser or admin/payment approver can add due
    * date of purchase."* `set` is the control being offered; everyone else who can
    * see the page should read the date and be unable to touch it.
@@ -295,6 +312,34 @@ async function seed() {
       read: { ...checkDoc("0000486709", "2026-07-12", 39210.75).read, dateBoxes: null },
       reschedules: [{ from: "2026-07-12", to: "2026-10-17", reason: "Correct date", byName: "Admin Ana", at: "" }],
     }],
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
+  // Two photos on ONE live PO with different read counts — the owner's *"3 tries
+  // in every row or every attachment"*. The point of the change is that the
+  // spent one going quiet must not take the fresh one with it, and page-wide
+  // "is there a Re-read button" cannot see that.
+  // A fixed id, because the reader checks the file belongs to the PO by PATH
+  // (`purchases/<prId>/…`) — a fixture with any other path is refused before the
+  // allowance is ever consulted, and would have "passed" this probe by accident.
+  const TRIES_PR = "harness-pr-tries";
+  await p.purchaseRequest.create({ data: {
+    id: TRIES_PR,
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    // COMPLETED on purpose: the Budgeted tab is client-rendered, so a scraper
+    // never sees those rows, and a probe pointed at one prints a column of
+    // falses that look like a bug. The completed department section is
+    // server-rendered, and reading a completed PO's check is exactly the corner
+    // the owner opened to Accounting.
+    note: "HARNESS-CHK-TRIES", status: "COMPLETED",
+    po: { ...poFor("HARNESS-CHK-TRIES"), supplier: { company: "HARNESS STEEL CORP" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    voucherCheckDocs: [
+      // Spent: three reads, so a limited reader gets no button at all.
+      { ...checkDoc("0000486801", "2026-10-20", 1000), path: `purchases/${TRIES_PR}/SPENT.jpg`, name: "SPENT.jpg", readCount: 3 },
+      // Half spent: one read, so the button is there and says what is left.
+      { ...checkDoc("0000486802", "2026-10-21", 2000), path: `purchases/${TRIES_PR}/LEFT2.jpg`, name: "LEFT2.jpg", readCount: 1 },
+    ],
     createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
   } });
 

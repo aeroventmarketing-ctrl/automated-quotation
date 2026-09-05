@@ -6,6 +6,8 @@ import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
   clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt, isClearingYMD,
+  hasUnlimitedCheckReads, checkReadsUsed, checkReadsLeft, canReadCheckAgain, nextCheckReadCount,
+  type CheckDoc,
   type CheckRead,
 } from "./voucher-check";
 
@@ -675,6 +677,92 @@ describe("a real calendar day, written YYYY-MM-DD", () => {
     expect(isClearingYMD("2028-02-29")).toBe(true);
     for (const bad of ["2026-02-31", "2026-13-01", "17-10-2026", "2026-10-17T00:00:00Z", "", null, undefined, 20261017]) {
       expect(isClearingYMD(bad), String(bad)).toBe(false);
+    }
+  });
+});
+
+/**
+ * The owner: *"In AI reading allow 3 tries in every row or every attachment.
+ * Update and check all roles that is allowed to 3 tries AI reading.
+ * Admin/payment approved still allowed unlimited number of tries."*
+ *
+ * The allowance used to be the PURCHASE ORDER's and counted photos-that-had-been
+ * -read rather than reads — so it did two wrong things at once: a PO paid by two
+ * checks spent its budget on the first photo, and one photo could be re-read for
+ * ever.
+ */
+describe("three AI reads per attachment", () => {
+  const photo = (over: Partial<CheckDoc> = {}): CheckDoc =>
+    ({ path: "purchases/pr1/1.jpg", name: "c.jpg", uploadedAt: "", uploadedByName: "M", ...over } as CheckDoc);
+  const read = { ...PRACTICE };
+  const LIMITED = { unlimited: false };
+  const FREE = { unlimited: true };
+
+  it("counts reads, and stops the fourth", () => {
+    expect(checkReadsLeft(photo(), LIMITED)).toBe(3);
+    expect(checkReadsLeft(photo({ readCount: 1, read }), LIMITED)).toBe(2);
+    expect(checkReadsLeft(photo({ readCount: 3, read }), LIMITED)).toBe(0);
+    expect(canReadCheckAgain(photo({ readCount: 2, read }), LIMITED)).toBe(true);
+    expect(canReadCheckAgain(photo({ readCount: 3, read }), LIMITED)).toBe(false);
+    // A counter beyond the limit (an older rule, a hand-edited row) still stops.
+    expect(checkReadsLeft(photo({ readCount: 9, read }), LIMITED)).toBe(0);
+  });
+
+  /**
+   * The point of the change: one photo running out must not silence the others.
+   */
+  it("gives each attachment its own three, not the PO's", () => {
+    const spent = photo({ path: "a.jpg", readCount: 3, read });
+    const fresh = photo({ path: "b.jpg" });
+    expect(canReadCheckAgain(spent, LIMITED)).toBe(false);
+    expect(canReadCheckAgain(fresh, LIMITED)).toBe(true);
+    expect(checkReadsLeft(fresh, LIMITED)).toBe(3);
+  });
+
+  it("never limits an admin or the Payment Approver", () => {
+    expect(hasUnlimitedCheckReads({ admin: true })).toBe(true);
+    expect(hasUnlimitedCheckReads({ paymentApprover: true })).toBe(true);
+    // Accounting attach and read checks daily — and are the role the limit is for.
+    expect(hasUnlimitedCheckReads({ accounting: true })).toBe(false);
+    expect(hasUnlimitedCheckReads({})).toBe(false);
+    expect(hasUnlimitedCheckReads()).toBe(false);
+    const spent = photo({ readCount: 99, read });
+    expect(checkReadsLeft(spent, FREE)).toBeNull();
+    expect(canReadCheckAgain(spent, FREE)).toBe(true);
+  });
+
+  /**
+   * An unlimited reader looking at a photo on someone's behalf must not spend
+   * that person's tries — hence a counter that is written even when it does not
+   * move, so the "read but never counted" fallback can't charge for it later.
+   */
+  it("does not charge anyone for an admin's read", () => {
+    const fresh = photo();
+    expect(nextCheckReadCount(fresh, FREE)).toBe(0);
+    const afterAdmin = photo({ read, readCount: nextCheckReadCount(fresh, FREE) });
+    expect(checkReadsLeft(afterAdmin, LIMITED)).toBe(3);
+    // …whereas Accounting's own read costs one.
+    expect(nextCheckReadCount(fresh, LIMITED)).toBe(1);
+    expect(nextCheckReadCount(afterAdmin, LIMITED)).toBe(1);
+  });
+
+  it("counts a photo read before the counter existed as one try, not none", () => {
+    expect(checkReadsUsed(photo({ read }))).toBe(1);
+    expect(checkReadsLeft(photo({ read }), LIMITED)).toBe(2);
+    // Nothing read, nothing spent — including after a read that FAILED, which
+    // leaves a readError and no read. A run of server errors must not lock the
+    // one person who can fix the record out of trying again.
+    expect(checkReadsUsed(photo())).toBe(0);
+    expect(checkReadsUsed(photo({ readError: { message: "AI key not set", at: "", byName: "M" } }))).toBe(0);
+  });
+
+  it("survives the column, including the zero that means 'cost nobody a try'", () => {
+    expect(coerceCheckDocs([photo({ read, readCount: 2 })])[0].readCount).toBe(2);
+    expect(coerceCheckDocs([photo({ read, readCount: 0 })])[0].readCount).toBe(0);
+    for (const junk of ["2", -1, NaN, Infinity, null, undefined, {}]) {
+      const [back] = coerceCheckDocs([{ ...photo({ read }), readCount: junk }]);
+      // Junk is dropped rather than trusted; the doc still reads as read once.
+      expect(back.readCount === undefined || back.readCount === 0, String(junk)).toBe(true);
     }
   });
 });

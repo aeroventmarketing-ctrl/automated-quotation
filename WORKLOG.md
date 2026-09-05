@@ -1,3 +1,58 @@
+## 2026-09-05 · Three AI reads per attachment, not three per purchase order
+
+The owner: *"In AI reading allow 3 tries in every row or every attachment. Update and check all roles that is
+allowed to 3 tries AI reading. Admin/payment approved still allowed unlimited number of tries."*
+
+### What the old allowance actually did
+
+It was the PURCHASE ORDER's, and it counted **photos that had been read** rather than reads. Two wrong things at
+once:
+
+- a PO paid by two checks spent its budget on the first photo, and the second could not be read by the person
+  who had just attached it;
+- and one photo could be re-read for ever, because re-reading replaced the read instead of adding one.
+
+A try is now a read, and a **photo** is what has three of them (`readCount`, persisted on the check doc).
+
+Two deliberate exemptions, both invisible unless written down:
+
+- **A failed read costs nothing.** It produced no answer to be tempted by, and a run of server errors must not
+  lock the one person who can fix the record out of trying again. Verified: three failed attempts left
+  `readCount=1` where it was, with the failure noted on the check.
+- **An admin's read costs nobody.** Their counter is written even though it does not move — a doc whose count is
+  explicitly `0` is one an admin read and nobody else has. Without that zero, the "read but never counted"
+  fallback would have charged the next person for it.
+
+### Every role, on the actual screen
+
+The harness carries one PO with **two photos on it**: `SPENT.jpg` at three reads and `LEFT2.jpg` at one. Page-
+wide, *"is there a Re-read button"* answers yes for that PO whatever is broken — so each probe is anchored to
+its own photo's file name.
+
+| | spent photo | photo with 2 left |
+| --- | --- | --- |
+| **Admin**, **Payment Approver** | *Re-read* | *Re-read* |
+| **Accounting** | *Read 3 times — check it against the photo, or ask an admin / the Payment Approver* | *Re-read · 2 left* |
+| Purchaser, Warehouse, Sales, Engineer | — | — |
+
+The last row is not new: reading a check has always been Accounting / Payment Approver / admin. It is in the
+table because "no button" and "no permission" look identical, and only the grid tells them apart.
+
+The button also **goes** rather than sitting there dead, and the count only appears once it has cost something —
+"3 tries left" on every untouched row is noise.
+
+### …and the server, which is the part that matters
+
+The UI hiding a button is not a limit. Posted directly at `/api/ai/read-check` on the running app:
+
+- Accounting → `SPENT.jpg` → **429**, *"This check has been read 3 times (3 allowed per attachment)…"*
+- Accounting → `LEFT2.jpg` → past the limit (fails later, on the harness having no real file) — the second photo
+  is unaffected by the first
+- Admin and Payment Approver → `SPENT.jpg` → past the limit, three reads or not
+- Purchaser → **403** before any of it — the role gate still comes first
+
+Eleven new tests, 402 pass.
+
 ## 2026-09-05 · The check's date comes off the boxes or not at all, and a misread can be corrected
 
 The owner, with PO-AFBM20260000630 and its check side by side: *"Error in reading date. It should be October
