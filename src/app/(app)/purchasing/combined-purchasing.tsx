@@ -88,6 +88,8 @@ export interface BatchCard {
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
   canAttachCheck: boolean;
   canReadCheck: boolean;
+  /** …and their reads don't count against the per-photo AI allowance. */
+  unlimitedCheckReads: boolean;
   canRemoveCheck: boolean;
 }
 
@@ -479,6 +481,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             canAttach={batch.canAttachCheck}
             canRead={batch.canReadCheck}
             canRemove={batch.canRemoveCheck}
+            unlimitedReads={batch.unlimitedCheckReads}
             canView={showSupplier}
             netAmount={totals.net}
           />

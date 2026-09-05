@@ -23,6 +23,7 @@
  */
 import type { PRStatus } from "@/lib/purchasing";
 import { prMainIndex, statusBucket } from "@/lib/purchasing";
+import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 
 /**
  * What the AI reads off the face of the check. The owner's field map, in their
@@ -137,6 +138,11 @@ export interface CheckDoc {
   uploadedByName: string;
   /** Absent until the AI has read it (or if the read failed). */
   read?: CheckRead;
+  /**
+   * How many AI reads THIS photo has cost a limited reader — see
+   * `checkReadsUsed`. Absent on a photo read before the counter existed.
+   */
+  readCount?: number;
   /**
    * Why the last read FAILED, when one was attempted and did not produce a
    * `read`.
@@ -302,6 +308,11 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
     uploadedAt: typeof o.uploadedAt === "string" ? o.uploadedAt : "",
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
     ...(read ? { read } : {}),
+    // Kept even when it is 0 — see `nextCheckReadCount`: the zero is what says
+    // "an admin read this, and it cost nobody a try".
+    ...(typeof o.readCount === "number" && Number.isFinite(o.readCount)
+      ? { readCount: Math.max(0, Math.floor(o.readCount)) }
+      : {}),
     ...(readError ? { readError } : {}),
     ...(dateFix ? { dateFix } : {}),
     ...(reschedules.length ? { reschedules } : {}),
@@ -526,6 +537,72 @@ export function checkAttachableAt(
   //
   // Every OTHER role still sees a completed PO's check and cannot touch it.
   return !!actor?.admin || !!actor?.paymentApprover || !!actor?.accounting;
+}
+
+// --- How many AI reads one photo is worth ------------------------------------
+//
+// The owner: *"In AI reading allow 3 tries in every row or every attachment.
+// … Admin/payment approved still allowed unlimited number of tries."*
+//
+// PER ATTACHMENT is the change. The allowance used to be per PURCHASE ORDER and
+// counted photos-that-had-been-read rather than reads, so it did two wrong
+// things at once: a PO paid by two checks spent its budget on the first photo
+// and left the second unreadable by the person who attached it, while a single
+// photo could be re-read forever. A try is now a read, and a photo is what has
+// three of them.
+
+/**
+ * Who is never counted: the two who sign for the money.
+ *
+ * The same pair that may read a check outside the Budgeted window at all. The
+ * limit exists to stop someone pressing a button until they like the answer;
+ * these two are the ones a person appeals TO when it runs out, so a limit on
+ * them would have no one behind it.
+ */
+export function hasUnlimitedCheckReads(actor?: CheckActor): boolean {
+  return !!actor?.admin || !!actor?.paymentApprover;
+}
+
+/**
+ * AI reads this photo has cost a limited reader.
+ *
+ * A read that FAILED costs nothing — it produced no answer to be tempted by, and
+ * a run of server errors must not lock the one person who can fix the record out
+ * of trying again. Nor does a read by an admin or the Payment Approver: their
+ * reads are outside the count, so looking at a photo on someone's behalf cannot
+ * spend that person's allowance.
+ *
+ * A photo attached before the counter existed but already read counts as one
+ * try — conservative, and true of every such photo.
+ */
+export function checkReadsUsed(doc: CheckDoc): number {
+  if (typeof doc.readCount === "number" && Number.isFinite(doc.readCount)) return Math.max(0, Math.floor(doc.readCount));
+  return doc.read ? 1 : 0;
+}
+
+/** Tries left on this photo — `null` for a reader who has no limit. */
+export function checkReadsLeft(doc: CheckDoc, opts?: { unlimited?: boolean }): number | null {
+  if (opts?.unlimited) return null;
+  return Math.max(0, AI_CHECK_READ_LIMIT - checkReadsUsed(doc));
+}
+
+/** May this photo be read (again) by this reader? */
+export function canReadCheckAgain(doc: CheckDoc, opts?: { unlimited?: boolean }): boolean {
+  const left = checkReadsLeft(doc, opts);
+  return left === null || left > 0;
+}
+
+/**
+ * What the counter should become after a SUCCESSFUL read — unchanged for a
+ * reader with no limit, one more for everyone else.
+ *
+ * Always written, even when it does not move: a doc whose counter is explicitly
+ * 0 is one an admin read and nobody else has, and without the zero the "read but
+ * never counted" fallback above would charge the next person for it.
+ */
+export function nextCheckReadCount(doc: CheckDoc, opts?: { unlimited?: boolean }): number {
+  const used = checkReadsUsed(doc);
+  return opts?.unlimited ? used : used + 1;
 }
 
 /** Expected, and not there — the condition the amber badge and the notification key on. */

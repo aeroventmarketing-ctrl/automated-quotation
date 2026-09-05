@@ -69,6 +69,8 @@ interface PRRow {
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
   canAttachCheck?: boolean;
   canReadCheck?: boolean;
+  /** …and their reads don't count against the per-photo AI allowance. */
+  unlimitedCheckReads?: boolean;
   canRemoveCheck?: boolean;
   purchaseDueAt?: string | null;
   canSetPurchaseDue?: boolean;
@@ -594,6 +596,7 @@ export function PurchasingChain({
                       canAttach={!readOnly && !!r.canAttachCheck}
                       canRead={!readOnly && !!r.canReadCheck}
                       canRemove={!readOnly && !!r.canRemoveCheck}
+                      unlimitedReads={!!r.unlimitedCheckReads}
                       canView={showSupplier}
                       netAmount={r.po ? poTotals(r.po).net : undefined}
                     />
