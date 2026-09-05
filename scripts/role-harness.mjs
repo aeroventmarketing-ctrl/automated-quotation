@@ -223,11 +223,26 @@ async function seed() {
     path: `purchases/x/${no}.jpg`, name: `${no}.jpg`, uploadedAt: "", uploadedByName: "Michelle Cotura",
     read: {
       accountNo: "003718007033", accountName: "AEROVENT FANS AND BLOWERS MANUFACTURING",
-      checkNo: no, payee: "HARNESS STEEL CORP", clearingYMD: ymd, dateBoxes: null,
+      checkNo: no, payee: "HARNESS STEEL CORP", clearingYMD: ymd,
+      // The eight DATE-box digits the date was assembled from — a CONFIRMED
+      // date, as every read taken since 2026-09-04 produces.
+      dateBoxes: `${ymd.slice(5, 7)}${ymd.slice(8, 10)}${ymd.slice(0, 4)}`,
       amount, amountFigures: amount, amountFromWords: amount, amountWords: "", bank: "BDO",
       confidence: 0.95, warnings: [], issues: [], readByName: "Michelle Cotura", readAt: "",
     },
   });
+  // One check in the owner's reported state: a clearing date the model wrote
+  // itself, with no DATE-box digits behind it — the shape that put 17 October
+  // in the register as 17 July, reading "49 days ago".
+  await p.purchaseRequest.create({ data: {
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    note: "HARNESS-CHK-UNCONFIRMED", status: "CASH_RELEASED",
+    po: { ...poFor("HARNESS-CHK-UNSURE"), supplier: { company: "POWERLINK MERCHANDISE" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    voucherCheckDocs: [{ ...checkDoc("0000486709", "2026-07-17", 39210.75), read: { ...checkDoc("0000486709", "2026-07-17", 39210.75).read, dateBoxes: null } }],
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
   for (const [no, ymd, amt, company] of [
     ["0000486901", "2026-09-10", 28344.64, "HARNESS STEEL CORP"],
     ["0000486902", "2026-10-02", 2836.94, "WIDGET SUPPLY INC"],

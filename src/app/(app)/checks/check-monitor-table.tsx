@@ -196,6 +196,21 @@ export function CheckMonitor({
 
       {err && <p className="text-sm text-destructive">{err}</p>}
 
+      {/* How much of the register is standing on a date nobody has confirmed.
+          Without this the owner has no way to know WHICH of fifty rows to go
+          and check — they only find out when one of them reads "49 days ago"
+          for a check that clears next month. */}
+      {summary.unverifiedDates > 0 && (
+        <p className="flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            <strong>{summary.unverifiedDates}</strong> of these clearing dates were never confirmed against the
+            check&apos;s own date boxes — they are marked <em>unconfirmed</em> below. Open the PO and press
+            <strong> Re-read</strong> to settle each one against the photo.
+          </span>
+        </p>
+      )}
+
       {shown.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -305,6 +320,14 @@ export function CheckMonitor({
                       <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
                       {/* How far off it is, which is the whole point of watching it. */}
                       <div className={`text-xs ${needsAttention(r.state) ? "font-medium text-amber-700" : "text-muted-foreground"}`}>{whenText(r)}</div>
+                      {/* This date is the model's own answer, never checked
+                          against the eight DATE boxes on the check. Saying so is
+                          the difference between a date and a guess. */}
+                      {r.clearingYMD && !r.dateVerified && (
+                        <div className="mt-0.5 text-xs italic text-amber-700" title="Read before the date boxes were transcribed, or the boxes could not be made out. Re-read the check to confirm it.">
+                          unconfirmed
+                        </div>
+                      )}
                       {r.originalYMD && (
                         <div className="mt-0.5 text-xs text-amber-700">
                           moved from {formatDate(r.originalYMD)}

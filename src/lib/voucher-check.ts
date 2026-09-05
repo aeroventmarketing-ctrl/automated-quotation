@@ -557,7 +557,7 @@ const sameDigits = (a: number, b: number): boolean => {
 };
 
 export interface CheckIssue {
-  key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence";
+  key: "payee" | "amount" | "words" | "account" | "duplicate" | "unread" | "confidence" | "date";
   message: string;
 }
 
@@ -725,6 +725,17 @@ export function checkIssues(opts: {
 
   if (typeof r.confidence === "number" && r.confidence < 0.7) {
     issues.push({ key: "confidence", message: "The photo is unclear — check the figures against the check itself." });
+  }
+  // (e) The clearing date has to come from the eight DATE boxes. When the model
+  // could not transcribe them, its own written date stands unchecked — and that
+  // is exactly how a check for 17 October came to sit in the register as 17
+  // July, reading "49 days ago". A date nobody confirmed must not look like one
+  // that was.
+  if (r.clearingYMD && !r.dateBoxes) {
+    issues.push({
+      key: "date",
+      message: "The date boxes couldn't be read, so this clearing date is the AI's own answer rather than the check's. Check it against the photo.",
+    });
   }
   // (b) The account name is OURS. A check drawn on someone else's account
   // attached to our PO is either the wrong photo or something worse.

@@ -9,7 +9,7 @@ const row = (over: Partial<CheckWatchRow>): CheckWatchRow => ({
   poDate: "2026-09-01", poNumber: "PO-AFBM20260000638", supplier: "TOZEN PHILIPPINES INC.",
   orderId: null, checkNo: "0000486726", amount: 2160.54,
   clearingYMD: "2026-10-04", originalYMD: null, moves: 0, lastMoveReason: null,
-  daysLeft: 30, state: "scheduled", clearedOn: null, clearedByName: null,
+  daysLeft: 30, dateVerified: true, state: "scheduled", clearedOn: null, clearedByName: null,
   statusLabel: "Check Clearing", form: "PDC", remarks: null,
   ...over,
 });

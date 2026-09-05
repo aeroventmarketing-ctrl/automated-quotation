@@ -267,3 +267,82 @@ describe("POs that owe a check but have none attached", () => {
     expect(rows.map((r) => r.state)).toEqual(["scheduled", "awaiting"]);
   });
 });
+
+
+/**
+ * The owner, on a check plainly reading `1 0 1 7 2 0 2 6`: *"error in reading
+ * check 10 17 2026 is october 17, 2026."* The register showed **17 July** —
+ * not a month/day swap, a different month entirely.
+ *
+ * The date had never come from the boxes. Either the read predated their being
+ * transcribed at all, or the model could not make them out and its own written
+ * answer stood by default — and nothing on screen distinguished either case
+ * from a date read straight off the check.
+ */
+describe("a clearing date nobody confirmed", () => {
+  const TODAY = "2026-09-04";
+  const helpers = {
+    coerceDocs: (v: unknown) => (v as CheckDoc[]) ?? [],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+  };
+  const pr = (docs: CheckDoc[]) => ({
+    id: "pr", quotationId: null,
+    po: { poNumber: "PO-630", supplierCompany: "POWERLINK", date: "2026-09-01", net: 39210.75 },
+    voucherCheckDocs: docs, status: "CASH_RELEASED",
+  });
+  const read = (over: Record<string, unknown> = {}) => ({
+    accountNo: null, accountName: null, checkNo: "0000486709", payee: null,
+    clearingYMD: "2026-10-17", dateBoxes: "10172026", amount: 39210.75,
+    amountFigures: 39210.75, amountFromWords: 39210.75, amountWords: "", bank: "BDO",
+    confidence: 0.95, warnings: [], issues: [], readByName: "M", readAt: "", ...over,
+  });
+  const doc = (r: Record<string, unknown> = {}): CheckDoc =>
+    ({ path: "c.jpg", name: "c.jpg", uploadedAt: "", uploadedByName: "M", read: read(r) } as CheckDoc);
+
+  it("trusts a date assembled from the check's own boxes", () => {
+    const [row] = buildCheckWatch([pr([doc()])], TODAY, helpers);
+    expect(row.clearingYMD).toBe("2026-10-17");
+    expect(row.dateVerified).toBe(true);
+  });
+
+  it("does NOT trust a date the boxes never produced", () => {
+    // The owner's row exactly: the model wrote July, the boxes say October, and
+    // the boxes were never recorded — so July is what was stored.
+    const [row] = buildCheckWatch([pr([doc({ clearingYMD: "2026-07-17", dateBoxes: null })])], TODAY, helpers);
+    expect(row.clearingYMD).toBe("2026-07-17");
+    expect(row.dateVerified).toBe(false);
+  });
+
+  it("does not trust a date the boxes CONTRADICT", () => {
+    // Belt and braces: stored date and stored digits disagreeing means one of
+    // them is wrong, and the row must not present the date as settled.
+    const [row] = buildCheckWatch([pr([doc({ clearingYMD: "2026-07-17", dateBoxes: "10172026" })])], TODAY, helpers);
+    expect(row.dateVerified).toBe(false);
+  });
+
+  it("counts them, so a person knows how much of the register to check", () => {
+    const rows = buildCheckWatch([
+      { ...pr([doc()]), id: "ok" },
+      { ...pr([doc({ clearingYMD: "2026-07-17", dateBoxes: null })]), id: "bad1" },
+      { ...pr([doc({ clearingYMD: "2026-08-01", dateBoxes: null })]), id: "bad2" },
+    ], TODAY, helpers);
+    expect(checkWatchSummary(rows).unverifiedDates).toBe(2);
+  });
+
+  it("takes a person's word over the boxes — a moved or cleared date is settled", () => {
+    const moved = doc({ clearingYMD: "2026-07-17", dateBoxes: null });
+    moved.reschedules = [{ from: "2026-07-17", to: "2026-10-17", reason: "funds", byName: "Ana", at: "" }];
+    expect(buildCheckWatch([pr([moved])], TODAY, helpers)[0].dateVerified).toBe(true);
+
+    const done = doc({ clearingYMD: "2026-07-17", dateBoxes: null });
+    done.cleared = { on: "2026-07-17", byName: "Ana", at: "" };
+    expect(buildCheckWatch([pr([done])], TODAY, helpers)[0].dateVerified).toBe(true);
+  });
+
+  it("says nothing about a PO whose check is not written yet", () => {
+    const rows = buildCheckWatch([pr([])], TODAY, { ...helpers, expectsCheck: () => true });
+    expect(rows[0].state).toBe("awaiting");
+    expect(rows[0].dateVerified).toBe(true); // no date, nothing to doubt
+    expect(checkWatchSummary(rows).unverifiedDates).toBe(0);
+  });
+});
