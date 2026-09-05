@@ -7,16 +7,22 @@
  *   - onTime   : comfortably ahead of its deadline
  * Shown on the dashboards so every production/monitoring role can see, at a
  * glance, which orders are on track — and click through to the client.
+ *
+ * An order leaves the list when it is DELIVERED, whatever its job orders say.
  */
 import { prisma } from "@/lib/db";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
-import { readOrderWorkflow, PRODUCTION_DEPTS, stageIndex } from "@/lib/order-workflow";
+import { readOrderWorkflow, PRODUCTION_DEPTS, stageIndex, type OrderStage, type OrderWorkflow } from "@/lib/order-workflow";
 
-export interface ProductionRow {
+/** The order's identity as the card shows it. */
+export interface ProductionOrderRef {
   orderId: string;
   company: string;
   quoteNumber: string;
   projectName: string;
+}
+
+export interface ProductionRow extends ProductionOrderRef {
   dept: string; // department label
   dueAt: string; // YYYY-MM-DD
   days: number; // due − today; negative = overdue
@@ -38,6 +44,41 @@ function daysBetween(fromYMD: string, toYMD: string): number {
     return Date.UTC(y, m - 1, d);
   };
   return Math.round((p(toYMD) - p(fromYMD)) / 86_400_000);
+}
+
+/**
+ * Is this order's production still worth watching?
+ *
+ * It opens when the job orders are released and **closes the moment the order is
+ * delivered** — the owner: *"Once item is delivered remove it from the list."*
+ *
+ * A department that never stamped its job order "finished" used to keep a row
+ * here for good, so an order the client already has kept accruing "37d overdue"
+ * beside orders still on the shop floor. Delivery is the fact that settles it: a
+ * deadline for goods that have gone out is not a deadline any more, and a list
+ * that shows it teaches the eye to skip the ones that matter.
+ *
+ * Both delivery modes land here. The single-batch flow stamps `delivered`; a
+ * multiple-batch order reaches the same stage only once EVERY item has been
+ * delivered, so a part-delivered order stays on the list — production still owes
+ * the rest.
+ */
+export function isLiveProduction(stage: OrderStage): boolean {
+  return stageIndex(stage) >= stageIndex("in_production") && stageIndex(stage) < stageIndex("delivered");
+}
+
+/**
+ * The rows one order contributes — one per department still owing work against a
+ * deadline. Empty for an order that has been delivered, has not reached
+ * production, or whose job orders are all finished or undated.
+ */
+export function productionRowsForOrder(ref: ProductionOrderRef, wf: OrderWorkflow, todayYMD: string): ProductionRow[] {
+  if (!isLiveProduction(wf.stage)) return [];
+  return PRODUCTION_DEPTS.flatMap((d) => {
+    const jo = wf.jobOrders[d.key];
+    if (!jo || jo.status === "finished" || !jo.dueAt) return [];
+    return [{ ...ref, dept: d.label, dueAt: jo.dueAt, days: daysBetween(todayYMD, jo.dueAt) }];
+  });
 }
 
 export async function getProductionStatus(): Promise<ProductionStatus> {
@@ -68,23 +109,15 @@ export async function getProductionStatus(): Promise<ProductionStatus> {
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
     const wf = readOrderWorkflow(q.classification);
-    // Only orders that have entered the production phase (job orders released).
-    if (stageIndex(wf.stage) < stageIndex("in_production")) continue;
-    for (const d of PRODUCTION_DEPTS) {
-      const jo = wf.jobOrders[d.key];
-      if (!jo || jo.status === "finished" || !jo.dueAt) continue;
-      const days = daysBetween(phToday, jo.dueAt);
-      const row: ProductionRow = {
-        orderId: q.id,
-        company: q.inquiry?.customer?.company ?? "—",
-        quoteNumber: q.quoteNumber,
-        projectName: q.projectName ?? q.inquiry?.projectName ?? "",
-        dept: d.label,
-        dueAt: jo.dueAt,
-        days,
-      };
-      if (days < 0) late.push(row);
-      else if (days <= NEAR_DUE_DAYS) nearDue.push(row);
+    const ref: ProductionOrderRef = {
+      orderId: q.id,
+      company: q.inquiry?.customer?.company ?? "—",
+      quoteNumber: q.quoteNumber,
+      projectName: q.projectName ?? q.inquiry?.projectName ?? "",
+    };
+    for (const row of productionRowsForOrder(ref, wf, phToday)) {
+      if (row.days < 0) late.push(row);
+      else if (row.days <= NEAR_DUE_DAYS) nearDue.push(row);
       else onTime.push(row);
     }
   }
