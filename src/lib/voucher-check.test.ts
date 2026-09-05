@@ -5,7 +5,7 @@ import { pesoAmountInWords } from "./amount-words";
 import {
   canAttachCheck, checkExpected, checkMissing, checkAttachableAt, coerceCheckDocs,
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
-  clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt,
+  clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt, isClearingYMD,
   type CheckRead,
 } from "./voucher-check";
 
@@ -639,5 +639,42 @@ describe("check numbers", () => {
     const [back] = coerceCheckDocs([{ ...doc, read: "not an object" }]);
     expect(back.path).toBe(doc.path);
     expect(back.read).toBeUndefined();
+  });
+});
+
+/**
+ * *"Error in reading date. It should be October 17, 2026."*
+ *
+ * `clearingFromDateBoxes` is arithmetic: "10172026" cannot come out of it as
+ * anything but the 17th of October. So a check dated 10 17 2026 that reached the
+ * register as July never went through it — the model's own written date stood in
+ * as a fallback. The fallback is gone, and an unreadable date is now no date.
+ */
+describe("a date the boxes could not give up", () => {
+  it("is called missing, not guessed", () => {
+    const [issue] = ok({ read: { ...PRACTICE, clearingYMD: null, dateBoxes: null } });
+    expect(issue.key).toBe("date");
+    expect(issue.message).toContain("No clearing date");
+    expect(issue.message).toContain("set the date by hand");
+  });
+
+  it("still names the older rows where the AI's own date was allowed to stand", () => {
+    const [issue] = ok({ read: { ...PRACTICE, clearingYMD: "2026-07-12", dateBoxes: null } });
+    expect(issue.key).toBe("date");
+    expect(issue.message).toContain("the AI's own answer");
+  });
+
+  it("says nothing when the boxes produced the date", () => {
+    expect(ok({ read: { ...PRACTICE, clearingYMD: "2026-10-17", dateBoxes: "10172026" } })).toEqual([]);
+  });
+});
+
+describe("a real calendar day, written YYYY-MM-DD", () => {
+  it("accepts one and refuses the rest", () => {
+    expect(isClearingYMD("2026-10-17")).toBe(true);
+    expect(isClearingYMD("2028-02-29")).toBe(true);
+    for (const bad of ["2026-02-31", "2026-13-01", "17-10-2026", "2026-10-17T00:00:00Z", "", null, undefined, 20261017]) {
+      expect(isClearingYMD(bad), String(bad)).toBe(false);
+    }
   });
 });

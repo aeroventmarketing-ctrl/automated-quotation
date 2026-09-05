@@ -6,7 +6,7 @@ import { Banknote, AlertTriangle, ScanLine, CheckCircle2 } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatDate } from "@/lib/utils";
-import { checkAmountAgreed, checkMissing, formatCheckNo, type CheckDoc } from "@/lib/voucher-check";
+import { checkAmountAgreed, checkMissing, formatCheckNo, printedClearingYMD, type CheckDoc } from "@/lib/voucher-check";
 import type { PRStatus } from "@/lib/purchasing";
 import { attachVoucherCheck, removeVoucherCheck } from "../orders/actions";
 
@@ -199,6 +199,9 @@ export function VoucherCheckControl({
         const r = d.read;
         const reading = busy === `read:${d.path}`;
         const agreed = checkAmountAgreed(r, netAmount ?? 0);
+        // What the check says, a person's correction included — otherwise this
+        // card goes on quoting the misread date the register has already fixed.
+        const clears = printedClearingYMD(d);
         return (
           <span key={d.path} className="inline-flex flex-col items-start gap-0.5 text-xs">
             <span className="inline-flex flex-wrap items-center gap-2">
@@ -233,11 +236,12 @@ export function VoucherCheckControl({
                 </button>
               )}
             </span>
-            {r && (r.amount != null || r.clearingYMD || r.payee) && (
+            {r && (r.amount != null || clears || r.payee) && (
               <span className="text-muted-foreground">
                 {r.payee ? `${r.payee} · ` : ""}
                 {r.amount != null ? `₱${peso(r.amount)}` : ""}
-                {r.clearingYMD ? ` · clears ${formatDate(r.clearingYMD)}` : ""}
+                {clears ? ` · clears ${formatDate(clears)}` : ""}
+                {d.dateFix ? " (date corrected)" : ""}
               </span>
             )}
             {/* What the read disagreed with the PO about. Reported, never enforced. */}

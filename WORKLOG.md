@@ -1,3 +1,49 @@
+## 2026-09-05 · The check's date comes off the boxes or not at all, and a misread can be corrected
+
+The owner, with PO-AFBM20260000630 and its check side by side: *"Error in reading date. It should be October
+17, 2026."*
+
+### Where July came from
+
+`clearingFromDateBoxes` is arithmetic. `"10172026"` cannot come out of it as anything but 17 October — so a
+check dated `1 0 1 7 2 0 2 6` that reached the register as **July never went through it**. It came out of the
+fallback: when the model could not transcribe the eight boxes, its own written date stood in, flagged
+*unconfirmed* and then presented as the clearing date anyway.
+
+That fallback is gone. The boxes, or **no date at all** — which the register already knows how to say, and which
+this module's own rule has always demanded: *an undated check is called undated, never assumed.* The model's
+guess is kept in a warning, named as a guess, and used for nothing. The prompt now says so too: `dateDigits` is
+the only field that counts, and a check whose digits it leaves null gets no clearing date.
+
+### Moving a date and correcting one are opposite acts
+
+Both were one button, and the register could not tell them apart:
+
+- **Move date** — the check is dated 12 July and the supplier is being asked to hold it. History. The row says
+  *"moved from Jul 12, 2026"* for as long as the check exists.
+- **Fix date** — the check was ALWAYS dated 17 October and the reading was wrong. Nothing moved.
+
+Having corrected the date with the only tool there was, the owner was left looking at a reschedule that never
+happened, in amber, underneath the date they had just fixed. So **Fix date** is now its own button (**Set date**
+on a check that has no date yet), writing a `dateFix` that beats the read and loses to a genuine reschedule. The
+misread is kept on the record — correcting it is not pretending the AI never said it — and the row reads *"date
+corrected by Admin Ana"* in grey, because a settled date is not a warning.
+
+A correction survives a re-read, deliberately: if the model comes back with a third answer, the eyes win.
+
+### Verified on the running app
+
+The harness grew the owner's row exactly — right down to *"Oct 17, 2026 · in 42 days · moved from Jul 12,
+2026 · Correct date"*. Pressing **Fix date** in a real browser turned that line into *"date corrected by Admin
+Ana"*, and the Purchasing card stopped quoting July: *"clears Oct 17, 2026 (date corrected)"*. The undated path
+too: a check with no date reads *"— · no date · No clearing date read"* and offers **Set date**; after it, *"Oct
+17, 2026 · in 42 days"* — and the Form of Payment turns itself from Check to **PDC**, the date now being past
+the PO's.
+
+Admin only, unchanged: Accounting sees the corrected row and no button.
+
+Nine new tests, 396 pass.
+
 ## 2026-09-05 · A delivered order leaves the Production Status list
 
 The owner, on the Production Status card: *"Once item is delivered remove it from the list."*

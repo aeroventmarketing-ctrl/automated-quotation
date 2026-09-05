@@ -58,7 +58,8 @@ The fields on the check, and exactly what each one means:
   - "1 0 0 4 2 0 2 6" is 4 OCTOBER 2026 (month 10, day 04). It is NOT 10 April 2026.
   - "0 3 1 1 2 0 2 6" is 11 MARCH 2026. It is NOT 3 November 2026.
   - "1 0 1 7 2 0 2 6" is 17 OCTOBER 2026.
-  Return the eight digits themselves in "dateDigits", exactly as they sit in the boxes left to right and with their leading zeros (e.g. "10042026"), AND the same date as YYYY-MM-DD in "date". ALWAYS fill in "dateDigits" when you can see the date at all — it is what the clearing date is actually built from, and a date given WITHOUT it is recorded as unconfirmed and has to be checked by a person. Set it to null only if the digits are genuinely unreadable, or the date is handwritten free-hand rather than sitting in boxes.
+  Return the eight digits themselves in "dateDigits", exactly as they sit in the boxes left to right and with their leading zeros (e.g. "10042026"), AND the same date as YYYY-MM-DD in "date".
+  "dateDigits" IS THE ONLY THING USED. The clearing date is built from those eight digits in code; your "date" field is read back only to check you against yourself, and is DISCARDED when the two disagree or when "dateDigits" is null. A check whose digits you leave null is recorded as having NO CLEARING DATE and has to be dated by hand by a person — so transcribe the boxes whenever the date is visible at all, and do not fall back on writing the date out instead. Set "dateDigits" to null only if the digits are genuinely unreadable, or the date is handwritten free-hand rather than sitting in boxes.
   THIS IS THE DATE THE CHECK CLEARS, not the date it was written — company checks here are commonly post-dated, so a date weeks or months in the future is normal and must be read as printed.
 - AMOUNT IN FIGURES — the number in the box beside the "P" peso sign, e.g. "20,827.37". Read it ONE DIGIT AT A TIME, left to right, and keep them in that order. Do not "recognise" a familiar-looking number and write it from memory: "2,081.25" and "2,018.25" differ by two digits changing places, and a check for the wrong one is a real payment to a supplier.
 - AMOUNT IN WORDS — the line above "PESOS", spelled out, e.g. "TWENTY THOUSAND EIGHT HUNDRED TWENTY SEVEN AND 37/100". Return it VERBATIM as printed, including however the line is closed. On these checks a whole-peso amount ends with the word "ONLY" ("TWO THOUSAND ONE HUNDRED EIGHTY PESOS ONLY") where other checks would write "AND 00/100" — do NOT convert one into the other, and do not drop a trailing "ONLY", asterisks or filler characters. Copy the line.
@@ -80,7 +81,7 @@ const USER_PROMPT = `From the attached photo of a check, return JSON with this e
   "checkNo": string|null,       // Check No. as printed — all 10 digits, leading zeros kept (NOT the BRSTN)
   "payee": string|null,         // Pay to the order of — the supplier
   "dateDigits": string|null,    // the 8 DATE-box digits as printed, left to right: MMDDYYYY, e.g. "10042026"
-  "date": string|null,          // the same date as YYYY-MM-DD (the clearing date; may be in the future)
+  "date": string|null,          // the same date as YYYY-MM-DD (a cross-check only — dateDigits is what is used)
   "amount": number|null,        // the figure in the peso box
   "amountWords": string|null,   // the PESOS line, verbatim
   "bank": string|null,          // the drawee bank if shown (e.g. "BDO")
@@ -209,9 +210,29 @@ export async function POST(req: NextRequest) {
     const boxes = r.dateDigits ?? null;
     const fromBoxes = clearingFromDateBoxes(boxes);
     const modelDate = r.date ?? null;
-    const dateWarnings = fromBoxes && modelDate && modelDate !== fromBoxes
-      ? [`Date boxes read ${boxes} = ${fromBoxes} (MM DD YYYY); the model wrote ${modelDate}. Using the boxes.`]
-      : [];
+    /**
+     * The model's own date is NEVER the clearing date — not even when the boxes
+     * could not be transcribed.
+     *
+     * It used to stand as a fallback, flagged "unconfirmed" and left on the
+     * register as fact. That fallback is the only way a check dated 10 17 2026
+     * could ever appear as July: `clearingFromDateBoxes` is arithmetic, and
+     * "10172026" cannot come out of it as anything but 17 October. So a wrong
+     * date is a date that never went through it.
+     *
+     * An unreadable date now leaves the check UNDATED, which the register
+     * already knows how to say, and a person supplies the date from the photo —
+     * the module's own rule: an undated check is called undated, never assumed.
+     */
+    const dateWarnings = fromBoxes
+      ? (modelDate && modelDate !== fromBoxes
+        ? [`Date boxes read ${boxes} = ${fromBoxes} (MM DD YYYY); the model wrote ${modelDate}. Using the boxes.`]
+        : [])
+      : [
+          modelDate
+            ? `The eight DATE boxes couldn't be transcribed, so this check has NO clearing date. (The AI's own guess was ${modelDate} — it is a guess, not the check, and was not used.) Open the photo and set the date by hand.`
+            : "The eight DATE boxes couldn't be transcribed, so this check has no clearing date. Open the photo and set it by hand.",
+        ];
 
     // The amount, likewise, is taken from the line that cannot be transposed.
     // A photo of "2,081.25" comes back as "2,018.25" if two digits change
@@ -234,8 +255,8 @@ export async function POST(req: NextRequest) {
       accountName: r.accountName ?? null,
       checkNo: r.checkNo ?? null,
       payee: r.payee ?? null,
-      // Boxes win; the model's own date only stands when there were no boxes to read.
-      clearingYMD: fromBoxes ?? modelDate,
+      // The boxes, or nothing at all. See the note above.
+      clearingYMD: fromBoxes,
       dateBoxes: boxes,
       amount: fromWords ?? figures,
       amountFigures: figures,

@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { saveCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
@@ -2725,6 +2725,37 @@ export async function unclearCheck(purchaseRequestId: string, path: string): Pro
   const denied = await assertCheckAdmin();
   if (denied) return { error: denied };
   return updateCheckDoc(purchaseRequestId, path, ({ cleared: _drop, ...rest }) => rest);
+}
+
+/**
+ * Correct a date the AI read wrongly — *"Error in reading date. It should be
+ * October 17, 2026."*
+ *
+ * NOT a reschedule, and the difference matters on screen. Moving a date says the
+ * check is dated the 12th of July and the supplier is being asked to hold it;
+ * the register then says "moved from Jul 12" for as long as the check exists.
+ * Correcting one says the check was always dated the 17th of October and the
+ * reading was wrong — nothing moved, so nothing should claim it did.
+ *
+ * With only "Move date" to hand, correcting a misread left the register
+ * announcing a reschedule that never happened, under the very date the owner had
+ * just corrected.
+ */
+export async function correctCheckDate(
+  purchaseRequestId: string,
+  path: string,
+  input: { ymd: string },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  if (!isYMD(input?.ymd)) return { error: "Give the date printed on the check." };
+  return updateCheckDoc(purchaseRequestId, path, (d) => ({
+    ...d,
+    // `was` keeps the misread on the record: the point of correcting it is not
+    // to pretend the AI never said it.
+    dateFix: { ymd: input.ymd, was: printedClearingYMD(d), byName: user?.name ?? "", at: new Date().toISOString() },
+  }));
 }
 
 /**

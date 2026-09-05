@@ -98,6 +98,29 @@ export interface CheckReschedule {
   at: string; // ISO
 }
 
+/**
+ * A person read the check and corrected the date the AI got wrong.
+ *
+ * NOT a reschedule. The two look the same on a form and mean opposite things:
+ *
+ *  - a **reschedule** says the check is dated the 12th of July and we are asking
+ *    the supplier to hold it until October — history worth keeping, and the
+ *    register says "moved from Jul 12" for as long as the check exists;
+ *  - a **correction** says the check was ALWAYS dated the 17th of October and the
+ *    reading was wrong. There is no "moved from", because nothing moved.
+ *
+ * With only one button, correcting a misread left the register announcing a
+ * reschedule that never happened — the owner, having corrected 12 July to 17
+ * October, still saw *"moved from Jul 12, 2026"* in amber under the right date.
+ */
+export interface CheckDateFix {
+  ymd: string; // what the check actually says
+  /** What the reading had claimed, kept so the misread is still auditable. */
+  was: string | null;
+  byName: string;
+  at: string; // ISO
+}
+
 /** The bank cleared it. Recorded by a person, because only the bank knows. */
 export interface CheckCleared {
   on: string; // YMD it actually cleared
@@ -124,6 +147,11 @@ export interface CheckDoc {
    * the next successful read.
    */
   readError?: { message: string; at: string; byName: string };
+  /**
+   * A person corrected the date the read got wrong. Beats the read, loses to a
+   * reschedule — see `effectiveClearingYMD`.
+   */
+  dateFix?: CheckDateFix;
   /** Every time the clearing date was moved, oldest first. */
   reschedules?: CheckReschedule[];
   /** Set once the bank has cleared it — moves the check to the Cleared tab. */
@@ -167,9 +195,21 @@ export function clearingFromDateBoxes(digits: string | null | undefined): string
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * What the CHECK ITSELF says, as best anyone knows — a person's correction if
+ * one was made, otherwise the date the read produced.
+ *
+ * A correction beats the read because the person had the paper in front of them.
+ * It survives a later re-read for the same reason: if the model comes back with
+ * a third answer, the eyes win.
+ */
+export function printedClearingYMD(doc: CheckDoc): string | null {
+  return doc.dateFix?.ymd ?? doc.read?.clearingYMD ?? null;
+}
+
 export function effectiveClearingYMD(doc: CheckDoc): string | null {
   const moved = doc.reschedules?.length ? doc.reschedules[doc.reschedules.length - 1].to : null;
-  return moved ?? doc.read?.clearingYMD ?? null;
+  return moved ?? printedClearingYMD(doc);
 }
 
 function coerceRead(v: unknown): CheckRead | undefined {
@@ -213,6 +253,24 @@ function coerceReschedules(v: unknown): CheckReschedule[] {
   });
 }
 
+/** A real calendar day written YYYY-MM-DD. */
+export function isClearingYMD(s: unknown): s is string {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const [y, m, d] = s.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+function coerceDateFix(v: unknown): CheckDateFix | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  // A correction with no date corrects nothing, and one that isn't a real day
+  // would poison the register's sort — drop it rather than carry it.
+  if (!isClearingYMD(str("ymd"))) return undefined;
+  return { ymd: str("ymd"), was: str("was") || null, byName: str("byName"), at: str("at") };
+}
+
 function coerceCleared(v: unknown): CheckCleared | undefined {
   if (!v || typeof v !== "object") return undefined;
   const o = v as Record<string, unknown>;
@@ -234,6 +292,7 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
   const o = v as Record<string, unknown>;
   if (typeof o.path !== "string" || !o.path) return null;
   const read = coerceRead(o.read);
+  const dateFix = coerceDateFix(o.dateFix);
   const reschedules = coerceReschedules(o.reschedules);
   const cleared = coerceCleared(o.cleared);
   const readError = coerceReadError(o.readError);
@@ -244,6 +303,7 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
     uploadedByName: typeof o.uploadedByName === "string" ? o.uploadedByName : "",
     ...(read ? { read } : {}),
     ...(readError ? { readError } : {}),
+    ...(dateFix ? { dateFix } : {}),
     ...(reschedules.length ? { reschedules } : {}),
     ...(cleared ? { cleared } : {}),
   };
@@ -732,9 +792,19 @@ export function checkIssues(opts: {
   // July, reading "49 days ago". A date nobody confirmed must not look like one
   // that was.
   if (r.clearingYMD && !r.dateBoxes) {
+    // A read stored while the model's own date was still allowed to stand in.
     issues.push({
       key: "date",
       message: "The date boxes couldn't be read, so this clearing date is the AI's own answer rather than the check's. Check it against the photo.",
+    });
+  } else if (!r.clearingYMD) {
+    // …and how it reads now that the model's date is no longer accepted: the
+    // check is undated until a person supplies the date from the photo. Saying
+    // nothing here would leave the register's "No clearing date read" as the
+    // only hint, on a screen the person attaching the check never opens.
+    issues.push({
+      key: "date",
+      message: "No clearing date — the eight DATE boxes couldn't be read. Open the photo and set the date by hand on Check Monitoring.",
     });
   }
   // (b) The account name is OURS. A check drawn on someone else's account
