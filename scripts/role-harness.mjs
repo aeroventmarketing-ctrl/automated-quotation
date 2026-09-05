@@ -117,6 +117,20 @@ const PROBES = [
     reads: (t) => /No purchase due date|Buy by|Overdue —|Bought · was due/.test(t),
     set: (t) => /No purchase due date\s*Add one|(Buy by|Overdue —)[^|]{0,40}Change/.test(t),
   } },
+  /**
+   * The Production Status card — *"Once item is delivered remove it from the
+   * list."* The seed carries two orders with identical job orders (nothing ever
+   * stamped finished, Duct already overdue); only their stage differs.
+   *
+   * `live` is the in-production one, which must be listed; `delivered` is the
+   * delivered one, which must not be. Probing only for the absence would pass on
+   * a card that renders nothing at all.
+   */
+  { path: "/my-dashboard", label: "prodstatus", checks: {
+    card: (t) => t.includes("Production Status"),
+    live: (t) => prodStatusRow(t, "HARNESS0001"),
+    delivered: (t) => prodStatusRow(t, "HARNESSDELIVERED"),
+  } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),
     price: (t) => t.includes("₱"),
@@ -124,6 +138,20 @@ const PROBES = [
     add: (t) => t.includes("+ Add product"),
   } },
 ];
+
+/**
+ * Does this order have a row on the Production Status CARD?
+ *
+ * Not "does the quote number appear on the dashboard": a delivered order
+ * legitimately appears elsewhere on the same page — Sales and Accounting get it
+ * under *Pending Your Action* ("Approve POD"). Both a page-wide search and a
+ * generous window after the card's subtitle reported the delivered order
+ * "present" for three roles who were reading it in that other card entirely.
+ *
+ * A card row ends `<quote number> due <Mon D>`, which nothing else on the page
+ * does — so the row's own shape is the anchor.
+ */
+const prodStatusRow = (t, quoteNo) => new RegExp(`${quoteNo}\\s+due\\s+[A-Z][a-z]{2}\\s+\\d`).test(t);
 
 /** Does `re` appear in the text just AFTER `marker` — i.e. on that PO's own row? */
 const near = (t, marker, re, span = 1200) => {
@@ -313,26 +341,41 @@ async function seed() {
     update: {},
     create: { id: "harness-inquiry", customerId: customer.id, createdById: ids["harness-sales@test"], projectName: "Harness Project" },
   });
-  const quote = await p.quotation.upsert({
-    where: { id: "harness-quote" },
-    update: {},
-    create: {
-      id: "harness-quote", inquiryId: inquiry.id, quoteNumber: "2026 - HARNESS0001", templateId: template.id,
-      preparedById: ids["harness-sales@test"], total: 100000,
-      // Four departments, four deadlines — the case the owner chose to show whole.
-      classification: {
-        workflow: {
-          stage: "in_production",
-          jobOrders: {
-            fans: { status: "issued", dueAt: "2026-10-20" },
-            duct: { status: "issued", dueAt: "2026-09-01" },
-            accessories: { status: "issued", dueAt: "2026-10-25" },
-            motor: { status: "issued" },
-          },
-        },
+  // Four departments, four deadlines — the case the owner chose to show whole.
+  // A confirmed sale (a PO on terms) because the Production Status card sources
+  // from confirmed sales, not from the inquiry's status.
+  const orderClassification = (stage) => ({
+    sale: { arrangement: "terms", po: { path: "harness/po.pdf", name: "po.pdf", uploadedAt: new Date().toISOString() } },
+    workflow: {
+      stage,
+      jobOrders: {
+        fans: { status: "issued", dueAt: "2026-10-20" },
+        duct: { status: "issued", dueAt: "2026-09-01" },
+        accessories: { status: "issued", dueAt: "2026-10-25" },
+        motor: { status: "issued" },
       },
     },
   });
+  const order = async (id, quoteNumber, stage) => {
+    const classification = orderClassification(stage);
+    // `update` carries the classification too: a stage the seed no longer sets
+    // would otherwise survive in a database from an earlier run, and the harness
+    // would be probing yesterday's fixture.
+    return p.quotation.upsert({
+      where: { id },
+      update: { classification },
+      create: {
+        id, inquiryId: inquiry.id, quoteNumber, templateId: template.id,
+        preparedById: ids["harness-sales@test"], total: 100000, classification,
+      },
+    });
+  };
+  const quote = await order("harness-quote", "2026 - HARNESS0001", "in_production");
+  // The owner: *"Once item is delivered remove it from the list."* Same job
+  // orders, same overdue Duct deadline, none of them ever stamped finished — the
+  // only difference is that this order has been delivered, and that alone must
+  // keep it off the Production Status card.
+  await order("harness-quote-delivered", "2026 - HARNESSDELIVERED", "delivered");
   await p.purchaseRequest.deleteMany({ where: { note: "HARNESS-ORDER-PR" } });
   await p.purchaseRequest.create({ data: {
     kind: "order", dept: "fans", items: ["GI SHEET 24GA x 10"], note: "HARNESS-ORDER-PR",

@@ -1,3 +1,38 @@
+## 2026-09-05 · A delivered order leaves the Production Status list
+
+The owner, on the Production Status card: *"Once item is delivered remove it from the list."*
+
+The card listed every department job order that was not stamped **finished** on any order past *JO released* —
+with no upper bound. A department that finished the work but never pressed the button kept its row for good, so
+an order the client already had sat in **Late Production** accruing "37d overdue" beside orders still on the
+shop floor. Seven late rows, and no way to tell which were real.
+
+Delivery is the fact that settles it. A deadline for goods that have gone out is not a deadline any more, and a
+list that shows it teaches the eye to skip the ones that matter. So the watch window now **closes at
+`delivered`** — the job order's own status is no longer the only way off the list.
+
+Both delivery modes land on the same stage, so one gate covers both: the single-batch flow stamps `delivered`,
+and a multiple-batch order reaches it only once EVERY item has been delivered. A **part-delivered** order
+therefore stays on the list, which is right — production still owes the rest.
+
+Nothing else moved. The stage progression, who acts and the gating are untouched; this is the dashboard
+deciding what to show.
+
+### Verified on the running app, not just in tests
+
+The harness now carries **two orders with identical job orders** — nothing ever stamped finished, Duct already
+overdue — differing only in stage. All seven roles: the card renders, the live order is listed, the delivered
+one is not. Then the negative control, on the same running server: flip that order's stage back to `producing`
+and its three rows reappear (*Late Production (2)*); flip it to `delivered` and they go (*Late Production (1)*).
+
+The probe took two tries to become honest. Page-wide, "is the quote number on this dashboard" said the
+delivered order was still there for Sales, Accounting and the Engineer — they were reading it in **Pending Your
+Action** ("Approve POD"), a different card doing its job. A generous window after the card's subtitle ran into
+the same card. A row ends `<quote number> due <Mon D>`, which nothing else on the page does; that shape is the
+anchor.
+
+Six new tests, 387 pass.
+
 ## 2026-09-05 · A counter sale says which half of it moved stock, and a purchase gets a deadline
 
 Two things from the owner: *"Counter sales transaction — item doesn't deduct on inventory record"* and *"Add due
