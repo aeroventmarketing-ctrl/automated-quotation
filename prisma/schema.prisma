@@ -379,6 +379,12 @@ model PurchaseRequest {
   // never blocked.
   voucherCheckDocs Json                  @default("[]")
 
+  /// When this purchase has to be MADE by, set by the Purchaser, an admin or the
+  /// Payment Approver. Distinct from the production job-order deadlines it
+  /// usually derives from — those live on the order's workflow, one per
+  /// department, and say when the goods are NEEDED rather than when to buy them.
+  purchaseDueAt DateTime?
+
   createdById   String
   createdByName String
   createdAt     DateTime @default(now())

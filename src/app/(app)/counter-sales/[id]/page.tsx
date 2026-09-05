@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText } from "lucide-react";
+import { AlertTriangle, FileText } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { isAdmin } from "@/lib/auth";
@@ -15,6 +15,7 @@ import {
   coerceCounterPayments,
   paymentMethodLabel,
   isCashMethod,
+  adhocLines,
   COUNTER_FINAL_PAYMENT_SLOT,
   type CounterSaleStatusKey,
   type CounterSaleVatMode,
@@ -52,6 +53,8 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
   if (!sale) notFound();
 
   const status = sale.status as CounterSaleStatusKey;
+  // The lines that bypass the warehouse — see `adhocLines`.
+  const adhoc = adhocLines(sale.items.map((i) => ({ stockItemId: i.stockItemId, description: i.description, qty: Number(i.qty) })));
   const vatMode = sale.vatMode as CounterSaleVatMode;
   const slots = counterDocSlots(vatMode);
   const docs = coerceCounterDocs(sale.docs);
@@ -85,6 +88,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
         <CounterSaleActions
           saleId={sale.id}
           status={status}
+          adhocDescriptions={adhoc.map((i) => i.description)}
           admin={admin}
           nonCash={nonCash}
           paymentCleared={sale.paymentCleared}
@@ -110,10 +114,26 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
         <Card className="lg:col-span-2">
           <CardHeader className="pb-2"><CardTitle className="text-sm">Items</CardTitle></CardHeader>
           <CardContent>
+            {/* Which half of this sale touches the warehouse. A line only
+                deducts when its item was PICKED from the stock list, and the
+                picker defaults to "Ad-hoc / Not In Inventory" — so a typed line
+                sells the goods and leaves the on-hand untouched, silently. That
+                silence is what the owner reported as inventory "not deducting". */}
+            {adhoc.length > 0 && (
+              <p className="mb-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  <strong>{adhoc.length}</strong> of these {adhoc.length === 1 ? "lines is" : "lines are"} not linked to an
+                  inventory item, so {status === "COMPLETED" ? "completing this sale did not deduct them" : "completing this sale will not deduct them"} from
+                  stock: {adhoc.map((i) => i.description).join(", ")}.
+                  {status === "DRAFT" && " Pick the item from the Item list on each line if it should come out of the warehouse."}
+                </span>
+              </p>
+            )}
             <ul className="divide-y text-sm">
               {sale.items.map((it) => (
                 <li key={it.id} className="flex flex-wrap items-center gap-x-3 py-2">
-                  <span className="min-w-0 flex-1 truncate">{it.description}{it.stockItemId ? "" : <span className="ml-1 text-[11px] text-muted-foreground">(ad-hoc)</span>}</span>
+                  <span className="min-w-0 flex-1 truncate">{it.description}{it.stockItemId ? "" : <span className="ml-1 text-[11px] text-amber-700">· not in inventory</span>}</span>
                   <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{Number(it.qty)} {it.unit} × {formatCurrency(Number(it.unitPrice))}</span>
                   <span className="w-28 shrink-0 text-right font-medium tabular-nums">{formatCurrency(Number(it.lineTotal))}</span>
                 </li>

@@ -1,3 +1,53 @@
+## 2026-09-05 · A counter sale says which half of it moved stock, and a purchase gets a deadline
+
+Two things from the owner: *"Counter sales transaction — item doesn't deduct on inventory record"* and *"Add due
+date of purchase… Show job order deadline at the right side of order number."*
+
+### The counter sale was not failing to deduct
+
+`completeCounterSale` issues stock for every line, and `applyStockChange` writes both the movement and the new
+on-hand. Read them end to end and there is no bug.
+
+The trap is the FORM. The item picker **defaults to "Ad-hoc / Not In Inventory"**, with the Description box
+right beside it — so typing the item's name instead of picking it from the Item list produces a line that sells
+the goods and never touches the warehouse. Correct for a genuine ad-hoc item, invisible for a mis-keyed one.
+The only hint was a grey "(ad-hoc)" after the fact.
+
+So the silence goes:
+
+- **Before it happens.** Complete Sale stops and names them — *"2 lines are not linked to an inventory item, so
+  completing this sale will NOT deduct them from stock: Courier charge, Custom bracket. Complete anyway?"*
+- **On the sale.** An amber note listing them, worded for the tense: *will not deduct* on a draft, *did not
+  deduct* on a completed one. Each line now reads **· not in inventory** rather than a grey "(ad-hoc)".
+
+### The due date of purchase
+
+`PurchaseRequest.purchaseDueAt` (migration 0052), set by the three the owner named — **Purchaser, Payment
+Approver, admin**. Accounting is not among them: they handle the voucher and the check, not when the buying
+happens. Everyone who can see the PO can READ the date; only those three see a control.
+
+Deliberately carries no status window. A date can be corrected without unwinding anything, and a purchase that
+has slipped its date needs a new one more than a finished one needs protecting.
+
+It reads louder as the day approaches — *Buy by* → *Buy today* → **Overdue** in red — and then **goes quiet the
+moment the goods are bought** (*"Bought · was due…"*). A screen that keeps a purchased item red teaches people
+to ignore red.
+
+### Every department's deadline, beside the order number
+
+Asked which of an order's four possible job-order deadlines to show, the owner chose **all of them**: a purchase
+can be feeding any of them, and the purchasing screen cannot know which. Earliest first, a department with no
+date left out rather than shown blank, and a date already past in red.
+
+Verified on the running app: **Duct Sep 1, 2026** (red) · Fans & Blower Oct 20, 2026 · Accessories Oct 25,
+2026 — Motor Controller absent, having no date. And per role, on the actual screen: admin, Purchaser and Payment
+Approver can change the purchase date; Accounting and Warehouse see *"Overdue — Aug 20, 2026"* and no control.
+
+The harness grew an order behind the purchases — a customer, inquiry, template and quotation carrying job-order
+deadlines — because the order header cannot be probed without one.
+
+Twelve new tests, 381 pass.
+
 ## 2026-09-04 · A date nobody confirmed stops looking like one that was
 
 Owner, on a check plainly reading `1 0 1 7 2 0 2 6`: *"error in reading check 10 17 2026 is october 17, 2026."*

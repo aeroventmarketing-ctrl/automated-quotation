@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, requisitionDeptLabel, REQUISITION_DEPTS } from "@/lib/order-workflow";
+import { jobOrderDues, type JobOrderDue } from "@/lib/job-order-due";
+import { PH_TIME_ZONE } from "@/lib/utils";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/lib/purchase-returns";
@@ -55,6 +57,9 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // Generating a payment voucher from selected requests — Accounting, Payment
   // Approver or an admin.
   const canVoucher = canAct("accounting") || canAct("payment_approver");
+  // Today in Philippine time — so "overdue" means the same thing for everyone
+  // reading the screen, wherever they are.
+  const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   // Attaching the photo of the check issued for a PO — Accounting, the Payment
   // Approver, an admin. Same audience as the voucher itself.
   // Admin or Payment Approver — the pair whose reach outlives the Budgeted
@@ -93,7 +98,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   const namesForRole = (role: WorkflowRoleKey): string[] =>
     usersWithWorkflowRole(assignments, role).map((uid) => userName.get(uid)).filter((n): n is string => !!n);
 
-  let orderGroups: { id: string; title: string; subtitle: string; rows: ReturnType<typeof buildPurchaseChainRow>[] }[] = [];
+  let orderGroups: { id: string; title: string; subtitle: string; joDues: JobOrderDue[]; rows: ReturnType<typeof buildPurchaseChainRow>[] }[] = [];
   let combinable: CombinableItem[] = [];
   let batches: BatchCard[] = [];
   let suggestions: SupplierSuggestion[] = [];
@@ -340,7 +345,11 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
           );
         if (rows.length === 0) return null;
         const project = q.projectName ?? q.inquiry.projectName ?? "";
-        return { id: q.id, title: q.inquiry.customer.company, subtitle: `Order ${q.quoteNumber}${project ? ` · ${project}` : ""}`, rows };
+        // Every department's deadline, the owner's choice — an order can be
+        // feeding four job orders at once, and which one a given purchase serves
+        // is not something this screen can know.
+        const joDues = jobOrderDues(readOrderWorkflow(q.classification));
+        return { id: q.id, title: q.inquiry.customer.company, subtitle: `Order ${q.quoteNumber}${project ? ` · ${project}` : ""}`, joDues, rows };
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
 
@@ -436,6 +445,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               combinable={combinable}
               suggestions={suggestions}
               orderGroups={orderGroups}
+              todayYMD={todayYMD}
               suppliers={suppliers}
               paymentTerms={paymentTerms}
               stockItems={stockItems}

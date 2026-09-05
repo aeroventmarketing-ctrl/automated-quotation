@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Eye, Printer, Trash2 } from "lucide-react";
+import { Search, Eye, Printer, Trash2, CalendarClock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { statusBucket, prMainIndex, type PRBucket, type PRStatus } from "@/lib/purchasing";
 import { poTotals } from "@/lib/purchase-order";
 import { checkNumbers } from "@/lib/voucher-check";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { isOverdueDue, type JobOrderDue } from "@/lib/job-order-due";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
@@ -26,6 +27,12 @@ export interface OrderGroup {
   id: string;
   title: string;
   subtitle: string;
+  /**
+   * Every department's job-order deadline on this order, earliest first — the
+   * owner's *"Show job order deadline at the right side of order number."*
+   * Empty when nothing has been dated.
+   */
+  joDues: JobOrderDue[];
   rows: PurchaseChainRow[];
 }
 
@@ -83,6 +90,7 @@ export function PurchasingWorkspace({
   combinable,
   suggestions,
   orderGroups,
+  todayYMD,
   suppliers,
   paymentTerms,
   stockItems,
@@ -108,6 +116,8 @@ export function PurchasingWorkspace({
   combinable: CombinableItem[];
   suggestions: SupplierSuggestion[];
   orderGroups: OrderGroup[];
+  /** Today in Philippine time, from the server — so a deadline reads the same for everyone. */
+  todayYMD: string;
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   stockItems: StockOpt[];
@@ -462,13 +472,32 @@ export function PurchasingWorkspace({
                 >
                   <CardContent className="space-y-3 pt-6">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
+                      <div className="min-w-0">
                         <Link href={`/orders/${g.id}`} className="font-semibold hover:underline">{g.title}</Link>
                         <span className="ml-2 text-xs text-muted-foreground">{g.subtitle}</span>
+                        {/* What production is working to. A purchaser choosing
+                            what to buy first could not see these without opening
+                            the order; a date already past is the one that
+                            decides the order of the day, so it reads in red. */}
+                        {g.joDues.length > 0 && (
+                          <span className="ml-2 inline-flex flex-wrap items-center gap-x-2 gap-y-0.5 align-middle text-xs">
+                            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                            {g.joDues.map((d) => (
+                              <span
+                                key={d.dept}
+                                className={isOverdueDue(d.dueAt, todayYMD) ? "font-medium text-destructive" : "text-muted-foreground"}
+                                title={isOverdueDue(d.dueAt, todayYMD) ? `${d.label} job order was due ${formatDate(d.dueAt)}` : `${d.label} job order due ${formatDate(d.dueAt)}`}
+                              >
+                                {d.label} {formatDate(d.dueAt)}
+                              </span>
+                            ))}
+                          </span>
+                        )}
                       </div>
                       <Link href={`/orders/${g.id}`} className="text-xs font-medium text-primary hover:underline">Open order →</Link>
                     </div>
                     <PurchasingChain
+                      todayYMD={todayYMD}
                       requests={g.rows}
                       stockItems={stockItems}
                       orderId={g.id}
@@ -516,6 +545,7 @@ export function PurchasingWorkspace({
             ) : (
               <Card><CardContent className="pt-6">
                 <PurchasingChain
+                      todayYMD={todayYMD}
                   requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
@@ -550,6 +580,7 @@ export function PurchasingWorkspace({
             ) : (
               <Card><CardContent className="pt-6">
                 <PurchasingChain
+                      todayYMD={todayYMD}
                   requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
                   catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
@@ -591,6 +622,7 @@ export function PurchasingWorkspace({
                   <p className="py-4 text-center text-sm text-muted-foreground">No completed POs match your search.</p>
                 ) : (
                   <PurchasingChain
+                      todayYMD={todayYMD}
                     requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                     suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
                     catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
