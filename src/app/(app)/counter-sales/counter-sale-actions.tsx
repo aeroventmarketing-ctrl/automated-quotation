@@ -15,6 +15,7 @@ import { completeCounterSale, voidCounterSale, deleteCounterSaleDraft, markCount
 export function CounterSaleActions({
   saleId,
   status,
+  adhocDescriptions = [],
   admin,
   nonCash,
   paymentCleared,
@@ -22,6 +23,12 @@ export function CounterSaleActions({
 }: {
   saleId: string;
   status: CounterSaleStatusKey;
+  /**
+   * The lines that carry no inventory item, named. Completing the sale will not
+   * deduct them, so the button says so before it happens rather than leaving it
+   * to be discovered in the stock record later.
+   */
+  adhocDescriptions?: string[];
   admin: boolean;
   nonCash: boolean;
   paymentCleared: boolean;
@@ -50,7 +57,22 @@ export function CounterSaleActions({
                 Override Stock
               </label>
             )}
-            <Button size="sm" disabled={busy === "complete"} onClick={() => run("complete", () => completeCounterSale(saleId, { overrideStock: override }))}>
+            <Button
+              size="sm"
+              disabled={busy === "complete"}
+              onClick={() => {
+                // Say what will NOT happen, before it does not happen. A line
+                // whose item was typed rather than picked sells the goods and
+                // leaves the on-hand untouched — correct for a genuine ad-hoc
+                // item, and a nasty surprise for a mis-keyed one.
+                if (adhocDescriptions.length > 0 && !window.confirm(
+                  `${adhocDescriptions.length} ${adhocDescriptions.length === 1 ? "line is" : "lines are"} not linked to an inventory item, so completing this sale will NOT deduct ${adhocDescriptions.length === 1 ? "it" : "them"} from stock:\n\n` +
+                  `${adhocDescriptions.map((d) => `  • ${d}`).join("\n")}\n\n` +
+                  "Complete the sale anyway?",
+                )) return;
+                run("complete", () => completeCounterSale(saleId, { overrideStock: override }));
+              }}
+            >
               {busy === "complete" ? "Completing…" : "Complete Sale"}
             </Button>
             <Button size="sm" variant="outline" disabled={busy === "discard"} onClick={() => { if (window.confirm("Discard this draft sale?")) run("discard", () => deleteCounterSaleDraft(saleId)); }}>

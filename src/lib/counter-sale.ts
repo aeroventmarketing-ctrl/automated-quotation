@@ -205,3 +205,31 @@ export function counterSaleRoleAllowed(opts: { admin: boolean; baseRole: string;
   if (opts.baseRole === "ENGINEER" && opts.salesPersonnel) return true;
   return COUNTER_SALE_WORKFLOW_ROLES.some((r) => opts.workflowRoles.includes(r));
 }
+
+
+/**
+ * The lines on a counter sale that will NOT move inventory.
+ *
+ * A sale line is only deducted from stock when it carries a `stockItemId` —
+ * i.e. when the item was chosen from the stock picker. The picker DEFAULTS to
+ * *"Ad-hoc / Not In Inventory"*, so a line whose name was typed into the
+ * description box beside it, rather than picked, sells the goods and leaves the
+ * on-hand untouched.
+ *
+ * That is correct behaviour for a genuine ad-hoc item — something sold that the
+ * warehouse does not carry — and it is silent, which is what made the owner
+ * report *"Counter sales transaction — item doesn't deduct on inventory
+ * record."* The sale is right; nothing said which half of it moved stock.
+ *
+ * So the screens ask this function, and say so plainly.
+ */
+export function adhocLines<T extends { stockItemId?: string | null; description: string; qty: number | { toString(): string } }>(
+  items: T[],
+): T[] {
+  return items.filter((i) => !i.stockItemId);
+}
+
+/** Do any lines on this sale bypass inventory? */
+export function hasAdhocLines(items: Array<{ stockItemId?: string | null }>): boolean {
+  return items.some((i) => !i.stockItemId);
+}

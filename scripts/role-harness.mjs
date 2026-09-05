@@ -107,6 +107,16 @@ const PROBES = [
     // Whether the AMBER "no photo ever attached" reminder is all they get.
     doneViewOnly: (t) => near(t, "HARNESS-DONE", /Check not attached/) && !near(t, "HARNESS-DONE", /Attach check|Add check/),
   } },
+  /**
+   * The due date of purchase — *"purchaser or admin/payment approver can add due
+   * date of purchase."* `set` is the control being offered; everyone else who can
+   * see the page should read the date and be unable to touch it.
+   */
+  { path: "/purchasing", label: "due", checks: {
+    open: (t) => !t.includes("don't have access"),
+    reads: (t) => /No purchase due date|Buy by|Overdue —|Bought · was due/.test(t),
+    set: (t) => /No purchase due date\s*Add one|(Buy by|Overdue —)[^|]{0,40}Change/.test(t),
+  } },
   { path: "/products", label: "prod", checks: {
     open: (t) => !t.includes("don't have access to the product list"),
     price: (t) => t.includes("₱"),
@@ -258,6 +268,17 @@ async function seed() {
     } });
   }
 
+  // A purchase carrying a DUE DATE, already past — so the probe can tell
+  // "can read it" apart from "there is nothing to read".
+  await p.purchaseRequest.create({ data: {
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    note: "HARNESS-DUE", status: "CASH_RELEASED",
+    po: { ...poFor("HARNESS-DUE"), supplier: { company: "HARNESS STEEL CORP" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    purchaseDueAt: new Date("2026-08-20T00:00:00.000Z"),
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
   for (const [status, poNo] of [["CASH_RELEASED", "HARNESS-LIVE"], ["COMPLETED", "HARNESS-DONE"]]) {
     await p.purchaseRequest.create({ data: {
       // A DEPARTMENT requisition, not a replenishment: replenishment rows render
@@ -273,6 +294,53 @@ async function seed() {
       createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
     } });
   }
+
+  // --- An ORDER with job-order deadlines -------------------------------------
+  //
+  // The Purchasing page shows every department's deadline beside the order
+  // number, and the deadlines live on the order's workflow — so verifying that
+  // header needs a real quotation behind a real order-linked purchase.
+  const customer = await p.customer.upsert({
+    where: { id: "harness-customer" },
+    update: {}, create: { id: "harness-customer", company: "HARNESS CLIENT CORP" },
+  });
+  const template = await p.quotationTemplate.upsert({
+    where: { layoutKey: "harness" },
+    update: {}, create: { name: "Harness", layoutKey: "harness" },
+  });
+  const inquiry = await p.inquiry.upsert({
+    where: { id: "harness-inquiry" },
+    update: {},
+    create: { id: "harness-inquiry", customerId: customer.id, createdById: ids["harness-sales@test"], projectName: "Harness Project" },
+  });
+  const quote = await p.quotation.upsert({
+    where: { id: "harness-quote" },
+    update: {},
+    create: {
+      id: "harness-quote", inquiryId: inquiry.id, quoteNumber: "2026 - HARNESS0001", templateId: template.id,
+      preparedById: ids["harness-sales@test"], total: 100000,
+      // Four departments, four deadlines — the case the owner chose to show whole.
+      classification: {
+        workflow: {
+          stage: "in_production",
+          jobOrders: {
+            fans: { status: "issued", dueAt: "2026-10-20" },
+            duct: { status: "issued", dueAt: "2026-09-01" },
+            accessories: { status: "issued", dueAt: "2026-10-25" },
+            motor: { status: "issued" },
+          },
+        },
+      },
+    },
+  });
+  await p.purchaseRequest.deleteMany({ where: { note: "HARNESS-ORDER-PR" } });
+  await p.purchaseRequest.create({ data: {
+    kind: "order", dept: "fans", items: ["GI SHEET 24GA x 10"], note: "HARNESS-ORDER-PR",
+    status: "CASH_RELEASED", quotationId: quote.id,
+    po: { ...poFor("HARNESS-ORDER"), supplier: { company: "HARNESS STEEL CORP" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    createdById: ids["harness-pu@test"], createdByName: "Allan Ramos",
+  } });
 
   await p.$disconnect();
 }

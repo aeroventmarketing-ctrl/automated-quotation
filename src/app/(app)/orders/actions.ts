@@ -55,6 +55,7 @@ import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDep
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
+import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { saveCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
@@ -555,6 +556,50 @@ export async function removeJobOrderProof(quotationId: string, dept: string, pat
   const proofs = (jo.proofs ?? []).filter((p) => p.path !== path);
   const updated: JobOrder = { ...jo, proofs: proofs.length ? proofs : undefined };
   await saveWorkflow(quotationId, cls, { ...wf, jobOrders: { ...wf.jobOrders, [deptKey]: updated } });
+}
+
+/**
+ * Set (or clear) the **due date of purchase** on a request.
+ *
+ * The owner: *"Add due date of purchase, purchaser or admin/payment approver can
+ * add due date of purchase."* It answers a question the purchasing screen could
+ * not: production's deadlines live on the order page, so a purchaser choosing
+ * what to buy first had nothing on their own screen to sort by.
+ *
+ * Deliberately NOT gated on the request's status. A date can be corrected
+ * without unwinding anything, and a purchase that has slipped its date needs a
+ * new one more than a finished one needs protecting.
+ *
+ * Returns `{ error }` rather than throwing: Next masks a thrown error in
+ * production, and "something went wrong" is no use to someone who just wants to
+ * know whether the date saved.
+ */
+export async function setPurchaseDue(purchaseRequestId: string, dueAt: string | null): Promise<{ ok?: true; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized" };
+  const assignments = await getWorkflowRoles();
+  const allowed = canSetPurchaseDue({
+    admin: isAdmin(user),
+    purchaser: userHasWorkflowRole(assignments, user.id, "purchaser"),
+    paymentApprover: userHasWorkflowRole(assignments, user.id, "payment_approver"),
+  });
+  if (!allowed) return { error: "Only the Purchaser, the Payment Approver or an admin can set the purchase due date." };
+
+  const clean = (dueAt ?? "").trim();
+  if (clean && !/^\d{4}-\d{2}-\d{2}$/.test(clean)) return { error: "Use a calendar date." };
+  // Midnight UTC: a purchase is due on a DAY, and storing an instant would make
+  // the answer depend on who is reading it and from where.
+  const value = clean ? new Date(`${clean}T00:00:00.000Z`) : null;
+  if (value && Number.isNaN(value.getTime())) return { error: "Use a calendar date." };
+
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, quotationId: true } });
+  if (!pr) return { error: "Purchase order not found." };
+
+  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { purchaseDueAt: value } });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+  return { ok: true };
 }
 
 /**

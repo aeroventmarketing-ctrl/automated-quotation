@@ -17,6 +17,7 @@ import {
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, type CheckDoc } from "@/lib/voucher-check";
+import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
@@ -187,6 +188,10 @@ export interface PurchaseChainRow {
   canReadCheck: boolean;
   /** …and may DELETE the photo. Admin-wide, like reading — see `checkRemovableAt`. */
   canRemoveCheck: boolean;
+  /** The due date of purchase (YYYY-MM-DD), if one has been set. */
+  purchaseDueAt: string | null;
+  /** May this viewer set or clear it — see `canSetPurchaseDue`. */
+  canSetPurchaseDue: boolean;
   canOverride: boolean; // admin escape hatch — roll the chain back
   priorStatuses: { key: string; label: string }[];
   // A warehouse/material requisition — the Plant Manager approves the request
@@ -233,6 +238,8 @@ export interface PurchaseRequestLike {
   chainLog?: unknown;
   returns?: unknown;
   reconciliation?: unknown;
+  /** When this purchase has to be made by. See `setPurchaseDue`. */
+  purchaseDueAt?: Date | null;
 }
 
 /** Format a request's supplier returns (with their lifecycle) for display. */
@@ -447,6 +454,8 @@ export function buildPurchaseChainRow(
     canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }, checkActor),
     canReadCheck: (ctx.canAttachCheck ?? false) && checkReadableAt(status, { isDept, poApproved }, checkActor),
     canRemoveCheck: (ctx.canAttachCheck ?? false) && checkRemovableAt(status, { isDept, poApproved }, checkActor),
+    purchaseDueAt: pr.purchaseDueAt ? pr.purchaseDueAt.toISOString().slice(0, 10) : null,
+    canSetPurchaseDue: canSetPurchaseDue({ admin: ctx.admin, purchaser: ctx.canAct("purchaser"), paymentApprover: ctx.paymentApprover }),
     canOverride: ctx.admin ?? false,
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,

@@ -11,13 +11,14 @@ import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
 import { VoucherCheckControl } from "../../purchasing/voucher-check-control";
+import { PurchaseDueControl } from "../../purchasing/purchase-due-control";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
 import { AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-manage";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
-import type { PRStatus } from "@/lib/purchasing";
+import { prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
@@ -69,6 +70,8 @@ interface PRRow {
   canAttachCheck?: boolean;
   canReadCheck?: boolean;
   canRemoveCheck?: boolean;
+  purchaseDueAt?: string | null;
+  canSetPurchaseDue?: boolean;
   canOverride?: boolean;
   priorStatuses?: { key: string; label: string }[];
   isDept?: boolean;
@@ -136,9 +139,16 @@ export function PurchasingChain({
   canIssueStock = false,
   adminManage = false,
   highlightId,
+  todayYMD,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
+  /**
+   * Today in Philippine time, from the server, so "overdue" reads the same for
+   * everyone. Optional: a caller that doesn't supply it gets no due-date
+   * highlighting rather than the browser's own idea of today.
+   */
+  todayYMD?: string;
   orderId: string;
   poDefaultRemarks: string;
   suppliers: Supplier[];
@@ -567,6 +577,14 @@ export function PurchasingChain({
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                     </a>
                     )}
+                    {/* When the buying has to happen — set here, where it is done. */}
+                    <PurchaseDueControl
+                      prId={r.id}
+                      dueAt={r.purchaseDueAt ?? null}
+                      canSet={!readOnly && !!r.canSetPurchaseDue}
+                      purchased={prMainIndex(r.status as PRStatus) >= prMainIndex("PURCHASED")}
+                      todayYMD={todayYMD ?? ""}
+                    />
                     {/* …and, to its right, the photo of the check that paid for it. */}
                     <VoucherCheckControl
                       prId={r.id}
