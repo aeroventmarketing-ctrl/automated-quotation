@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, Image as ImageIcon, Search, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, Image as ImageIcon, PenLine, Search, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,7 +14,16 @@ import {
   searchCheckRows, sortCheckRows, groupCheckRows, DEFAULT_CHECK_SORT, CHECK_GROUP_LABEL,
   type CheckSortKey, type SortDir, type CheckGroupBy,
 } from "@/lib/check-register-view";
-import { markCheckCleared, rescheduleCheck, unclearCheck } from "../orders/actions";
+import { correctCheckDate, markCheckCleared, rescheduleCheck, unclearCheck } from "../orders/actions";
+
+/**
+ * The three things a person can do to a check's date, kept apart on purpose.
+ *
+ * "Move" and "Fix" used to be one button, and the register could not tell a
+ * supplier being put off from a misread being corrected — so a corrected date
+ * still carried "moved from Jul 12, 2026" in amber underneath it.
+ */
+type FormKind = "clear" | "move" | "fix";
 
 const TONE: Record<CheckWatchRow["state"], string> = {
   overdue: "border-destructive/40 bg-destructive/10 text-destructive",
@@ -59,7 +68,7 @@ export function CheckMonitor({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   // Which row's form is open, and which kind.
-  const [form, setForm] = useState<{ key: string; kind: "clear" | "move" } | null>(null);
+  const [form, setForm] = useState<{ key: string; kind: FormKind } | null>(null);
   const [dateVal, setDateVal] = useState(todayYMD);
   const [reason, setReason] = useState("");
   const [query, setQuery] = useState("");
@@ -86,11 +95,12 @@ export function CheckMonitor({
       ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
       : { key, dir: key === "amount" ? "desc" : "asc" }));
 
-  function openForm(r: CheckWatchRow, kind: "clear" | "move") {
+  function openForm(r: CheckWatchRow, kind: FormKind) {
     setForm({ key: keyOf(r), kind });
     setErr(null);
     setReason("");
-    // Clearing defaults to today; moving defaults to the date it is on now.
+    // Clearing defaults to today; moving and correcting default to the date it
+    // is on now — a correction is usually one or two digits away from it.
     setDateVal(kind === "clear" ? todayYMD : r.clearingYMD ?? todayYMD);
   }
 
@@ -334,6 +344,14 @@ export function CheckMonitor({
                           {r.moves > 1 ? ` · ${r.moves} times` : ""}
                         </div>
                       )}
+                      {/* Not amber: a corrected date is a settled one. It says
+                          who settled it, so the register never presents a
+                          person's reading as the machine's. */}
+                      {r.dateFixedBy && (
+                        <div className="mt-0.5 text-xs text-muted-foreground" title="The AI read this date wrongly; it was corrected against the photo.">
+                          date corrected by {r.dateFixedBy}
+                        </div>
+                      )}
                     </td>
                     <td className="px-2 py-2 text-muted-foreground">{r.form}</td>
                     <td className="px-2 py-2">
@@ -395,6 +413,19 @@ export function CheckMonitor({
                               >
                                 <CalendarClock className="mr-1 h-3.5 w-3.5" /> Move date
                               </Button>
+                              {/* A different act, and so a different button: the
+                                  check was always dated this — the reading was
+                                  wrong. Sharing "Move date" is what left a
+                                  corrected row claiming it had been rescheduled. */}
+                              <Button
+                                size="sm"
+                                variant={openForm_?.kind === "fix" ? "secondary" : "outline"}
+                                className="h-7 w-full justify-center px-1 text-xs"
+                                onClick={() => openForm(r, "fix")}
+                                title="The date was read wrongly — set what the check actually says"
+                              >
+                                <PenLine className="mr-1 h-3.5 w-3.5" /> {r.clearingYMD ? "Fix date" : "Set date"}
+                              </Button>
                             </>
                           )}
                         </div>
@@ -410,7 +441,11 @@ export function CheckMonitor({
                         <div className="flex flex-wrap items-end gap-3">
                           <label className="flex flex-col gap-1">
                             <span className="text-xs font-medium">
-                              {openForm_.kind === "clear" ? "Date the check cleared" : "New clearing date"}
+                              {openForm_.kind === "clear"
+                                ? "Date the check cleared"
+                                : openForm_.kind === "fix"
+                                ? "The date printed on the check"
+                                : "New clearing date"}
                             </span>
                             <Input
                               type="date"
@@ -431,6 +466,16 @@ export function CheckMonitor({
                               />
                             </label>
                           )}
+                          {/* Two buttons a click apart that do opposite things
+                              need the difference said, not implied. */}
+                          {openForm_.kind === "fix" && (
+                            <p className="min-w-[240px] flex-1 text-xs text-muted-foreground">
+                              Read it off the photo — the eight DATE boxes are <strong>MM DD YYYY</strong>. This
+                              replaces what the AI read; it does <strong>not</strong> record the check as
+                              rescheduled. If the check is fine and you are putting it off, use <strong>Move
+                              date</strong> instead.
+                            </p>
+                          )}
                           <div className="flex items-center gap-2">
                             <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => setForm(null)}>Cancel</Button>
                             <Button
@@ -441,11 +486,19 @@ export function CheckMonitor({
                                 run(key, () =>
                                   openForm_.kind === "clear"
                                     ? markCheckCleared(r.prId, r.path, { on: dateVal })
+                                    : openForm_.kind === "fix"
+                                    ? correctCheckDate(r.prId, r.path, { ymd: dateVal })
                                     : rescheduleCheck(r.prId, r.path, { to: dateVal, reason }),
                                 )
                               }
                             >
-                              {busy === key ? "Saving…" : openForm_.kind === "clear" ? "Mark cleared" : "Move date"}
+                              {busy === key
+                                ? "Saving…"
+                                : openForm_.kind === "clear"
+                                ? "Mark cleared"
+                                : openForm_.kind === "fix"
+                                ? "Save the correct date"
+                                : "Move date"}
                             </Button>
                           </div>
                         </div>

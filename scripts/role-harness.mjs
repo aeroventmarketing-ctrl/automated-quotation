@@ -281,6 +281,23 @@ async function seed() {
     createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
   } });
 
+  // The owner's screenshot, exactly: a check dated 10 17 2026 that the AI read
+  // as July, then corrected with the only tool there was — Move date. The
+  // register duly printed "moved from Jul 12, 2026" in amber under the right
+  // date, announcing a reschedule that never happened.
+  await p.purchaseRequest.create({ data: {
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    note: "HARNESS-CHK-MISREAD", status: "CASH_RELEASED",
+    po: { ...poFor("HARNESS-CHK-MISREAD"), supplier: { company: "POWERLINK MERCHANDISE TRADING CORP." } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    voucherCheckDocs: [{
+      ...checkDoc("0000486709", "2026-07-12", 39210.75),
+      read: { ...checkDoc("0000486709", "2026-07-12", 39210.75).read, dateBoxes: null },
+      reschedules: [{ from: "2026-07-12", to: "2026-10-17", reason: "Correct date", byName: "Admin Ana", at: "" }],
+    }],
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
   for (const [no, ymd, amt, company] of [
     ["0000486901", "2026-09-10", 28344.64, "HARNESS STEEL CORP"],
     ["0000486902", "2026-10-02", 2836.94, "WIDGET SUPPLY INC"],

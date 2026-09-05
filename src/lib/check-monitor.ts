@@ -18,7 +18,7 @@
  *    the Cleared tab on its due date — it waits to be told.
  */
 import type { CheckDoc } from "@/lib/voucher-check";
-import { clearingFromDateBoxes, effectiveClearingYMD } from "@/lib/voucher-check";
+import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD } from "@/lib/voucher-check";
 
 /**
  * How far ahead a check reads as *Clearing soon* on screen.
@@ -139,8 +139,16 @@ export interface CheckWatchRow {
   amount: number | null;
   /** The date it is expected to clear — rescheduled if it was moved. */
   clearingYMD: string | null;
-  /** The date printed on the check, when it differs from the one above. */
+  /**
+   * The date printed on the check, when it differs from the one above — i.e.
+   * this check was RESCHEDULED off its own date.
+   *
+   * A date a person CORRECTED is not that: the check always said the corrected
+   * date, so there is nothing to have moved from. See `dateFixedBy`.
+   */
   originalYMD: string | null;
+  /** Who corrected a misread date, if anyone did. */
+  dateFixedBy: string | null;
   /** How many times the date has been moved. */
   moves: number;
   /** Why it was last moved (typically insufficient funds). */
@@ -212,6 +220,7 @@ export function buildCheckWatch(
           prId: pr.id, path: "", fileName: "",
           poDate, poNumber: po.poNumber, supplier: po.supplierCompany, orderId: pr.quotationId,
           checkNo: null, amount: po.net, clearingYMD: null, originalYMD: null,
+          dateFixedBy: null,
           moves: 0, lastMoveReason: null, daysLeft: null,
           // No check, so no date to doubt.
           dateVerified: true,
@@ -226,7 +235,11 @@ export function buildCheckWatch(
 
     for (const doc of docs) {
       const due = effectiveClearingYMD(doc);
-      const original = doc.read?.clearingYMD ?? null;
+      // What the check says — a person's correction if there was one. Comparing
+      // the DUE date against the AI's discarded answer is what left the register
+      // reading "moved from Jul 12, 2026" under a date that had merely been
+      // corrected to the 17th of October.
+      const original = printedClearingYMD(doc);
       const moves = doc.reschedules?.length ?? 0;
       const state = checkWatchState(doc, todayYMD);
       const poDate = po?.date ? po.date.slice(0, 10) : null;
@@ -242,12 +255,13 @@ export function buildCheckWatch(
         amount: doc.read?.amount ?? null,
         clearingYMD: due,
         originalYMD: original && original !== due ? original : null,
+        dateFixedBy: doc.dateFix?.byName || null,
         moves,
         lastMoveReason: moves ? doc.reschedules![moves - 1].reason || null : null,
         daysLeft: due ? daysBetweenYMD(todayYMD, due) : null,
-        // A human-set date (moved, or recorded as cleared) is as good as the
-        // boxes; anything else has to match what the boxes actually said.
-        dateVerified: !!doc.cleared || moves > 0 || (!!due && clearingFromDateBoxes(doc.read?.dateBoxes) === due),
+        // A human-set date (corrected, moved, or recorded as cleared) is as good
+        // as the boxes; anything else has to match what the boxes actually said.
+        dateVerified: !!doc.cleared || !!doc.dateFix || moves > 0 || (!!due && clearingFromDateBoxes(doc.read?.dateBoxes) === due),
         state,
         clearedOn: doc.cleared?.on ?? null,
         clearedByName: doc.cleared?.byName ?? null,

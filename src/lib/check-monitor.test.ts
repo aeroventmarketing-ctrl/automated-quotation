@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { CheckDoc } from "./voucher-check";
-import { effectiveClearingYMD, coerceCheckDocs } from "./voucher-check";
+import { effectiveClearingYMD, printedClearingYMD, coerceCheckDocs } from "./voucher-check";
 import {
   CHECK_NOTICE_DAYS, buildCheckWatch, checkWatchState, checkWatchSummary,
   daysBetweenYMD, needsAttention, notifiesAdmin, type CheckWatchState,
@@ -344,5 +344,96 @@ describe("a clearing date nobody confirmed", () => {
     expect(rows[0].state).toBe("awaiting");
     expect(rows[0].dateVerified).toBe(true); // no date, nothing to doubt
     expect(checkWatchSummary(rows).unverifiedDates).toBe(0);
+  });
+});
+
+/**
+ * The owner, with the check in front of them: *"Error in reading date. It should
+ * be October 17, 2026."*
+ *
+ * They had already corrected it — with the only tool there was, **Move date** —
+ * and the register still printed *"moved from Jul 12, 2026"* in amber under the
+ * corrected date, announcing a reschedule that never happened.
+ */
+describe("correcting a date the AI read wrongly", () => {
+  const TODAY = "2026-09-05";
+  const helpers = {
+    coerceDocs: (v: unknown) => (v as CheckDoc[]) ?? [],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+  };
+  const pr = (docs: CheckDoc[]) => ({
+    id: "pr", quotationId: null,
+    po: { poNumber: "PO-AFBM20260000630", supplierCompany: "POWERLINK MERCHANDISE TRADING CORP.", date: "2026-09-01", net: 39210.75 },
+    voucherCheckDocs: docs, status: "CASH_RELEASED",
+  });
+  /** The owner's row: the AI's July date, no boxes behind it. */
+  const misread = (over: Partial<CheckDoc> = {}): CheckDoc => ({
+    path: "c.jpg", name: "c.jpg", uploadedAt: "", uploadedByName: "M",
+    read: {
+      accountNo: null, accountName: null, checkNo: "0000486709", payee: null,
+      clearingYMD: "2026-07-12", dateBoxes: null, amount: 39210.75, amountWords: null,
+      bank: "BDO", confidence: 0.9, warnings: [], issues: [], readByName: "M", readAt: "",
+    },
+    ...over,
+  });
+  const fix = { ymd: "2026-10-17", was: "2026-07-12", byName: "Admin Ana", at: "2026-09-05T01:00:00.000Z" };
+
+  it("is what the check says — it beats the reading", () => {
+    const fixed = misread({ dateFix: fix });
+    expect(printedClearingYMD(fixed)).toBe("2026-10-17");
+    expect(effectiveClearingYMD(fixed)).toBe("2026-10-17");
+    // The misread is kept, not erased: correcting it is not pretending it never happened.
+    expect(fixed.read!.clearingYMD).toBe("2026-07-12");
+    expect(fixed.dateFix!.was).toBe("2026-07-12");
+  });
+
+  it("leaves NO 'moved from' behind, because nothing moved", () => {
+    const [row] = buildCheckWatch([pr([misread({ dateFix: fix })])], TODAY, helpers);
+    expect(row.clearingYMD).toBe("2026-10-17");
+    expect(row.originalYMD).toBeNull();
+    expect(row.moves).toBe(0);
+    expect(row.dateFixedBy).toBe("Admin Ana");
+    // …and the date is settled, so the row stops calling itself unconfirmed.
+    expect(row.dateVerified).toBe(true);
+    expect(checkWatchSummary([row]).unverifiedDates).toBe(0);
+  });
+
+  /**
+   * The screenshot's row: corrected with Move date before there was anything
+   * else. Correcting it properly must clear the amber line the move left.
+   */
+  it("clears the phantom reschedule off a row that was corrected with Move date", () => {
+    const patched = misread({
+      reschedules: [{ from: "2026-07-12", to: "2026-10-17", reason: "Correct date", byName: "Admin Ana", at: "" }],
+      dateFix: fix,
+    });
+    const [row] = buildCheckWatch([pr([patched])], TODAY, helpers);
+    expect(row.clearingYMD).toBe("2026-10-17");
+    expect(row.originalYMD).toBeNull(); // no "moved from Jul 12, 2026"
+  });
+
+  /**
+   * The two acts stay distinct in both directions. A check correctly read as the
+   * 17th and then put off to November IS rescheduled, and the register must
+   * still say so.
+   */
+  it("still reports a real reschedule made after a correction", () => {
+    const both = misread({
+      dateFix: fix,
+      reschedules: [{ from: "2026-10-17", to: "2026-11-04", reason: "insufficient funds", byName: "Admin Ana", at: "" }],
+    });
+    expect(effectiveClearingYMD(both)).toBe("2026-11-04"); // the move wins for WHEN
+    expect(printedClearingYMD(both)).toBe("2026-10-17"); // …the correction for WHAT IT SAYS
+    const [row] = buildCheckWatch([pr([both])], TODAY, helpers);
+    expect(row.clearingYMD).toBe("2026-11-04");
+    expect(row.originalYMD).toBe("2026-10-17"); // moved from the date it really carries
+  });
+
+  it("survives the column, and a correction that isn't a real day is dropped", () => {
+    const [back] = coerceCheckDocs([misread({ dateFix: fix })]);
+    expect(back.dateFix).toEqual(fix);
+    for (const bad of [{ ymd: "" }, { ymd: "2026-02-31" }, { ymd: "17-10-2026" }, { ymd: "2026-13-01" }, "junk", null]) {
+      expect(coerceCheckDocs([{ ...misread(), dateFix: bad }])[0].dateFix, JSON.stringify(bad)).toBeUndefined();
+    }
   });
 });
