@@ -1,3 +1,58 @@
+## 2026-09-06 · The item code, beside the item — and nowhere near the supplier
+
+The owner, on a Fans & Blower requisition: *"Show the sku number at the right side of the item. Show it in mrf,
+requisition, PO or anywhere it can show. Show it to all roles that is allowed access. Do not show the sku to
+downloaded excel or csv file for submission to supplier."*
+
+### There was no code to print
+
+Every one of those documents keeps its items as **free text**. A PO line is `{ description, qty, unit,
+unitPrice }`; a requisition line is a string like `"10 pc · GI SHEET 24GA"`. The identity is lost at the very
+first hop — the product picker's `onPick` keeps `p.name` and drops the id and the SKU — and everything
+downstream re-matches on that name.
+
+So the code is **looked up**, by name, from the catalogue the screen already loaded: `StockItem.sku` (the
+warehouse's scan code, `10002`) first, `Product.sku` (`PRD10044`) second. Stock wins where an item is in both:
+they are different series, and a person reading an MRF line is on their way to a shelf.
+
+**Exact names only.** There are five fuzzy description-matchers in this codebase already, and none of them
+belongs here: a code is an identifier, and `SKU 10002` printed against the wrong item is worse than no code at
+all. An item nobody stocks shows **nothing** — not "SKU —", which would train the eye past the real ones.
+
+### Why the supplier's copy is safe by construction
+
+The obvious implementation — append the code to the description — would have put it on the supplier's document,
+because the printed PO and the workbook both emit `line.description` verbatim. Keeping it as a **separate
+element** means there is nothing to strip and no filter for anyone to forget. `POLine` has no field for a code
+and `coercePurchaseOrder` drops what it does not name, so one cannot be smuggled onto a PO either.
+
+Proved on the running app rather than argued: the actual downloaded **647 KB .xlsx** contains no "sku" and no
+"10002" in any part of the archive — the only item string in it is `GI SHEET 24GA` — and the printed PO's HTML
+has no "SKU" anywhere.
+
+### Where it shows, and to whom
+
+Order page **Phase 4** item lines (the owner's screenshot), the **Phase 3 MRF** table, the **printable MRF** —
+which gets a proper *Item code* column, being the copy somebody carries to a shelf — the MRF **triage** and
+**stock-match** panels, the **requisitions** list, the in-app **PO line** tables on a combined PO, and the
+**reconciliation** lines. The stock pickers' dropdowns now name the code too, so the right item is easier to
+pick in the first place.
+
+No new permission. The code is an identifier on a document the reader is already allowed to open, so anyone who
+can see the line sees its code. On the actual screen, per role:
+
+| | coded item | stocked, no code | not in the catalogue |
+| --- | --- | --- | --- |
+| Admin, Warehouse, Purchaser, Payment Approver, Accounting | **SKU 10002** | — | — |
+| Sales, Engineer | *(the Purchasing page has always been closed to them)* | | |
+
+The harness fixture carries all three cases on one requisition side by side, because a code appearing on the
+first and nowhere else is the whole assertion. The probe took two tries: anchored on the item name alone it
+passed on the PO LINE table further up the same page, which legitimately shows a code — while the item list it
+was meant to be checking showed nothing.
+
+Nine new tests, 412 pass.
+
 ## 2026-09-05 · Three AI reads per attachment, not three per purchase order
 
 The owner: *"In AI reading allow 3 tries in every row or every attachment. Update and check all roles that is

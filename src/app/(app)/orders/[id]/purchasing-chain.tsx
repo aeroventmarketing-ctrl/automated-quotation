@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Printer, Pencil, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +21,14 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
-import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 
 interface ActionOpt {
   key: string;
@@ -211,6 +213,15 @@ export function PurchasingChain({
   const viewHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/view` : `/orders/${orderId}/po/${prId}/view`;
   const router = useRouter();
+  /**
+   * Name → item code, for the SKU beside each line — the owner's *"Show the sku
+   * number at the right side of the item."*
+   *
+   * Built from what this screen already loads: the warehouse's stock items and
+   * the PO editor's product catalogue. Nothing new is fetched, and a caller that
+   * passes neither simply gets no codes rather than an error.
+   */
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
@@ -359,6 +370,10 @@ export function PurchasingChain({
             </div>
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => {
+                // The item's code, beside the item. The line is free text, so it
+                // is looked up by name — and it stays a separate element rather
+                // than joining the description, which is what the supplier's
+                // copy prints.
                 const issued = parseIssuedFromStockLine(it);
                 if (issued) {
                   return (
@@ -367,18 +382,21 @@ export function PurchasingChain({
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
+                      <ItemSku code={skuFor(issued.desc, skuIndex)} />
                     </li>
                   );
                 }
                 if (isToPurchaseLine(it)) {
+                  const line = stripToPurchasePrefix(it);
                   return (
                     <li key={i} className="marker:text-amber-600">
-                      {stripToPurchasePrefix(it)}
+                      {line}
                       <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
+                      <ItemSku code={skuFor(poLineFromPRItem(line).description, skuIndex)} />
                     </li>
                   );
                 }
-                return <li key={i}>{it}</li>;
+                return <li key={i}>{it}<ItemSku code={skuFor(poLineFromPRItem(it).description, skuIndex)} /></li>;
               })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
@@ -519,6 +537,7 @@ export function PurchasingChain({
                 surfaces (e.g. Requisitions) for whoever may reconcile. */}
             {showAmounts && r.reconcile && (canReconcileAt(r.status as PRStatus) || r.reconcile.recorded != null) && (
               <PurchaseReconcilePanel
+                skuIndex={skuIndex}
                 prId={r.id}
                 reconcile={r.reconcile}
                 canRecord={r.canRecordReconcile ?? false}

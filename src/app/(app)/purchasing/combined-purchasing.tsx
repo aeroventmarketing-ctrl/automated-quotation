@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Printer, Pencil, Eye } from "lucide-react";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
@@ -269,6 +271,9 @@ export function CombinedPurchasing({
 }
 
 function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false, showAmounts = true, showSupplier = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
+  /** Name → item code, for the SKU beside each PO line ON SCREEN. The supplier's
+   *  copy is built from `line.description` alone and never sees it. */
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -364,7 +369,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           <tbody>
             {batch.lines.map((l, i) => (
               <tr key={i} className="border-b last:border-0">
-                <td className="py-1 pr-2">{l.description}</td>
+                <td className="py-1 pr-2">{l.description}<ItemSku code={skuFor(l.description, skuIndex)} /></td>
                 <td className="py-1 px-1 text-right tabular-nums">{[l.qty, l.unit].filter(Boolean).join(" ")}</td>
                 {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>}
                 {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{poLineAmount(l) ? formatCurrency(poLineAmount(l), "PHP") : "—"}</td>}
@@ -421,6 +426,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           Only once the item is purchased (or already recorded); hidden earlier. */}
       {showAmounts && (canReconcileAt(batch.status) || batch.reconcile.recorded != null) && (
         <PurchaseReconcilePanel
+          skuIndex={skuIndex}
           prId={batch.anchorId}
           reconcile={batch.reconcile}
           canRecord={batch.canRecordReconcile}

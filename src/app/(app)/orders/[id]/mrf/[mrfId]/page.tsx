@@ -5,6 +5,9 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { formatDate } from "@/lib/utils";
 import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
+import { listStockItemsWithAvailability } from "@/lib/inventory";
+import { getProducts } from "@/lib/product-catalog";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +26,14 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
 
   // Pad the item rows so the form always looks like a full sheet.
   const rows = [...mrf.items];
+  // The item code beside each article. This is the warehouse's own copy of the
+  // form — the one somebody carries to a shelf — so the code earns a column of
+  // its own. It is never on a supplier's document; nothing here reaches one.
+  const [stock, products] = await Promise.all([
+    listStockItemsWithAvailability().catch(() => []),
+    getProducts().catch(() => []),
+  ]);
+  const skuIndex = buildSkuIndex({ stock, products });
   while (rows.length < 12) rows.push({ description: "", qty: "", unit: "", remark: "" });
 
   return (
@@ -83,6 +94,7 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
           <thead>
             <tr>
               <th className="border border-black bg-gray-100 px-2 py-1 text-left">ARTICLES / DESCRIPTION</th>
+              <th className="w-24 border border-black bg-gray-100 px-2 py-1">Item code</th>
               <th className="w-16 border border-black bg-gray-100 px-2 py-1">Qty</th>
               <th className="w-20 border border-black bg-gray-100 px-2 py-1">Unit</th>
               <th className="w-40 border border-black bg-gray-100 px-2 py-1">Remark</th>
@@ -92,6 +104,7 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
             {rows.map((it, i) => (
               <tr key={i}>
                 <td className="border border-black px-2 py-1.5">{it.description}</td>
+                <td className="border border-black px-2 py-1.5 text-center font-mono text-xs">{skuFor(it.description, skuIndex) ?? ""}</td>
                 <td className="border border-black px-2 py-1.5 text-center">{it.qty}</td>
                 <td className="border border-black px-2 py-1.5 text-center">{it.unit}</td>
                 <td className="border border-black px-2 py-1.5">{it.remark}</td>
