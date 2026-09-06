@@ -11,6 +11,8 @@ import { uploadDocument } from "@/lib/client-upload";
 import { AI_RECEIPT_READ_LIMIT } from "@/lib/ai/limits";
 import { UploadLink } from "@/components/upload-link";
 import { recordReconciliation, settleReconciliation, escalateReconciliation, approveReconciliation, escalateReconcileAiRead, resetReconcileAiRead, removeReconciliationReceipt, addReconciliationReceipt, replaceReconciliationReceipt } from "../orders/actions";
+import { skuFor, EMPTY_SKU_INDEX, type SkuIndex } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 
 const VAT = 0.12;
 // Auto-record threshold — mirrors balanceTolerance() on the server so an
@@ -38,6 +40,7 @@ export function PurchaseReconcilePanel({
   canApprove = false,
   readOnly = false,
   admin = false,
+  skuIndex = EMPTY_SKU_INDEX,
 }: {
   prId: string;
   reconcile: PurchaseReconcileView;
@@ -47,6 +50,11 @@ export function PurchaseReconcilePanel({
   canApprove?: boolean;
   readOnly?: boolean;
   admin?: boolean;
+  /**
+   * Name → item code, for the SKU beside each line. Optional: a caller with no
+   * catalogue to hand shows no codes rather than failing.
+   */
+  skuIndex?: SkuIndex;
 }) {
   const router = useRouter();
   const recorded = reconcile.lines !== null;
@@ -335,7 +343,7 @@ export function PurchaseReconcilePanel({
             <tbody>
               {reconcile.lines.map((l, i) => (
                 <tr key={i} className="border-b last:border-0">
-                  <td className="py-1 pr-2">{l.description || <span className="text-muted-foreground">Line {i + 1}</span>}{l.qty ? <span className="text-muted-foreground"> · {l.qty}</span> : null}</td>
+                  <td className="py-1 pr-2">{l.description || <span className="text-muted-foreground">Line {i + 1}</span>}{l.qty ? <span className="text-muted-foreground"> · {l.qty}</span> : null}<ItemSku code={skuFor(l.description, skuIndex)} /></td>
                   <td className="py-1 px-1 text-right tabular-nums">{peso(l.expected)}</td>
                   <td className="py-1 px-1 text-right tabular-nums">{peso(l.actualAmount)}</td>
                   <td className={`py-1 px-1 text-right tabular-nums ${Math.abs(l.variance) < 0.005 ? "text-emerald-700" : l.variance > 0 ? "text-amber-700" : "text-destructive"}`}>
@@ -500,7 +508,7 @@ export function PurchaseReconcilePanel({
                   const diff = round2(expected - num(r.actual));
                   return (
                     <tr key={i} className="border-b last:border-0">
-                      <td className="py-1 pr-2">{r.description || `Line ${i + 1}`}{r.qty ? <span className="text-muted-foreground"> · {r.qty}</span> : null}</td>
+                      <td className="py-1 pr-2">{r.description || `Line ${i + 1}`}{r.qty ? <span className="text-muted-foreground"> · {r.qty}</span> : null}<ItemSku code={skuFor(r.description, skuIndex)} /></td>
                       <td className="py-1 px-1 text-right tabular-nums text-muted-foreground">{peso(expected)}</td>
                       <td className="py-1 px-1"><Input className="h-7 text-right text-xs" value={r.actual} onChange={(e) => setActual(i, e.target.value)} placeholder="0.00" /></td>
                       <td className={`py-1 px-1 text-right tabular-nums ${r.actual.trim() === "" ? "text-muted-foreground" : Math.abs(diff) < 0.005 ? "text-emerald-700" : diff > 0 ? "text-amber-700" : "text-destructive"}`}>

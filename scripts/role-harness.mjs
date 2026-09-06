@@ -125,6 +125,21 @@ const PROBES = [
     leftCount: (t) => near(t, "LEFT2.jpg", /· 2 left/, 150),
   } },
   /**
+   * The item code beside an item — the owner's *"Show the sku number at the right
+   * side of the item… Show it to all roles that is allowed access."*
+   *
+   * Anchored per LINE, because the interesting cases sit next to each other on
+   * one PO: a stocked item with a code, a stocked item without one, and an item
+   * nobody stocks. Page-wide, "is SKU anywhere" would pass on all three.
+   */
+  { path: "/purchasing", label: "sku", checks: {
+    // The item that HAS a code shows it, right beside the item.
+    coded: (t) => /GI SHEET 24GA\s+SKU 10002/.test(skuItemBlock(t)),
+    // …and the two that have none show nothing at all, rather than "SKU —".
+    uncoded: (t) => !/CUTTING DISC 4in\s+SKU/.test(skuItemBlock(t)),
+    unknown: (t) => !/SOMETHING TYPED BY HAND\s+SKU/.test(skuItemBlock(t)),
+  } },
+  /**
    * The due date of purchase — *"purchaser or admin/payment approver can add due
    * date of purchase."* `set` is the control being offered; everyone else who can
    * see the page should read the date and be unable to touch it.
@@ -169,6 +184,22 @@ const PROBES = [
  * does — so the row's own shape is the anchor.
  */
 const prodStatusRow = (t, quoteNo) => new RegExp(`${quoteNo}\\s+due\\s+[A-Z][a-z]{2}\\s+\\d`).test(t);
+
+/**
+ * Just the three-line item list on the seeded requisition.
+ *
+ * Anchoring on "GI SHEET 24GA" alone was not enough: the PO LINE table on the
+ * same page carries that description too, and it legitimately shows the code —
+ * so a probe pointed at the first match passed while the item list it was meant
+ * to be checking showed nothing. The block is pinned by the line that only this
+ * fixture has.
+ */
+const skuItemBlock = (t) => {
+  const end = t.indexOf("SOMETHING TYPED BY HAND");
+  if (end < 0) return "";
+  const start = t.lastIndexOf("GI SHEET 24GA", end);
+  return start < 0 ? "" : t.slice(start, end + 60);
+};
 
 /** Does `re` appear in the text just AFTER `marker` — i.e. on that PO's own row? */
 const near = (t, marker, re, span = 1200) => {
@@ -228,8 +259,17 @@ async function seed() {
   await p.stockMovement.deleteMany({});
   await p.stockReservation.deleteMany({});
   await p.stockItem.deleteMany({});
-  for (const [n, q, c, s] of [["BELT B-50", 4, 210, 300], ["GI SHEET 24GA", 50, 850, 1100], ["CUTTING DISC 4in", 12, 29, 45]]) {
-    await p.stockItem.create({ data: { name: n, unit: "pc", quantity: q, reorderLevel: 2, unitCost: c, sellPrice: s, location: "Plant Warehouse" } });
+  // SKUs on purpose: the item code beside a requisition / MRF / PO line is looked
+  // up by NAME, so a fixture with no codes would render an empty result that
+  // looks identical to a broken lookup.
+  for (const [n, q, c, s, sku] of [
+    ["BELT B-50", 4, 210, 300, "10001"],
+    ["GI SHEET 24GA", 50, 850, 1100, "10002"],
+    // Deliberately WITHOUT a code — a hand-typed item must show nothing at all
+    // rather than a placeholder, and only a coded row beside it proves that.
+    ["CUTTING DISC 4in", 12, 29, 45, null],
+  ]) {
+    await p.stockItem.create({ data: { name: n, sku, unit: "pc", quantity: q, reorderLevel: 2, unitCost: c, sellPrice: s, location: "Plant Warehouse" } });
   }
   // A Warehouse request the Purchaser has already approved — the state the owner
   // reported as stuck. It must show as AWAITING the price owner, not applied.
@@ -374,7 +414,19 @@ async function seed() {
       // A DEPARTMENT requisition, not a replenishment: replenishment rows render
       // in their own list, which carries no check control — seeding one produced
       // an all-false table that looked like a permission bug and was not.
-      kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+      // Item lines in the REAL shape a form produces ("<qty> <unit> · <name>"),
+      // because the item code is looked up from the description the parser pulls
+      // out of that string. A fixture written as free text would show no codes
+      // and look exactly like a broken lookup.
+      //
+      // Three lines on purpose: one stocked item WITH a code, one WITHOUT, and
+      // one the catalogue has never heard of — a code appearing on the first and
+      // nowhere else is the whole assertion.
+      kind: "department", dept: "office", items: [
+        "10 pc · GI SHEET 24GA",
+        "2 pc · CUTTING DISC 4in",
+        "1 pc · SOMETHING TYPED BY HAND",
+      ],
       note: `HARNESS-${status}`, status,
       po: poFor(poNo),
       // `approve_po`, not `po_approved`: without it a DEPARTMENT requisition sits

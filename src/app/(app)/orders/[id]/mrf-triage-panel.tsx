@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { StockOpt } from "./stock-match-panel";
 import { pickIssueRow } from "@/lib/stock-location";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 
 /** Normalise an item label for matching (drop parenthetical notes, fold case). */
 const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -45,6 +47,8 @@ export function MrfTriagePanel({
   // Match each line to a stock item by name and find what's free to issue, so a
   // line with nothing in stock offers only "Purchase" (no "Issue from stock").
   // Group rows by name so the department's location policy chooses which one.
+  /** Name → item code, for the SKU beside each line being triaged. */
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems }), [stockItems]);
   const rowsByName = useMemo(() => {
     const m = new Map<string, StockOpt[]>();
     for (const s of stockItems) {
@@ -106,7 +110,7 @@ export function MrfTriagePanel({
           return (
             <div key={i} className="rounded-md border bg-background p-2">
               <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-2">
-                <span className="text-sm font-medium">{l.description}</span>
+                <span className="text-sm font-medium">{l.description}<ItemSku code={skuFor(l.description, skuIndex)} /></span>
                 <span className="text-xs text-muted-foreground">{[l.qty, l.unit].filter(Boolean).join(" ")}{l.remark ? ` · ${l.remark}` : ""}</span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -138,7 +142,7 @@ export function MrfTriagePanel({
                     >
                       <option value="">— pick stock item —</option>
                       {stockItems.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.location ? ` · ${s.location}` : ""}</option>
+                        <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.sku ? ` · SKU ${s.sku}` : ""}{s.location ? ` · ${s.location}` : ""}</option>
                       ))}
                     </select>
                     <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty"

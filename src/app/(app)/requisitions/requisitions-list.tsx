@@ -9,6 +9,7 @@ import type { StockOpt } from "../orders/[id]/stock-match-panel";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
+import type { ScanProduct } from "@/lib/product-scan";
 
 /** A chain row plus the extra fields the list searches and sorts on. */
 export type RequisitionRow = PurchaseChainRow & { createdAt: string; requestor: string };
@@ -71,6 +72,7 @@ function isCompletedRequisition(r: PurchaseChainRow): boolean {
 export function RequisitionsList({
   rows,
   stockItems,
+  scanProducts = [],
   suppliers,
   paymentTerms,
   poDefaultRemarks,
@@ -82,6 +84,8 @@ export function RequisitionsList({
 }: {
   rows: RequisitionRow[];
   stockItems: StockOpt[];
+  /** The product catalogue, for the item code beside a line that is not stocked. */
+  scanProducts?: ScanProduct[];
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
@@ -166,7 +170,7 @@ export function RequisitionsList({
     return [...map.entries()].map(([key, rs]) => ({ key, rows: rs }));
   }, [visible, group]);
 
-  const chainProps = { stockItems, suppliers, paymentTerms, poDefaultRemarks, admin, showAmounts, showSupplier, showStockCheck: canCheckStock, canIssueStock };
+  const chainProps = { stockItems, scanProducts, suppliers, paymentTerms, poDefaultRemarks, admin, showAmounts, showSupplier, showStockCheck: canCheckStock, canIssueStock };
 
   return (
     <div className="space-y-3">

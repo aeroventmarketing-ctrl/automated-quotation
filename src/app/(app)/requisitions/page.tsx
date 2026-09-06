@@ -137,6 +137,7 @@ export default async function RequisitionsPage() {
           <RequisitionsList
             rows={rows}
             stockItems={stockItems}
+            scanProducts={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))}
             suppliers={suppliers}
             paymentTerms={paymentTerms}
             poDefaultRemarks={COMPANY.poDefaultRemarks}

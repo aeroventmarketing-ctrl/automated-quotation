@@ -17,6 +17,8 @@ import { MrfStockCheck } from "./mrf-stock-check";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import { ProductPicker } from "@/components/product-picker";
 import type { ScanProduct } from "@/lib/product-scan";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 
 interface ReqRow {
   id: string;
@@ -154,6 +156,8 @@ export function MaterialRequests({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const productByName = useMemo(() => new Map(products.map((p) => [p.name.trim().toLowerCase(), p])), [products]);
+  /** Name → item code, for the SKU beside each MRF line. Built from what this panel already holds. */
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products }), [stockItems, products]);
 
   function setCell(i: number, key: keyof MRFItem, value: string) {
     setRows((rs) =>
@@ -365,6 +369,8 @@ export function MaterialRequests({
                       <tr key={i} className="border-b last:border-0">
                         <td className="py-1 pr-2">
                           {it.description}
+                          {/* The item's own code, for finding it on a shelf. */}
+                          <ItemSku code={skuFor(it.description, skuIndex)} />
                           {it.disposition && (() => {
                             const req = Number(it.qty || 0);
                             const emerald = "bg-emerald-600/15 text-emerald-700";

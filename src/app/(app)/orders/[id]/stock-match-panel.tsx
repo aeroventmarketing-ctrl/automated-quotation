@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { pickIssueRow } from "@/lib/stock-location";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
+import { ItemSku } from "@/components/item-sku";
 
 export interface MatchLine {
   label: string;
@@ -116,6 +118,8 @@ export function StockMatchPanel({
     const siblings = stockItems.filter((s) => canon(s.name) === canon(bestRow.name) || (!!bestRow.sku && s.sku === bestRow.sku));
     return pickIssueRow(siblings, dept)?.id ?? best;
   };
+  /** Name → item code, for the SKU beside each line being matched. */
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems }), [stockItems]);
   const nameOf = (id: string) => stockItems.find((s) => s.id === id)?.name ?? "";
   const locOf = (id: string) => stockItems.find((s) => s.id === id)?.location ?? null;
   const verb = selectable ? "released from" : "received into"; // selectable = the release flow
@@ -173,7 +177,7 @@ export function StockMatchPanel({
                 aria-label={`Release ${l.label}`}
               />
             )}
-            <span className={`min-w-[10rem] flex-1 text-sm ${selectable && !rows[i].checked ? "text-muted-foreground line-through" : ""}`}>{l.label}</span>
+            <span className={`min-w-[10rem] flex-1 text-sm ${selectable && !rows[i].checked ? "text-muted-foreground line-through" : ""}`}>{l.label}<ItemSku code={skuFor(l.label, skuIndex)} /></span>
             <select
               value={rows[i].stockItemId}
               onChange={(e) => set(i, "stockItemId", e.target.value)}
@@ -182,7 +186,7 @@ export function StockMatchPanel({
             >
               <option value="">— skip —</option>
               {stockItems.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.location ? ` · ${s.location}` : ""}</option>
+                <option key={s.id} value={s.id}>{s.name} ({s.unit}){s.sku ? ` · SKU ${s.sku}` : ""}{s.location ? ` · ${s.location}` : ""}</option>
               ))}
             </select>
             <Input className="h-8 w-24" type="number" step="any" min={0} placeholder="Qty" value={rows[i].qty} disabled={selectable && !rows[i].checked} onChange={(e) => set(i, "qty", e.target.value)} />
