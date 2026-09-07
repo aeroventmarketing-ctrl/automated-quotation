@@ -8,6 +8,7 @@ import { downloadFromStorage } from "@/lib/storage";
 import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { saleDocReadSchema } from "@/lib/ai/schemas";
 import { AI_SALE_DOC_READ_LIMIT } from "@/lib/ai/limits";
+import { coerceReadCounts, readsUsed, readsLeft, canReadAgain, bumpReadCount, readLimitMessage } from "@/lib/ai/read-allowance";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
 import {
@@ -104,17 +105,23 @@ export async function POST(req: NextRequest) {
 
   const cls = ((quote.classification as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
 
-  // Cap the AI reads per order so documents are verified by hand instead of
-  // relying on repeated reads. An Admin / Payment Approver is the override — no
-  // limit, and their reads don't consume the shared budget. Count persists on
-  // the classification.
+  // Cap the AI reads PER DOCUMENT so each is verified by hand instead of relying
+  // on repeated reads — *"allow unlimited number of rows but limit to 3 reads per
+  // row."* One number for the whole order meant three documents used it up and
+  // the fourth was refused a read it had never had. An Admin / Payment Approver
+  // is the override: no limit, and their reads consume nobody's allowance.
+  //
+  // The stamps in `saleDocReads` were already keyed by path; only the COUNT was
+  // the odd one out. The old per-order `saleDocReadCount` is left where it lies
+  // and ignored — spending it on whichever document is read next would charge
+  // that one for reads it never had.
   const unlimited = admin || isPaymentApprover;
-  const reads = typeof cls.saleDocReadCount === "number" ? cls.saleDocReadCount : 0;
-  if (!unlimited && reads >= AI_SALE_DOC_READ_LIMIT) {
+  const counts = coerceReadCounts(cls.saleDocReadCounts);
+  if (!canReadAgain(counts, body.path, AI_SALE_DOC_READ_LIMIT, { unlimited })) {
     return NextResponse.json({
-      error: `AI read limit reached (${AI_SALE_DOC_READ_LIMIT} of ${AI_SALE_DOC_READ_LIMIT} used for this order). Check the document and record it by hand — or ask an admin / payment approver.`,
+      error: readLimitMessage(AI_SALE_DOC_READ_LIMIT, "document", "an admin / payment approver"),
       limitReached: true,
-      reads,
+      reads: readsUsed(counts, body.path),
       limit: AI_SALE_DOC_READ_LIMIT,
     }, { status: 429 });
   }
@@ -220,10 +227,11 @@ export async function POST(req: NextRequest) {
       readAt: new Date().toISOString(),
     };
     const saleDocReads = { ...((cls.saleDocReads as Record<string, unknown>) ?? {}), [body.path]: stamp };
-    const usedReads = unlimited ? reads : reads + 1; // override reads don't consume the budget
+    // This document's own tally. An override read costs nobody anything.
+    const saleDocReadCounts = bumpReadCount(counts, body.path, { unlimited });
     await prisma.quotation.update({
       where: { id: body.quotationId },
-      data: { classification: { ...cls, saleDocReads, saleDocReadCount: usedReads } as unknown as Prisma.InputJsonValue },
+      data: { classification: { ...cls, saleDocReads, saleDocReadCounts } as unknown as Prisma.InputJsonValue },
     });
 
     // Autofill the client's TIN from the document — the Customer table has no TIN
@@ -268,9 +276,10 @@ export async function POST(req: NextRequest) {
       amountMatches,
       duplicateOf,
       warnings,
-      reads: usedReads,
+      // All three are about THIS document, not the order.
+      reads: readsUsed(saleDocReadCounts, body.path),
       limit: unlimited ? null : AI_SALE_DOC_READ_LIMIT,
-      remaining: unlimited ? null : Math.max(0, AI_SALE_DOC_READ_LIMIT - usedReads),
+      remaining: readsLeft(saleDocReadCounts, body.path, AI_SALE_DOC_READ_LIMIT, { unlimited }),
     });
   } catch (err) {
     console.error("read-sale-doc error", err);

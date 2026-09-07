@@ -8,6 +8,7 @@ import { downloadFromStorage } from "@/lib/storage";
 import { callClaudeJson, type ContentBlock } from "@/lib/ai/client";
 import { depositSlipReadSchema } from "@/lib/ai/schemas";
 import { AI_DEPOSIT_SLIP_READ_LIMIT } from "@/lib/ai/limits";
+import { coerceReadCounts, readsUsed, readsLeft, canReadAgain, bumpReadCount, readLimitMessage, type ReadCounts } from "@/lib/ai/read-allowance";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
 import { getCounterSaleViewer } from "@/lib/counter-sale-access";
 import type { SlipValidation } from "@/lib/payment-slip";
@@ -75,8 +76,20 @@ export async function POST(req: NextRequest) {
   // answers the same three questions — is the file ours, may this person read it,
   // and how many reads has it spent — then takes the validation stamp at the end.
   let subject: "order" | "sale";
-  let reads: number;
-  let persist: (stamp: SlipValidation, usedReads: number) => Promise<void>;
+  /**
+   * Reads spent PER PROOF, not per order — the owner's *"allow unlimited number
+   * of rows but limit to 3 reads per row."* One shared number let an order with
+   * four payments read three of them and refuse the fourth, which nobody had
+   * read at all.
+   */
+  let counts: ReadCounts;
+  let persist: (stamp: SlipValidation, nextCounts: ReadCounts) => Promise<void>;
+  /**
+   * True only in the window where this code is live and migration 0053 has not
+   * been run yet — the count is then the SALE's old total, not this proof's, and
+   * the message must not promise the other rows an allowance they don't have.
+   */
+  let legacyPerSale = false;
 
   if (body.counterSaleId) {
     subject = "sale";
@@ -87,13 +100,45 @@ export async function POST(req: NextRequest) {
     // that records the payment in the first place.
     const { allowed } = await getCounterSaleViewer();
     if (!allowed) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
-    const sale = await prisma.counterSale.findUnique({ where: { id: body.counterSaleId }, select: { slipReads: true } });
-    if (!sale) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
-    reads = sale.slipReads;
-    // A counter sale keeps no classification blob, so only the count is kept —
+    /**
+     * `slipReadCounts` (migration 0053) may not exist yet: this code deploys on
+     * push and the migration is run by hand afterwards. In that window the query
+     * throws, so fall back to the old per-sale Int and keep the OLD behaviour
+     * rather than failing the read or silently handing out unlimited ones. The
+     * fallback disappears the moment the column lands.
+     */
+    const sale = await prisma.counterSale
+      .findUnique({ where: { id: body.counterSaleId }, select: { slipReadCounts: true } })
+      .catch(() => null);
+    if (sale) {
+      counts = coerceReadCounts(sale.slipReadCounts);
+    } else {
+      const old = await prisma.counterSale.findUnique({ where: { id: body.counterSaleId }, select: { slipReads: true } }).catch(() => null);
+      if (!old) return NextResponse.json({ error: "Sale not found" }, { status: 404 });
+      legacyPerSale = true;
+      // One number for the whole sale, presented under this proof's key so the
+      // cap below reads it — the pre-0053 behaviour, unchanged.
+      counts = old.slipReads > 0 ? { [body.path]: old.slipReads } : {};
+    }
+    // A counter sale keeps no classification blob, so only the counts are kept —
     // the figures are shown to the person reading and saved with the payment.
-    persist = async (_stamp, usedReads) => {
-      await prisma.counterSale.update({ where: { id: body.counterSaleId! }, data: { slipReads: usedReads } });
+    //
+    // The old per-sale `slipReads` Int is deliberately NOT carried across once
+    // the column exists. It counted the wrong thing, and spending a whole sale's
+    // total on whichever proof is read next would charge that row for reads it
+    // never had.
+    persist = async (_stamp, nextCounts) => {
+      if (legacyPerSale) {
+        await prisma.counterSale.update({
+          where: { id: body.counterSaleId! },
+          data: { slipReads: readsUsed(nextCounts, body.path) },
+        });
+        return;
+      }
+      await prisma.counterSale.update({
+        where: { id: body.counterSaleId! },
+        data: { slipReadCounts: nextCounts as unknown as Prisma.InputJsonValue },
+      });
     };
   } else {
     subject = "order";
@@ -118,26 +163,34 @@ export async function POST(req: NextRequest) {
     if (!allowed) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
 
     const cls = ((quote.classification as Record<string, unknown> | null) ?? {}) as Record<string, unknown>;
-    reads = typeof cls.depositSlipReadCount === "number" ? cls.depositSlipReadCount : 0;
+    // Keyed by proof path, beside the `slipValidations` stamps — which were
+    // already per proof, so only the COUNT was ever the odd one out. The old
+    // per-order `depositSlipReadCount` is left where it lies and ignored: it
+    // counted the wrong thing, and spending it on whichever row is read next
+    // would charge that row for reads it never had.
+    counts = coerceReadCounts(cls.depositSlipReads);
     // Stamp the validation on the classification so the save action can enforce
     // it and follow the machine/computer figures.
-    persist = async (stamp, usedReads) => {
+    persist = async (stamp, nextCounts) => {
       const slipValidations = { ...((cls.slipValidations as Record<string, unknown>) ?? {}), [body.path]: stamp };
       await prisma.quotation.update({
         where: { id: body.quotationId },
-        data: { classification: { ...cls, slipValidations, depositSlipReadCount: usedReads } as unknown as Prisma.InputJsonValue },
+        data: { classification: { ...cls, slipValidations, depositSlipReads: nextCounts } as unknown as Prisma.InputJsonValue },
       });
     };
   }
 
-  // Cap the AI reads per order / sale so figures are verified by hand instead of
-  // relying on repeated reads. Admins are exempt (no limit, and their reads don't
-  // consume the shared budget).
-  if (!admin && reads >= AI_DEPOSIT_SLIP_READ_LIMIT) {
+  // Cap the AI reads PER PROOF so figures are verified by hand instead of relying
+  // on repeated reads. Admins are exempt (no limit, and their reads don't consume
+  // anyone else's allowance). Every other row keeps its own three.
+  if (!canReadAgain(counts, body.path, AI_DEPOSIT_SLIP_READ_LIMIT, { unlimited: admin })) {
     return NextResponse.json({
-      error: `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this ${subject}). Check the slip and enter the figures manually — or ask an admin.`,
+      error: legacyPerSale
+        // Pre-0053 wording, for the deploy window only.
+        ? `AI read limit reached (${AI_DEPOSIT_SLIP_READ_LIMIT} of ${AI_DEPOSIT_SLIP_READ_LIMIT} used for this sale). Check the slip and enter the figures manually — or ask an admin.`
+        : readLimitMessage(AI_DEPOSIT_SLIP_READ_LIMIT, subject === "sale" ? "proof" : "payment proof", "an admin"),
       limitReached: true,
-      reads,
+      reads: readsUsed(counts, body.path),
       limit: AI_DEPOSIT_SLIP_READ_LIMIT,
     }, { status: 429 });
   }
@@ -200,8 +253,9 @@ export async function POST(req: NextRequest) {
       readByName: user.name,
       readAt: new Date().toISOString(),
     };
-    const usedReads = admin ? reads : reads + 1; // admin reads don't consume the budget
-    await persist(stamp, usedReads);
+    // This proof's own tally. An admin's read costs nobody anything.
+    const nextCounts = bumpReadCount(counts, body.path, { unlimited: admin });
+    await persist(stamp, nextCounts);
 
     const warnings = [...(r.warnings ?? [])];
     if (!validated) {
@@ -220,9 +274,10 @@ export async function POST(req: NextRequest) {
       bank: r.bank ?? null,
       documentType: r.documentType ?? null,
       warnings,
-      reads: usedReads,
+      // All three are about THIS proof, not the order.
+      reads: readsUsed(nextCounts, body.path),
       limit: admin ? null : AI_DEPOSIT_SLIP_READ_LIMIT,
-      remaining: admin ? null : Math.max(0, AI_DEPOSIT_SLIP_READ_LIMIT - usedReads),
+      remaining: readsLeft(nextCounts, body.path, AI_DEPOSIT_SLIP_READ_LIMIT, { unlimited: admin }),
     });
   } catch (err) {
     console.error("read-deposit-slip error", err);

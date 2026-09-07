@@ -920,7 +920,13 @@ model CounterSale {
   clearedAt       DateTime?
   docs            Json              @default("{}") // Record<string, SaleDoc[]> — SI / CR / DR / DF / AF / 2307 / final payment proof
   payments        Json              @default("[]") // SalePayment[] — collections with their proof of payment
-  slipReads       Int               @default(0) // AI "read slip" runs used on this sale (non-admins are capped)
+  /// SUPERSEDED by slipReadCounts. One number for the whole sale, so the first
+  /// proofs read spent the budget and later rows were refused reads they had
+  /// never had. Kept so old rows are not rewritten; nothing reads it.
+  slipReads       Int               @default(0)
+  /// AI "read slip" runs used, per proof (keyed by storage path). Non-admins get
+  /// AI_DEPOSIT_SLIP_READ_LIMIT per attachment; rows are unlimited.
+  slipReadCounts  Json              @default("{}")
   notes           String?
   createdAt       DateTime          @default(now())
   completedAt     DateTime?

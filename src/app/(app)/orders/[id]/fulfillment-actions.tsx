@@ -72,7 +72,7 @@ export function FulfillmentActions({
   orderAmount = 0,
   amountPaid = 0,
   saleDocReads = {},
-  saleDocReadCount = 0,
+  saleDocReadCounts = {},
   saleDocReadsUnlimited = false,
 }: {
   orderId: string;
@@ -104,7 +104,8 @@ export function FulfillmentActions({
   amountPaid?: number;
   /** Closing-document AI reads (SI / OR / DR), keyed by file path. */
   saleDocReads?: Record<string, SaleDocReadStamp>;
-  saleDocReadCount?: number;
+  /** Reads spent per document (by path), not per order. */
+  saleDocReadCounts?: Record<string, number>;
   /** Admin / Payment Approver — no read limit; may approve / allow-more. */
   saleDocReadsUnlimited?: boolean;
 }) {
@@ -400,7 +401,7 @@ export function FulfillmentActions({
           currency={currency}
           orderAmount={orderAmount}
           docReads={saleDocReads}
-          docReadCount={saleDocReadCount}
+          docReadCounts={saleDocReadCounts}
           docReadsUnlimited={saleDocReadsUnlimited}
           canReadDocs={perms.canFile || saleDocReadsUnlimited}
         />
@@ -421,7 +422,7 @@ export function FulfillmentActions({
           currency={currency}
           orderAmount={orderAmount}
           docReads={saleDocReads}
-          docReadCount={saleDocReadCount}
+          docReadCounts={saleDocReadCounts}
           docReadsUnlimited={saleDocReadsUnlimited}
           canReadDocs={perms.canFile || saleDocReadsUnlimited}
           closed

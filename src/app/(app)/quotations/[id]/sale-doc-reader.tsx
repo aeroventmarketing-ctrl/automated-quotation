@@ -45,7 +45,7 @@ export function SaleDocReader({
   expectedTotal,
   currency,
   initialReads,
-  readsUsed,
+  readCounts,
   unlimited,
   canApprove,
   canRead,
@@ -56,7 +56,13 @@ export function SaleDocReader({
   expectedTotal?: number;
   currency: string;
   initialReads: Record<string, SaleDocReadStamp>;
-  readsUsed: number;
+  /**
+   * Reads spent PER DOCUMENT — the owner's *"allow unlimited number of rows but
+   * limit to 3 reads per row."* It used to be one number for the whole order, so
+   * three documents used it up and the fourth was locked without ever having
+   * been read.
+   */
+  readCounts: Record<string, number>;
   /** Admin / Payment Approver — no read limit. */
   unlimited: boolean;
   /** Admin / Payment Approver — may approve / allow-more. */
@@ -67,13 +73,15 @@ export function SaleDocReader({
   const router = useRouter();
   const [reads, setReads] = useState<Record<string, SaleDocReadStamp>>(initialReads);
   const [status, setStatus] = useState<Record<string, { tone: "muted" | "ok" | "bad"; text: string }>>({});
-  const [used, setUsed] = useState(readsUsed);
+  const [counts, setCounts] = useState<Record<string, number>>(readCounts);
   const [readingPath, setReadingPath] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const seen = useRef<Set<string>>(new Set(files.map((f) => f.path)));
 
-  const locked = !unlimited && used >= AI_SALE_DOC_READ_LIMIT;
-  const readsLeft = Math.max(0, AI_SALE_DOC_READ_LIMIT - used);
+  // Per document, never per order.
+  const usedOn = (path: string) => Math.max(0, counts[path] ?? 0);
+  const leftOn = (path: string) => Math.max(0, AI_SALE_DOC_READ_LIMIT - usedOn(path));
+  const lockedOn = (path: string) => !unlimited && leftOn(path) === 0;
 
   async function read(path: string) {
     setReadingPath(path);
@@ -85,7 +93,7 @@ export function SaleDocReader({
         body: JSON.stringify({ quotationId, path, docKey, expectedTotal: docKey === "delivery_receipt" ? undefined : expectedTotal }),
       });
       const j = await res.json();
-      if (typeof j.reads === "number") setUsed(j.reads);
+      if (typeof j.reads === "number") setCounts((c) => ({ ...c, [path]: j.reads }));
       if (res.ok) {
         const stamp: SaleDocReadStamp = {
           path, docKey,
@@ -121,7 +129,7 @@ export function SaleDocReader({
     for (const f of files) {
       if (seen.current.has(f.path)) continue;
       seen.current.add(f.path);
-      if (canRead && !isSaleDocCleared(reads[f.path]) && !(locked && !unlimited)) void read(f.path);
+      if (canRead && !isSaleDocCleared(reads[f.path]) && !lockedOn(f.path)) void read(f.path);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [files]);
@@ -131,10 +139,14 @@ export function SaleDocReader({
     try { await approveSaleDoc(quotationId, path, docKey); router.refresh(); }
     finally { setBusy(false); }
   }
-  async function allowMore() {
+  /** Give ONE document its three back — not the whole order's. */
+  async function allowMore(path: string) {
     setBusy(true);
-    try { await resetSaleDocReadLimit(quotationId); setUsed(0); router.refresh(); }
-    finally { setBusy(false); }
+    try {
+      await resetSaleDocReadLimit(quotationId, path);
+      setCounts((c) => { const n = { ...c }; delete n[path]; return n; });
+      router.refresh();
+    } finally { setBusy(false); }
   }
 
   if (files.length === 0) return null;
@@ -155,10 +167,10 @@ export function SaleDocReader({
                 {st.text}
               </span>
             )}
-            {canRead && !cleared && !(locked && !unlimited) && (
+            {canRead && !cleared && !lockedOn(f.path) && (
               <button type="button" disabled={reading || busy} onClick={() => read(f.path)}
                 className="inline-flex items-center gap-0.5 text-muted-foreground hover:text-primary disabled:opacity-50">
-                <ScanLine className="h-3 w-3" /> {reading ? "reading…" : stamp || live ? "re-read" : "read"}{!unlimited && used > 0 ? ` (${readsLeft} left)` : ""}
+                <ScanLine className="h-3 w-3" /> {reading ? "reading…" : stamp || live ? "re-read" : "read"}{!unlimited && usedOn(f.path) > 0 ? ` (${leftOn(f.path)} left)` : ""}
               </button>
             )}
             {canApprove && !cleared && (
@@ -170,16 +182,22 @@ export function SaleDocReader({
           </div>
         );
       })}
-      {locked && !unlimited && files.some((f) => !isSaleDocCleared(reads[f.path])) && (
-        <p className="text-[11px] font-medium text-amber-700">
-          🔒 AI read limit reached ({AI_SALE_DOC_READ_LIMIT} of {AI_SALE_DOC_READ_LIMIT}). Ask an Admin / Payment Approver to approve the upload or allow more tries.
-        </p>
-      )}
-      {canApprove && locked && (
-        <button type="button" disabled={busy} onClick={allowMore} className="text-[11px] font-medium text-primary hover:underline disabled:opacity-50">
-          Allow {AI_SALE_DOC_READ_LIMIT} more AI reads
-        </button>
-      )}
+      {/* The lock is this DOCUMENT's, so it is said on the document — and only
+          about the ones that are actually out of reads. An order-wide banner
+          told people every remaining row was finished when it was not. */}
+      {files.map((f) => (
+        lockedOn(f.path) && !isSaleDocCleared(reads[f.path]) ? (
+          <p key={f.path} className="text-[11px] font-medium text-amber-700">
+            🔒 {f.name}: read {AI_SALE_DOC_READ_LIMIT} times — the limit for one document. Ask an Admin / Payment Approver
+            to approve the upload or allow more tries. Every other document still has its own {AI_SALE_DOC_READ_LIMIT}.
+            {canApprove && (
+              <button type="button" disabled={busy} onClick={() => allowMore(f.path)} className="ml-1 font-medium text-primary hover:underline disabled:opacity-50">
+                Allow {AI_SALE_DOC_READ_LIMIT} more
+              </button>
+            )}
+          </p>
+        ) : null
+      ))}
     </div>
   );
 }

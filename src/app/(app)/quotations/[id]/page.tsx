@@ -15,6 +15,7 @@ import { saleFromClassification, isSaleConfirmed, saleDocReadsFromClassification
 import { readPricing } from "@/lib/quote";
 import { getAccountData, currentOwner } from "@/lib/account";
 import { DuplicateToClient } from "./duplicate-to-client";
+import { coerceReadCounts } from "@/lib/ai/read-allowance";
 
 export const dynamic = "force-dynamic";
 
@@ -139,7 +140,9 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         // AI reads of the closing documents (Sales Invoice / Collection Receipt /
         // Delivery Receipt) — captured numbers + amount checks, by file path.
         docReads: saleDocReadsFromClassification(quotation.classification),
-        docReadCount: ((v) => (typeof v === "number" ? v : 0))((quotation.classification as Record<string, unknown> | null)?.saleDocReadCount),
+        // Reads spent PER DOCUMENT (by path). The superseded per-order
+        // `saleDocReadCount` is not read: it counted the wrong thing.
+        docReadCounts: coerceReadCounts((quotation.classification as Record<string, unknown> | null)?.saleDocReadCounts),
         // Admin / Payment Approver override the AI-read limit (no cap).
         docReadsUnlimited: !!user && (isAdmin(user) || userHasWorkflowRole(assignments, user.id, "payment_approver")),
         revision: ((r) => (typeof r === "number" ? r : 0))((quotation.classification as Record<string, unknown> | null)?.revision),

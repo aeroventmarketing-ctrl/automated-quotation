@@ -1,3 +1,60 @@
+## 2026-09-07 · Three AI reads per row, and as many rows as you like
+
+The owner, on an order's *Payments Collected* rows: *"in AI reading, allow unlimited number of rows but limit
+to 3 reads per row. In the first picture, 1st to 3rd row the AI reading is allowed but after the 4th row it
+message that it exceeded the AI reading."*
+
+### The allowance was counting the wrong thing
+
+Every reader in the app began with a budget belonging to the **order** — one number, spent by whichever row was
+read first. So four payments could read three of them and the fourth was told it had exhausted its allowance,
+having never been read at all. Exactly the shape fixed for the check photos in #501, still in place here.
+
+A try is a read, and an **attachment** has three of them. Rows are unlimited: attach a fifth payment and it
+arrives with its own three.
+
+Three surfaces ran the same wrong rule, and all three now share one module (`src/lib/ai/read-allowance.ts`):
+
+| | was | is |
+| --- | --- | --- |
+| Payments Collected (order) | `depositSlipReadCount`, per order | `depositSlipReads`, per proof path |
+| Payments (counter sale) | `slipReads` Int, per sale | `slipReadCounts` JSON, per proof path |
+| Closing documents | `saleDocReadCount`, per order | `saleDocReadCounts`, per document path |
+
+The counters are keyed by **storage path**, which is what the `slipValidations` and `saleDocReads` *stamps*
+beside them were already keyed by — only the count was ever the odd one out.
+
+The old per-order totals are left where they lie and **ignored**. Carrying one across would mean spending a
+whole order's tally on whichever row happens to be read next, charging that row for reads it never had.
+
+### What it says when a row does run out
+
+The old message read *"AI read limit reached (3 of 3) used for this order"*, which is what made this look like a
+whole-order lock. It now names the row and says the others are fine: *"This payment proof has already been read
+3 times — that is the limit per attachment. … Every other row still has its own 3."* The closing-documents
+banner moved onto the individual document for the same reason, and **Allow 3 more** now unlocks that one
+document rather than the whole order.
+
+### Verified against the running app
+
+Seeded the owner's four rows with the first one spent, and — crucially — the superseded per-order counter set to
+**9**, well past the limit, which under the old rule refused everything:
+
+- Accounting and the preparer → **429** on the spent row only; rows 2, 3 and 4 all pass the gate
+- admin → through on every row, spent or not
+- closing documents: the same, with the Payment Approver as the override
+- counter sale: the same, and its old per-sale `slipReads: 9` ignored
+
+### Migration 0053 — and a deploy that is safe either way
+
+`CounterSale.slipReadCounts jsonb not null default '{}'`. Code deploys on push and the migration is run by hand
+afterwards, so in that window the new column does not exist. The counter-sale read catches that, falls back to
+the old per-sale Int and keeps the OLD behaviour — including the old wording, so it does not promise other rows
+an allowance they do not have yet. Tested by dropping the column out from under the running app: no error, the
+pre-0053 answer, and per-row again the moment it is restored.
+
+Twelve new tests, 431 pass.
+
 ## 2026-09-07 · The cash position is the two who sign for money
 
 The owner, pointing at the panel under the check register: *"show this part to admin and payment approver only.

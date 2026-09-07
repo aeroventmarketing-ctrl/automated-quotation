@@ -19,6 +19,7 @@ import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
 import { logActivity } from "@/lib/activity-log";
 import { isCurrentAccountOwner } from "@/lib/account";
+import { coerceReadCounts } from "@/lib/ai/read-allowance";
 
 const lineSchema = z.object({
   catalogueItemId: z.string().nullable().optional(),
@@ -993,18 +994,33 @@ export async function approveSaleDoc(quotationId: string, path: string, docKey: 
 }
 
 /**
- * Unlock the closing-document AI reader for Accounting after the 3-read limit —
- * resets the per-order read counter so they can try again (Admin / Payment
- * Approver only).
+ * Unlock the closing-document AI reader for Accounting after the 3-read limit
+ * (Admin / Payment Approver only).
+ *
+ * Clears the count for ONE document when a path is given, and only then. The
+ * allowance is per attachment, so unlocking a whole order would hand back reads
+ * on documents nobody had asked about — the same over-reach that made the limit
+ * itself wrong. Called with no path only by the pre-existing order-wide button,
+ * which is kept working.
  */
-export async function resetSaleDocReadLimit(quotationId: string): Promise<void> {
+export async function resetSaleDocReadLimit(quotationId: string, path?: string): Promise<void> {
   await assertSaleDocApprover();
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { classification: true } });
   if (!quote) throw new Error("Order not found.");
   const cls = (quote.classification as Record<string, unknown> | null) ?? {};
+  const counts = coerceReadCounts(cls.saleDocReadCounts);
+  if (path) delete counts[path];
   await prisma.quotation.update({
     where: { id: quotationId },
-    data: { classification: { ...cls, saleDocReadCount: 0 } as unknown as Prisma.InputJsonObject },
+    data: {
+      classification: {
+        ...cls,
+        saleDocReadCounts: path ? counts : {},
+        // The superseded per-order counter, zeroed too so a half-deployed build
+        // cannot resurrect a lock this just lifted.
+        saleDocReadCount: 0,
+      } as unknown as Prisma.InputJsonObject,
+    },
   });
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath(`/orders/${quotationId}`);
