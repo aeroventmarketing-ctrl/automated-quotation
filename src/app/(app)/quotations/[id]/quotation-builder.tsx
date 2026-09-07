@@ -280,7 +280,7 @@ interface Quote {
   /** AI reads of the closing documents, keyed by the file's storage path. */
   docReads?: Record<string, SaleDocReadStamp>;
   /** How many capped AI reads have been used on this order's closing documents. */
-  docReadCount?: number;
+  docReadCounts?: Record<string, number>;
   /** Admin / Payment Approver — no AI-read limit. */
   docReadsUnlimited?: boolean;
   revision: number;
@@ -6075,7 +6075,7 @@ export function QuotationBuilder({
           vatInclusive={quotation.vatMode !== "EXCLUSIVE"}
           zeroRated={quotation.vatMode === "ZERO_RATED"}
           initialDocReads={quotation.docReads}
-          docReadCount={quotation.docReadCount}
+          docReadCounts={quotation.docReadCounts}
           docReadsUnlimited={quotation.docReadsUnlimited}
         />
       )}

@@ -8,21 +8,32 @@
 export const AI_RECEIPT_READ_LIMIT = 3;
 
 /**
- * How many times the AI "Read slip" may be run against a single order's deposit
- * slips / proofs of payment, for NON-admin users. Persisted on the sale
- * classification. Once reached, non-admins must check the slip and key the
- * figures in manually. Admins have no limit (and their reads don't consume the
- * shared budget).
+ * How many times the AI "Read slip" may be run against **one proof of payment**,
+ * for NON-admin users.
+ *
+ * The owner: *"allow unlimited number of rows but limit to 3 reads per row. In
+ * the first picture, 1st to 3rd row the AI reading is allowed but after the 4th
+ * row it message that it exceeded the AI reading."* It used to be one budget for
+ * the whole order, spent by whichever row was read first — so a fourth payment
+ * was refused a read it had never had. Rows are unlimited; each attachment has
+ * three.
+ *
+ * Persisted per proof path (`depositSlipReads` on the classification;
+ * `CounterSale.slipReadCounts`). Admins have no limit, and their reads don't
+ * consume anyone else's allowance.
  */
 export const AI_DEPOSIT_SLIP_READ_LIMIT = 3;
 
 /**
- * How many times the AI "Read document" may be run against a single order's
- * closing documents (Sales Invoice / Collection Receipt / Delivery Receipt),
- * for users other than an Admin or the Payment Approver. Persisted on the sale
- * classification. Once reached, everyone else must check the document by hand;
- * an Admin / Payment Approver has no limit (and their reads don't consume the
- * shared budget) — they are the override for this rule.
+ * How many times the AI "Read document" may be run against **one closing
+ * document** (Sales Invoice / Collection Receipt / Delivery Receipt), for users
+ * other than an Admin or the Payment Approver.
+ *
+ * Per DOCUMENT, for the same reason as the slips above: one budget for the whole
+ * order locked the fourth document without it ever having been read. Persisted
+ * per path (`saleDocReadCounts` on the classification), beside the `saleDocReads`
+ * stamps, which were already keyed that way. An Admin / Payment Approver has no
+ * limit and consumes nobody else's allowance — they are the override.
  */
 export const AI_SALE_DOC_READ_LIMIT = 3;
 

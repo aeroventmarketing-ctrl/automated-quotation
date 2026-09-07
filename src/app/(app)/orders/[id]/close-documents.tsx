@@ -32,7 +32,7 @@ export function CloseDocuments({
   currency = "PHP",
   orderAmount = 0,
   docReads = {},
-  docReadCount = 0,
+  docReadCounts = {},
   docReadsUnlimited = false,
   canReadDocs = false,
 }: {
@@ -53,7 +53,8 @@ export function CloseDocuments({
   currency?: string;
   orderAmount?: number;
   docReads?: Record<string, SaleDocReadStamp>;
-  docReadCount?: number;
+  /** Reads spent per document (by path), not per order. */
+  docReadCounts?: Record<string, number>;
   /** Admin / Payment Approver — no read limit; may approve / allow-more. */
   docReadsUnlimited?: boolean;
   /** Accounting / Admin / Payment Approver — may run the AI reader. */
@@ -165,7 +166,7 @@ export function CloseDocuments({
                   expectedTotal={t.key === "delivery_receipt" ? undefined : orderAmount}
                   currency={currency}
                   initialReads={docReads}
-                  readsUsed={docReadCount}
+                  readCounts={docReadCounts}
                   unlimited={docReadsUnlimited}
                   canApprove={docReadsUnlimited}
                   canRead={canReadDocs}

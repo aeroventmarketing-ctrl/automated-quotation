@@ -78,7 +78,7 @@ export function SalePanel({
   vatInclusive = true,
   zeroRated = false,
   initialDocReads = {},
-  docReadCount = 0,
+  docReadCounts = {},
   docReadsUnlimited = false,
 }: {
   quotationId: string;
@@ -99,7 +99,8 @@ export function SalePanel({
   /** Persisted AI reads of the closing documents, keyed by file path. */
   initialDocReads?: Record<string, SaleDocReadStamp>;
   /** Capped AI reads already used on this order's closing documents. */
-  docReadCount?: number;
+  /** Reads spent per document (by path), not per order. */
+  docReadCounts?: Record<string, number>;
   /** Admin / Payment Approver — no AI-read limit. */
   docReadsUnlimited?: boolean;
 }) {
@@ -349,7 +350,7 @@ export function SalePanel({
             expectedTotal={type.key === "delivery_receipt" ? undefined : dealTotal}
             currency={currency}
             initialReads={initialDocReads}
-            readsUsed={docReadCount}
+            readCounts={docReadCounts}
             unlimited={docReadsUnlimited}
             canApprove={docReadsUnlimited}
             canRead={canReadDocs}
