@@ -56,7 +56,7 @@ import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDe
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
-import { saveCashPosition } from "@/lib/cash-position";
+import { saveCashPosition, canEditCashPosition } from "@/lib/cash-position";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -2796,9 +2796,14 @@ export async function rescheduleCheck(
 export async function saveCashPositionAction(input: {
   cob: number; coh: number; cashGcashChecking: number;
 }): Promise<{ ok?: true; error?: string }> {
-  const denied = await assertCheckAdmin();
-  if (denied) return { error: denied };
   const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized" };
+  // The panel's own rule, not the check-clearing one. The two agree today; the
+  // owner has just narrowed WHO SEES the panel, and the next change to either
+  // must not silently move the other.
+  if (!canEditCashPosition({ admin: isAdmin(user) })) {
+    return { error: "Only an admin can enter the cash figures." };
+  }
   const bad = (["cob", "coh", "cashGcashChecking"] as const).find(
     (k) => !Number.isFinite(Number(input?.[k])),
   );

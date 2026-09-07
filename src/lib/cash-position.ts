@@ -24,6 +24,47 @@ import { round2 } from "@/lib/quote";
 
 export const CASH_POSITION_KEY = "cash_position";
 
+/**
+ * Who may SEE the cash position at all.
+ *
+ * The owner, pointing at the panel: *"show this part to admin and payment
+ * approver only. Do not show to accounting role or any one not given the
+ * authority."*
+ *
+ * Narrower than the page it sits on. Check monitoring is open to Accounting —
+ * they attach and read the checks, so they need the schedule — but the panel
+ * underneath is a different thing: the bank balance, what the company can still
+ * fund, and how far short it is. That is the two who sign for money, and nobody
+ * else by default.
+ *
+ * A separate rule from `canAttachCheck` on purpose. The two started out agreeing
+ * about the admin and the Payment Approver, and every previous widening of the
+ * check rules has been about Accounting — sharing one function would have
+ * dragged this panel along with the next one.
+ */
+export interface CashPositionActor {
+  admin?: boolean;
+  paymentApprover?: boolean;
+  /** Named so the rule is explicit about the role it excludes, not silent. */
+  accounting?: boolean;
+}
+
+export function canSeeCashPosition(actor?: CashPositionActor): boolean {
+  return !!actor?.admin || !!actor?.paymentApprover;
+}
+
+/**
+ * …and who may TYPE the four figures only a person can know.
+ *
+ * Admin alone, unchanged: the owner asked for the panel to be *shown* to the
+ * Payment Approver, and entering a bank balance nothing in the system can check
+ * is a different act from reading one. Kept as its own function so widening the
+ * view cannot quietly widen the keyboard.
+ */
+export function canEditCashPosition(actor?: CashPositionActor): boolean {
+  return !!actor?.admin;
+}
+
 /** The four figures only a person can know. Rules 2 and 4. */
 export interface CashPositionInput {
   /** **Cash in Bank** (the sheet's COB). */

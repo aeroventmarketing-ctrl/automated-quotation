@@ -6,7 +6,7 @@ import { canAttachCheck } from "@/lib/voucher-check";
 import { checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
 import { loadCheckRegister } from "@/lib/check-register";
 import { PH_TIME_ZONE } from "@/lib/utils";
-import { getCashPosition, computeCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
+import { getCashPosition, computeCashPosition, canSeeCashPosition, canEditCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
 import { getReceivablesOutstanding } from "@/lib/receivables";
 import { CheckMonitor } from "./check-monitor-table";
 import { CashPositionPanel } from "./cash-position-panel";
@@ -31,6 +31,16 @@ export default async function ChecksPage() {
     admin,
     workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => userHasWorkflowRole(assignments, viewer.id, r)),
   });
+  // The panel under the register is narrower than the register — *"show this
+  // part to admin and payment approver only."* The ROLE itself, not `canAct`,
+  // which reads true for an admin and would make every admin look like the
+  // Payment Approver to a rule that has to tell them apart.
+  const cashActor = {
+    admin,
+    paymentApprover: userHasWorkflowRole(assignments, viewer.id, "payment_approver"),
+    accounting: userHasWorkflowRole(assignments, viewer.id, "accounting"),
+  };
+  const showCash = canSeeCashPosition(cashActor);
 
   if (!canView) {
     return (
@@ -48,16 +58,24 @@ export default async function ChecksPage() {
   const summary = checkWatchSummary(rows);
   // The cash position sits under the register and is driven by it: First
   // Priority and Total Payables are the register's own totals, never re-derived.
-  const [saved, receivables] = await Promise.all([
-    getCashPosition().catch(() => EMPTY_CASH_POSITION),
-    // The same figure as the Management Dashboard's Receivables tile.
-    getReceivablesOutstanding().catch(() => 0),
-  ]);
-  const cash = computeCashPosition(saved, {
-    firstPriority: summary.firstPriorityAmount,
-    totalPayables: summary.openAmount,
-    receivables,
-  });
+  //
+  // Not fetched at all for someone who may not see it. Rendering it and hiding
+  // it would still ship the bank balance to their browser in the page payload,
+  // where "hidden" means nothing.
+  const cash = showCash
+    ? await (async () => {
+        const [saved, receivables] = await Promise.all([
+          getCashPosition().catch(() => EMPTY_CASH_POSITION),
+          // The same figure as the Management Dashboard's Receivables tile.
+          getReceivablesOutstanding().catch(() => 0),
+        ]);
+        return computeCashPosition(saved, {
+          firstPriority: summary.firstPriorityAmount,
+          totalPayables: summary.openAmount,
+          receivables,
+        });
+      })()
+    : null;
 
   return (
     <div className="space-y-4">
@@ -81,7 +99,7 @@ export default async function ChecksPage() {
       ) : (
         <>
           <CheckMonitor rows={rows} summary={summary} admin={admin} todayYMD={todayYMD} />
-          <CashPositionPanel pos={cash} admin={admin} />
+          {cash && <CashPositionPanel pos={cash} admin={canEditCashPosition(cashActor)} />}
         </>
       )}
     </div>

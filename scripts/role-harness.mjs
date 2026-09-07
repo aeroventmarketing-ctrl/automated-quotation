@@ -125,6 +125,27 @@ const PROBES = [
     leftCount: (t) => near(t, "LEFT2.jpg", /· 2 left/, 150),
   } },
   /**
+   * Check monitoring, and the CASH POSITION panel underneath it — *"show this
+   * part to admin and payment approver only. Do not show to accounting role or
+   * any one not given the authority."*
+   *
+   * Two probes on one page because they are two different rules: Accounting must
+   * still be let IN (they work the register) and must not see the panel. Testing
+   * only the panel would pass on a page that had shut them out altogether.
+   *
+   * `figuresSent` looks at the WHOLE response, not the rendered text: hiding the
+   * panel client-side would still ship the bank balance in the page payload,
+   * where "hidden" means nothing. It must be FALSE for Accounting — and TRUE for
+   * the two who may see it, which is also what stops the check being vacuous.
+   */
+  { path: "/checks", label: "cash", checks: {
+    open: (t) => !t.includes("don't have access to check monitoring"),
+    panel: (t) => t.includes("Cash position"),
+    edit: (t) => /Cash position[\s\S]{0,4000}?\bEdit\b/.test(t),
+  }, raw: {
+    figuresSent: (html) => /Available Bank Balance|Funding Shortfall|fundingShortfall/.test(html),
+  } },
+  /**
    * The item code beside an item — the owner's *"Show the sku number at the right
    * side of the item… Show it to all roles that is allowed access."*
    *
@@ -537,13 +558,17 @@ async function boot() {
 async function probe() {
   const rows = [];
   for (const c of CAST) {
-    for (const { path, label, checks } of PROBES) {
+    for (const { path, label, checks, raw: rawChecks } of PROBES) {
       const res = await fetch(`http://localhost:${PORT}${path}`, { headers: { Cookie: `e2e_as=${c.email}` }, redirect: "manual" });
       // Keep the raw HTML for probes that need an attribute (icon buttons).
       const raw = res.status === 200 ? await res.text() : "";
       const t = raw ? strip(raw) + " " + raw.match(/aria-label="[^"]*"/g)?.join(" ") : "";
       const cells = Object.fromEntries(Object.entries(checks).map(([k, f]) => [k, res.status === 200 ? f(t) : false]));
-      rows.push({ who: c.name, page: label, ...cells });
+      // `raw` checks read the WHOLE response rather than the rendered text —
+      // for asking whether a figure was SENT, not whether it was drawn. A panel
+      // hidden in the browser still ships its numbers in the page payload.
+      const rawCells = Object.fromEntries(Object.entries(rawChecks ?? {}).map(([k, f]) => [k, res.status === 200 ? f(raw) : false]));
+      rows.push({ who: c.name, page: label, ...cells, ...rawCells });
     }
   }
   return rows;
