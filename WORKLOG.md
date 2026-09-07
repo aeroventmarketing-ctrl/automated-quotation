@@ -1,3 +1,47 @@
+## 2026-09-07 · A remark stopped hiding the item's code
+
+The owner: *"when user make an input in the remarks, it shows no SKU, although the item is stored in inventory
+and products tab."*
+
+### The remark is glued onto the item name
+
+A requisition line is **composed, not stored**. `mrfItemLine` writes `"<qty> <unit> · <description>
+(<remark>)"`, and `poLineFromPRItem` reads it back by splitting on `" · "` — so the owner's row
+
+> `6 pc · VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY (Spring Vibration Isolator · Foot Mounted · Rated
+> capacity 80 kg)`
+
+arrives at the code lookup as the item name **plus the remark they typed**, brackets and all. Matched exactly
+against the catalogue, as an identifier must be, that is not a product — so no code. Type no remark and the same
+item finds its code immediately, which is exactly what the owner saw.
+
+### Peel the brackets, but only after trying the name
+
+`skuFor` now tries the name as given, and only then the same name with a trailing `(…)` peeled off, up to twice.
+
+The order is the whole point. A product whose REAL name ends in brackets — `ANCHOR BOLT (GALVANISED)`, sitting
+in a catalogue that also holds `ANCHOR BOLT` — is found by the exact match first and keeps its own code, instead
+of being peeled into its neighbour's. Peeling is the fallback, never the first answer, and an item nobody
+stocks still shows nothing rather than borrowing a code off a stem it happens to share.
+
+### The probe found a bug I had put in the fixture
+
+Adding the owner's item to the harness turned the `uncoded` column false: `CUTTING DISC 4in`, the fixture's only
+item with no code anywhere, had quietly acquired one. Two mistakes of mine, one on top of the other — I had
+added it to the product seed in the SKU work, and the seed's cleanup deleted by NAME (`HARNESS %`) while the
+rows are created with a `harness-prd-` ID, so taking it back out of the list left the row in the database. The
+sweep goes by ID now, and says why.
+
+That column existing at all is why this was caught: "shows nothing for an item with no code" and "shows nothing
+because the lookup is broken" are the same picture, and only a coded row beside it tells them apart.
+
+### On the running app
+
+`10 pc · GI SHEET 24GA` **SKU 10002** · `2 pc · CUTTING DISC 4in` · `1 pc · SOMETHING TYPED BY HAND` ·
+`6 pc · VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY (Spring Vibration Isolator · Foot Mounted · Rated
+capacity 80 kg)` **SKU PRD10005** — for every role that can open the page.
+
+Five new tests, 443 pass.
 ## 2026-09-07 · Articles / Description is a dropdown now, for everyone
 
 The owner: *"In requisitions, disallow editing in articles/description to all roles including the purchaser

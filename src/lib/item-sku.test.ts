@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSkuIndex, skuFor, normalizeItemName, EMPTY_SKU_INDEX } from "./item-sku";
+import { buildSkuIndex, skuFor, normalizeItemName, itemNameCandidates, EMPTY_SKU_INDEX } from "./item-sku";
 import { coercePurchaseOrder, type PurchaseOrder } from "./purchase-order";
 import { renderPurchaseOrderHtml } from "./po-html";
 
@@ -123,5 +123,60 @@ describe("the supplier's copy", () => {
     const desc = 'DRILL BIT 3/16" COBALT';
     expect(skuFor(desc, INDEX)).toBe("PRD10044");
     expect(desc).not.toContain("PRD10044"); // the lookup key is untouched by the answer
+  });
+});
+
+
+/**
+ * The owner, on an MRF row that had a remark typed into it: *"when user make an
+ * input in the remarks, it shows no SKU, although the item is stored in
+ * inventory and products tab."*
+ *
+ * A requisition line is COMPOSED — `mrfItemLine` writes
+ * `"<qty> <unit> · <description> (<remark>)"` — so the remark arrives glued to
+ * the item name, and an exact-name lookup rightly failed to find it.
+ */
+describe("a row with a remark typed into it", () => {
+  const CATALOGUE = buildSkuIndex({
+    products: [
+      { name: "VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY", sku: "PRD10501" },
+      // A product whose REAL name ends in brackets, sharing a stem with another.
+      { name: "ANCHOR BOLT (GALVANISED)", sku: "PRD10502" },
+      { name: "ANCHOR BOLT", sku: "PRD10503" },
+    ],
+  });
+
+  /** The owner's line, exactly as `poLineFromPRItem` hands it over. */
+  it("finds the code the owner could not see", () => {
+    const asComposed = "VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY (Spring Vibration Isolator · Foot Mounted · Rated capacity 80 kg)";
+    expect(skuFor(asComposed, CATALOGUE)).toBe("PRD10501");
+  });
+
+  it("still finds it with no remark at all", () => {
+    expect(skuFor("VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY", CATALOGUE)).toBe("PRD10501");
+  });
+
+  /**
+   * The exact name is tried FIRST, so a product whose own name ends in brackets
+   * keeps its own code instead of being peeled into its neighbour's.
+   */
+  it("does not peel a name that really does end in brackets", () => {
+    expect(skuFor("ANCHOR BOLT (GALVANISED)", CATALOGUE)).toBe("PRD10502");
+    expect(skuFor("ANCHOR BOLT", CATALOGUE)).toBe("PRD10503");
+    // …and that same product WITH a remark still peels down to itself.
+    expect(skuFor("ANCHOR BOLT (GALVANISED) (spare)", CATALOGUE)).toBe("PRD10502");
+  });
+
+  it("peels most-specific first, and stops rather than peeling to nothing", () => {
+    expect(itemNameCandidates("A (b) (c)")).toEqual(["A (b) (c)", "A (b)", "A"]);
+    expect(itemNameCandidates("PLAIN NAME")).toEqual(["PLAIN NAME"]);
+    expect(itemNameCandidates("(all brackets)")).toEqual(["(all brackets)"]);
+    expect(itemNameCandidates("")).toEqual([""]);
+    expect(itemNameCandidates(null)).toEqual([""]);
+  });
+
+  /** Peeling must not turn an item nobody stocks into somebody else's code. */
+  it("still says nothing for an item the catalogue has never heard of", () => {
+    expect(skuFor("SOMETHING ELSE ENTIRELY (with a remark)", CATALOGUE)).toBeNull();
   });
 });

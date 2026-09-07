@@ -78,6 +78,44 @@ export function buildSkuIndex(sources: {
   return index;
 }
 
+/** A trailing `(…)` group — one level, anchored at the end. */
+const TRAILING_PARENTHETICAL = /\s*\([^()]*\)\s*$/;
+
+/** How many trailing groups to peel before giving up. Two is already generous. */
+const MAX_PEEL = 2;
+
+/**
+ * The item name, then the same name with its trailing parenthetical peeled off,
+ * and so on — most specific first.
+ *
+ * A requisition line is COMPOSED, not stored: `mrfItemLine` writes
+ * `"<qty> <unit> · <description> (<remark>)"`, so a row with a remark reaches
+ * this lookup as
+ *
+ * > `VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY (Spring Vibration Isolator ·
+ * > Foot Mounted · Rated capacity 80 kg)`
+ *
+ * — the item, plus a remark the person typed, glued together. The owner found it
+ * exactly there: *"when user make an input in the remarks, it shows no SKU…
+ * although the item is stored in inventory and products tab."*
+ *
+ * The exact name is always tried FIRST, so a product whose real name ends in
+ * brackets keeps its own code rather than being peeled into a different item's.
+ * Peeling is the fallback, never the first answer.
+ */
+export function itemNameCandidates(description: string | null | undefined): string[] {
+  const first = String(description ?? "").trim();
+  const out = [first];
+  let s = first;
+  for (let i = 0; i < MAX_PEEL; i++) {
+    const next = s.replace(TRAILING_PARENTHETICAL, "").trim();
+    if (!next || next === s) break;
+    out.push(next);
+    s = next;
+  }
+  return out;
+}
+
 /**
  * The code for one item, or null when the catalogue has never heard of it.
  *
@@ -85,5 +123,9 @@ export function buildSkuIndex(sources: {
  * by hand, and "—" on every such row would train the eye past the real codes.
  */
 export function skuFor(description: string | null | undefined, index: SkuIndex): string | null {
-  return index.get(normalizeItemName(description)) ?? null;
+  for (const name of itemNameCandidates(description)) {
+    const hit = index.get(normalizeItemName(name));
+    if (hit) return hit;
+  }
+  return null;
 }
