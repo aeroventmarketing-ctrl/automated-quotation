@@ -57,6 +57,8 @@ import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purcha
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { saveCashPosition, canEditCashPosition } from "@/lib/cash-position";
+import { getProducts } from "@/lib/product-catalog";
+import { unknownCatalogueItems, unknownItemsMessage } from "@/lib/catalogue-items";
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
@@ -1145,6 +1147,10 @@ export async function raiseMaterialRequest(
     }))
     .filter((it) => it.description !== "");
   if (cleanItems.length === 0) throw new Error("List at least one item.");
+  // Every row must be a product that exists. The forms enforce this too, but a
+  // browser's opinion is not a rule — see `unknownCatalogueItems`.
+  const unknown = unknownCatalogueItems(cleanItems.map((it) => it.description), await getProducts().catch(() => []));
+  if (unknown.length) throw new Error(unknownItemsMessage(unknown));
 
   const { cls, wf } = await loadWorkflow(quotationId);
   if (office) {
@@ -1296,6 +1302,10 @@ export async function createDepartmentRequisition(
     }))
     .filter((it) => it.description !== "");
   if (cleanItems.length === 0) throw new Error("List at least one item.");
+  // Every row must be a product that exists. The forms enforce this too, but a
+  // browser's opinion is not a rule — see `unknownCatalogueItems`.
+  const unknown = unknownCatalogueItems(cleanItems.map((it) => it.description), await getProducts().catch(() => []));
+  if (unknown.length) throw new Error(unknownItemsMessage(unknown));
 
   // Office requisitions normally need no Plant Manager approval — they start
   // APPROVED so the Purchaser can prepare the PO directly. EXCEPTION: an Office

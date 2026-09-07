@@ -146,6 +146,24 @@ const PROBES = [
     figuresSent: (html) => /Available Bank Balance|Funding Shortfall|fundingShortfall/.test(html),
   } },
   /**
+   * The Articles / Description cell — *"disallow editing in articles/description
+   * to all roles including the purchaser role. Let all roles choose from drop
+   * down only."*
+   *
+   * Read off the RAW html, because the whole question is what KIND of control it
+   * is: a button you open, or a box you can type a value into. Stripped text
+   * cannot tell those apart, and "the value snaps back on blur" looks identical
+   * to "you cannot type" in a scrape.
+   */
+  { path: "/requisitions", label: "picker", checks: {
+    form: (t) => t.includes("New department requisition"),
+  }, raw: {
+    // The cell is a button that opens a list…
+    dropdown: (html) => /<button[^>]*role="combobox"/.test(html),
+    // …and there is no text input behind the value, for anyone.
+    noTyping: (html) => !/<input[^>]*role="combobox"/.test(html) && !/placeholder="Type or pick a product"/.test(html),
+  } },
+  /**
    * The item code beside an item — the owner's *"Show the sku number at the right
    * side of the item… Show it to all roles that is allowed access."*
    *
@@ -280,6 +298,21 @@ async function seed() {
   await p.stockMovement.deleteMany({});
   await p.stockReservation.deleteMany({});
   await p.stockItem.deleteMany({});
+  // The PRODUCT catalogue. Without it the Articles / Description picker has
+  // nothing to offer and renders its empty state, so a probe of the picker would
+  // be measuring the wrong screen. Names match the stock items so the item-code
+  // lookup has something to find either way.
+  await p.product.deleteMany({ where: { name: { startsWith: "HARNESS " } } });
+  for (const [name, sku, unit] of [
+    ["GI SHEET 24GA", "PRD10001", "pc"],
+    ["BELT B-50", "PRD10002", "pc"],
+    ["CUTTING DISC 4in", "PRD10003", "pc"],
+    // Catalogue-only: not stocked, so it exercises the product half of the join.
+    ["HARNESS OFFICE PAPER", "PRD10004", "ream"],
+  ]) {
+    await p.product.upsert({ where: { id: `harness-prd-${sku}` }, update: { name, sku, unit, active: true }, create: { id: `harness-prd-${sku}`, name, sku, unit, active: true } });
+  }
+
   // SKUs on purpose: the item code beside a requisition / MRF / PO line is looked
   // up by NAME, so a fixture with no codes would render an empty result that
   // looks identical to a broken lookup.
