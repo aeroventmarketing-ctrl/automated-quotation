@@ -1,3 +1,53 @@
+## 2026-09-07 · Articles / Description is a dropdown now, for everyone
+
+The owner: *"In requisitions, disallow editing in articles/description to all roles including the purchaser
+role. In MRF, disallow editing in articles/description to all roles including the purchaser role. Let all roles
+choose from drop down only."*
+
+### The rule was right; the affordance was wrong
+
+The cell was already selection-only in intent — you typed into it, and on blur free text was quietly undone.
+But a box you can type in is an invitation, and *"it snaps back when you look away"* is not something a person
+discovers, it is something that happens to them.
+
+So the value now has no text input at all. The cell is a **button** reading *Choose a product*; the only way to
+fill it is to choose. Typing is still how you FIND something — the search box lives **inside** the open menu,
+where what you type filters the list and can never become the answer. Clearing a row is a choice in the menu
+too, or a row picked by mistake could never be taken back.
+
+No role is exempt. The Purchaser was named because they are the one who could most plausibly be trusted to type
+an item; the point is that the catalogue is the only source of item names, whoever is at the keyboard.
+
+### Two holes closed while we were here
+
+**The empty-catalogue escape hatch.** With no products the field used to fall back to a plain free-text input —
+the one remaining way to type an item, and it opened exactly when the catalogue failed to load, which is when a
+typo is least likely to be noticed. It now stays shut and says *"No products in the catalogue · Add products in
+Products first."*
+
+**The server took whatever it was handed.** Both forms refused an unknown item, but that is the browser's
+opinion; `raiseMaterialRequest` and `createDepartmentRequisition` never checked. They do now, through one shared
+function so the button and the server cannot disagree about whether a row is valid — matched on the name,
+exactly, ignoring case and stray whitespace. When the catalogue itself is empty nothing is refused, deliberately:
+a database hiccup must not turn into "no item is valid" and refuse every requisition in the company.
+
+### Verified in a real browser, as the role the owner named
+
+As the **Purchaser**, on both screens: the cell is a `BUTTON`, typing `SOMETHING MADE UP` goes into the search
+box and the cell still reads *Choose a product* — the list answers *"No product matches…"*. Searching `GI SHEET`
+and clicking the match commits it, and it survives the blur that used to be where free text died. Across every
+role that can open either form — admin, Purchaser, Payment Approver, Warehouse, Sales — the count of typable
+description cells is **0** and the count of dropdowns is 3.
+
+The harness had no Products at all, so the picker was rendering its empty state and any probe of it would have
+been measuring the wrong screen. It seeds a catalogue now.
+
+Seven new tests, 438 pass.
+
+### Worth knowing
+
+A product that is later **deactivated** will block submission of a row that names it, since the catalogue only
+lists active products. That is the rule working, but it is a new way for an old draft to be refused.
 ## 2026-09-07 · Three AI reads per row, and as many rows as you like
 
 The owner, on an order's *Payments Collected* rows: *"in AI reading, allow unlimited number of rows but limit
