@@ -852,8 +852,17 @@ export function checkIssues(opts: {
   netAmount: number;
   /** Our own company name, from config. */
   ourCompany: string;
-  /** Check numbers already recorded on OTHER purchase orders. */
-  usedCheckNos?: string[];
+  /**
+   * OTHER purchase orders already carrying this check number, NAMED — see
+   * `otherPurchaseOrdersWithCheck`, which is what decides "other".
+   *
+   * The caller does the deciding because it needs the whole table: a combined PO
+   * is several request rows sharing one PO number, and a cancelled request is
+   * not a competing record of a payment. Passing names rather than numbers is
+   * also what lets the warning say where to look — the old message said only
+   * "another purchase order", which is a claim nobody can check.
+   */
+  duplicateOnPos?: string[];
   inWords: (n: number) => string;
 }): CheckIssue[] {
   const r = opts.read;
@@ -911,12 +920,14 @@ export function checkIssues(opts: {
       issues.push({ key: "words", message: `The amount in words doesn't match the figure — "${r.amountWords}".` });
     }
   }
-  // (c) The same check number must not already be recorded elsewhere.
-  if (r.checkNo) {
-    const mine = normalizeCheckNo(r.checkNo);
-    if (mine && (opts.usedCheckNos ?? []).some((n) => normalizeCheckNo(n) === mine)) {
-      issues.push({ key: "duplicate", message: `Check No. ${formatCheckNo(r.checkNo)} is already recorded on another purchase order.` });
-    }
+  // (c) The same check number must not already be recorded on a DIFFERENT
+  // purchase order. Named, so the reader can open the other one and decide.
+  const dupes = opts.duplicateOnPos ?? [];
+  if (r.checkNo && dupes.length) {
+    issues.push({
+      key: "duplicate",
+      message: `Check No. ${formatCheckNo(r.checkNo)} is also recorded on ${dupes.length === 1 ? dupes[0] : dupes.join(" and ")}. One of the two is the wrong photo, unless this check really did pay both.`,
+    });
   }
   return issues;
 }

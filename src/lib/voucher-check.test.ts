@@ -547,10 +547,29 @@ describe("what the read is cross-examined against", () => {
     expect(ok({ read }).map((i) => i.key)).toContain("account");
   });
 
-  it("flags a check number already recorded on another PO", () => {
-    // Leading zeros and any formatting are ignored on both sides.
-    expect(ok({ usedCheckNos: ["486722"] }).map((i) => i.key)).toContain("duplicate");
-    expect(ok({ usedCheckNos: ["0000486723"] })).toEqual([]);
+  /**
+   * WHICH other PO is the whole point. "Already recorded on another purchase
+   * order" is a claim the reader cannot check, and the owner asked exactly that
+   * about a live one. Deciding *whether* there is a duplicate now belongs to
+   * `otherPurchaseOrdersWithCheck`, which can see the whole table; this only
+   * says it well.
+   */
+  it("names the other PO, so the claim can be checked", () => {
+    const [issue] = ok({ duplicateOnPos: ["PO-AFBM20260000610"] });
+    expect(issue.key).toBe("duplicate");
+    expect(issue.message).toContain("0000486722");
+    expect(issue.message).toContain("PO-AFBM20260000610");
+    expect(issue.message).not.toMatch(/another purchase order\.?$/);
+  });
+
+  it("names both when a check somehow reached two", () => {
+    const [issue] = ok({ duplicateOnPos: ["PO-A", "PO-B"] });
+    expect(issue.message).toContain("PO-A and PO-B");
+  });
+
+  it("says nothing when there is no other PO", () => {
+    expect(ok({ duplicateOnPos: [] })).toEqual([]);
+    expect(ok({})).toEqual([]);
   });
 
   it("flags a photo the model wasn't sure of", () => {

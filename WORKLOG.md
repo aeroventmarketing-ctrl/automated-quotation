@@ -1,3 +1,49 @@
+## 2026-09-07 · "Already recorded on another purchase order" — asked per PO, and it says which
+
+The owner, on PO-AFBM20260000609: *"check the error Check No. 0000486718 is already recorded on another
+purchase order."*
+
+### The question was asked of the wrong thing
+
+The test compared this purchase-request ROW against every other row. But `purchase-batch.ts` says it plainly:
+
+> *every member PurchaseRequest carries the SAME `po` JSON (with the combined lines and one PO number)*
+
+A **combined PO is several rows and one purchase order.** Each of those rows renders its own check control on the
+order page, so a check attached from two of them is one check, on one PO, sitting on two rows — and the old test
+reported it as a duplicate of itself. It also counted **cancelled and rejected** requests, where no money ever
+moved: a PO cancelled and re-raised with the same check is one payment, and being told otherwise sends somebody
+hunting for a second one.
+
+The unit is now the purchase order: its batch id, else its PO number, else the row's own id for a request with
+no PO yet.
+
+### And the message could not be checked
+
+*"…is already recorded on another purchase order"* names nothing, so there was no way to go and look — which is
+exactly what the owner asked to do. It now reads:
+
+> Check No. 0000486718 is also recorded on **PO-AFBM20260000610**. One of the two is the wrong photo, unless this
+> check really did pay both.
+
+Named, and not phrased as a verdict: one check paying two POs is unusual, not impossible, and the screen should
+not tell somebody they are wrong about their own payment.
+
+### Verified against real rows, through the query the route runs
+
+Seeded into the database and read back with the route's own `findMany`:
+
+- a **combined PO** whose check sits on two member rows, plus a **cancelled** PO that once carried the same
+  check → **no warning**. Under the old rule both fired.
+- the same, plus a genuine second live PO → **`["PO-AFBM20260000777"]`**, named.
+
+Ten new tests, 453 pass.
+
+### Worth knowing
+
+The issue is computed and STORED at the moment of reading — deliberately, since it needs every other PO's
+numbers. So a warning already stored on a check keeps its old wording, and its old verdict, until somebody
+presses **Re-read** on that check. For PO-AFBM20260000609 that is the way to find out what this now says.
 ## 2026-09-07 · A remark stopped hiding the item's code
 
 The owner: *"when user make an input in the remarks, it shows no SKU, although the item is stored in inventory
