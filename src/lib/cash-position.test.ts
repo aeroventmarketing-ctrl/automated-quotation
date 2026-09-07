@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeCashPosition, coerceCashPosition, EMPTY_CASH_POSITION, type CashPositionInput } from "./cash-position";
+import {
+  computeCashPosition, coerceCashPosition, EMPTY_CASH_POSITION,
+  canSeeCashPosition, canEditCashPosition,
+  type CashPositionInput, type CashPositionActor,
+} from "./cash-position";
 import { buildCheckWatch, checkWatchSummary } from "./check-monitor";
 import type { CheckDoc } from "./voucher-check";
 
@@ -153,5 +157,53 @@ describe("coerceCashPosition", () => {
     expect(c.cob).toBe(121658.12);
     expect(c.coh).toBe(500);
     expect(c.updatedByName).toBe("Admin Ana");
+  });
+});
+
+/**
+ * The owner, pointing at the panel: *"show this part to admin and payment
+ * approver only. Do not show to accounting role or any one not given the
+ * authority."*
+ *
+ * Every role at once, so a change to one cell is a change to a table someone has
+ * to read — and so the roles that were DELIBERATELY left out are written down
+ * rather than merely absent.
+ */
+describe("who may see the cash position", () => {
+  const WHO: Array<[string, CashPositionActor, { see: boolean; edit: boolean }]> = [
+    ["Admin", { admin: true }, { see: true, edit: true }],
+    ["Payment Approver", { paymentApprover: true }, { see: true, edit: false }],
+    /**
+     * The role the owner named. Accounting can still open Check monitoring and
+     * work the register above — they attach and read the checks — but the bank
+     * balance underneath is not theirs.
+     */
+    ["Accounting", { accounting: true }, { see: false, edit: false }],
+    // An admin who also holds Accounting is still an admin.
+    ["Admin who is also Accounting", { admin: true, accounting: true }, { see: true, edit: true }],
+    ["nobody in particular", {}, { see: false, edit: false }],
+  ];
+
+  for (const [who, actor, want] of WHO) {
+    it(`${who}: ${want.see ? "sees" : "does not see"} it, ${want.edit ? "and types the figures" : "and cannot type the figures"}`, () => {
+      expect(canSeeCashPosition(actor)).toBe(want.see);
+      expect(canEditCashPosition(actor)).toBe(want.edit);
+    });
+  }
+
+  it("shows nothing to a caller who says nothing about themselves", () => {
+    expect(canSeeCashPosition()).toBe(false);
+    expect(canEditCashPosition()).toBe(false);
+  });
+
+  /**
+   * Seeing the panel and typing into it are separate rules that happen to agree
+   * about the admin. The owner widened the VIEW only, so widening it again must
+   * not carry the keyboard along with it.
+   */
+  it("never lets someone type a figure they are not even shown", () => {
+    for (const [, actor] of WHO) {
+      if (canEditCashPosition(actor)) expect(canSeeCashPosition(actor)).toBe(true);
+    }
   });
 });

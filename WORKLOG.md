@@ -1,3 +1,52 @@
+## 2026-09-07 · The cash position is the two who sign for money
+
+The owner, pointing at the panel under the check register: *"show this part to admin and payment approver only.
+Do not show to accounting role or any one not given the authority."*
+
+It had been shown to everyone who could open Check monitoring — which includes **Accounting**, because they
+attach and read the checks and need the schedule. The panel underneath is a different thing: the bank balance,
+what the company can still fund, and how far short it is.
+
+### Not hidden — never sent
+
+The figures are not fetched at all for someone who may not see them. Rendering the panel and hiding it would
+still ship the bank balance to their browser in the page payload, where "hidden" means nothing; so
+`getCashPosition()` and the Receivables lookup only run once the rule has said yes.
+
+### Two rules, not one
+
+- **`canSeeCashPosition`** — admin or Payment Approver.
+- **`canEditCashPosition`** — admin alone, *unchanged*. The owner widened who is SHOWN the panel; typing in a
+  bank balance nothing in the system can check against a bank is a different act from reading one. Kept as its
+  own function so widening the view cannot quietly widen the keyboard, with a test asserting nobody can type a
+  figure they are not even shown.
+
+Both are deliberately separate from `canAttachCheck`, which governs the page. The two agreed about the admin and
+the Payment Approver to start with, and **every** previous widening of the check rules has been about
+Accounting — sharing one function would have dragged this panel along with the next one.
+
+The server action was on `assertCheckAdmin` ("only an admin can clear a check or move its clearing date"), which
+happened to give the right answer for the wrong reason. It now asks `canEditCashPosition` directly.
+
+### The grid, and then the screen
+
+| | opens Check monitoring | sees the panel | types the figures | figures sent to the browser |
+| --- | --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | ✓ | ✓ |
+| **Payment Approver** | ✓ | ✓ | — | ✓ |
+| **Accounting** | ✓ | — | — | **—** |
+| Purchaser, Warehouse, Sales, Engineer | — | — | — | — |
+
+That last column is the point, and it is read off the WHOLE response rather than the rendered text. It has to be
+TRUE for the two who may see the panel as well as false for Accounting — otherwise the check would pass on a
+page that sent nobody anything.
+
+Confirmed on the running app: Accounting's Check monitoring is intact — register, tabs, totals, every check
+control they had — with no panel and no figures anywhere in the response. The Payment Approver gets the whole
+panel and no Edit button.
+
+Seven new tests, 419 pass.
+
 ## 2026-09-06 · The item code, beside the item — and nowhere near the supplier
 
 The owner, on a Fans & Blower requisition: *"Show the sku number at the right side of the item. Show it in mrf,
