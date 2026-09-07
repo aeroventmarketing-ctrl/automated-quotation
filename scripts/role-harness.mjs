@@ -177,6 +177,8 @@ const PROBES = [
     // …and the two that have none show nothing at all, rather than "SKU —".
     uncoded: (t) => !/CUTTING DISC 4in\s+SKU/.test(skuItemBlock(t)),
     unknown: (t) => !/SOMETHING TYPED BY HAND\s+SKU/.test(skuItemBlock(t)),
+    // A catalogued item with a remark typed into it still shows its code.
+    remarked: (t) => /Rated capacity 80 kg\)\s+SKU PRD10005/.test(skuItemBlock(t)),
   } },
   /**
    * The due date of purchase — *"purchaser or admin/payment approver can add due
@@ -237,7 +239,9 @@ const skuItemBlock = (t) => {
   const end = t.indexOf("SOMETHING TYPED BY HAND");
   if (end < 0) return "";
   const start = t.lastIndexOf("GI SHEET 24GA", end);
-  return start < 0 ? "" : t.slice(start, end + 60);
+  // Long enough to reach the fourth line (the one carrying a remark), which sits
+  // after the marker the block is pinned by.
+  return start < 0 ? "" : t.slice(start, end + 220);
 };
 
 /** Does `re` appear in the text just AFTER `marker` — i.e. on that PO's own row? */
@@ -302,13 +306,24 @@ async function seed() {
   // nothing to offer and renders its empty state, so a probe of the picker would
   // be measuring the wrong screen. Names match the stock items so the item-code
   // lookup has something to find either way.
-  await p.product.deleteMany({ where: { name: { startsWith: "HARNESS " } } });
+  // Delete by the harness ID prefix, not by name: a fixture removed from the
+  // list below still exists in the database from an earlier run, and a
+  // name-based sweep leaves it there. That is exactly how "CUTTING DISC 4in"
+  // kept a code after being taken out of the catalogue, and the probe reported a
+  // regression that was really a stale row.
+  await p.product.deleteMany({ where: { id: { startsWith: "harness-prd-" } } });
+  // NOTE: "CUTTING DISC 4in" is deliberately NOT here. It is the fixture's only
+  // item with no code anywhere — stocked but never given a SKU — and adding it
+  // to the catalogue would quietly give it one, taking the "shows nothing" case
+  // with it. The `sku` probe caught exactly that.
   for (const [name, sku, unit] of [
     ["GI SHEET 24GA", "PRD10001", "pc"],
     ["BELT B-50", "PRD10002", "pc"],
-    ["CUTTING DISC 4in", "PRD10003", "pc"],
     // Catalogue-only: not stocked, so it exercises the product half of the join.
     ["HARNESS OFFICE PAPER", "PRD10004", "ream"],
+    // The owner's item — the one whose code vanished the moment a remark was
+    // typed into the row, because the remark is glued onto the item name.
+    ["VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY", "PRD10005", "pc"],
   ]) {
     await p.product.upsert({ where: { id: `harness-prd-${sku}` }, update: { name, sku, unit, active: true }, create: { id: `harness-prd-${sku}`, name, sku, unit, active: true } });
   }
@@ -480,6 +495,9 @@ async function seed() {
         "10 pc · GI SHEET 24GA",
         "2 pc · CUTTING DISC 4in",
         "1 pc · SOMETHING TYPED BY HAND",
+        // The owner's row, verbatim: a catalogued item with a REMARK, which the
+        // line format glues on in brackets. Its code went missing.
+        "6 pc · VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY (Spring Vibration Isolator · Foot Mounted · Rated capacity 80 kg)",
       ],
       note: `HARNESS-${status}`, status,
       po: poFor(poNo),
