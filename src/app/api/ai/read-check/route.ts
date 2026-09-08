@@ -15,6 +15,8 @@ import {
   type CheckDoc, type CheckRead,
 } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { poBatchId } from "@/lib/purchase-batch";
+import { otherPurchaseOrdersWithCheck, type CheckHolder } from "@/lib/check-duplicates";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
 import { COMPANY } from "@/lib/config";
@@ -282,18 +284,40 @@ export async function POST(req: NextRequest) {
     // number recorded on ANY OTHER purchase order counts as used, so the same
     // check can't quietly pay two POs.
     const po = coercePurchaseOrder(pr.po);
-    const others = await prisma.purchaseRequest.findMany({
-      where: { id: { not: pr.id } },
-      select: { voucherCheckDocs: true },
+    /**
+     * Which OTHER purchase orders carry this check number.
+     *
+     * Every row is fetched, including this one, because the question is asked per
+     * PURCHASE ORDER and a combined PO is several rows sharing one PO number —
+     * `otherPurchaseOrdersWithCheck` groups them and drops the ones that are
+     * really this same PO. It also drops cancelled and rejected requests: no
+     * money moved on those, so they are not a second record of this payment.
+     */
+    const all = await prisma.purchaseRequest.findMany({
+      select: { id: true, po: true, status: true, voucherCheckDocs: true },
     });
-    const usedCheckNos = others.flatMap((o) => coerceCheckDocs(o.voucherCheckDocs).map((d) => d.read?.checkNo ?? "")).filter(Boolean);
+    const holders: CheckHolder[] = all.map((o) => {
+      const otherPo = coercePurchaseOrder(o.po);
+      return {
+        id: o.id,
+        poNumber: otherPo?.poNumber ?? null,
+        batchId: poBatchId(o.po),
+        status: o.status,
+        checkNos: coerceCheckDocs(o.voucherCheckDocs).map((d) => d.read?.checkNo ?? "").filter(Boolean),
+      };
+    });
+    const duplicateOnPos = otherPurchaseOrdersWithCheck(
+      read.checkNo,
+      { id: pr.id, poNumber: po?.poNumber ?? null, batchId: poBatchId(pr.po) },
+      holders,
+    );
 
     const issues = checkIssues({
       read,
       supplierCompany: po?.supplier.company ?? "",
       netAmount: po ? poTotals(po).net : 0,
       ourCompany: COMPANY.name,
-      usedCheckNos,
+      duplicateOnPos,
       inWords: pesoAmountInWords,
     });
     read.issues = issues;

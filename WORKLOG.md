@@ -1,3 +1,206 @@
+## 2026-09-08 · Downloading the register is the two who sign for money
+
+The owner, answering the question I left open yesterday: *"admin/payment approver can download. accounting role
+has mo capability to download."*
+
+I had put the cash position on the file **under the same rule as the screen** — admin and Payment Approver get
+the ten lines, Accounting gets the register and no bank balance — and said so, in case they meant the other
+thing. They meant something narrower still: Accounting does not get the **file** at all.
+
+So there is now a third rule, `canDownloadCheckRegister`, beside `canAttachCheck` in `voucher-check.ts`:
+
+| | see Check monitoring | download it | see the cash position |
+| --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | ✓ |
+| **Payment Approver** | ✓ | ✓ | ✓ |
+| **Accounting** | ✓ | — | — |
+| everyone else | — | — | — |
+
+Three columns, three functions. `canDownloadCheckRegister` and `canSeeCashPosition` would answer identically
+today and are still separate on purpose: one is *may this person hold a copy of the register*, the other *may
+this person see the bank balance*. Every widening of the check rules so far has been about Accounting, and one
+shared function is how the next one drags the other along without anybody noticing.
+
+### The routes are the rule; the buttons are only manners
+
+Hiding the two links would have left `/checks/xlsx` and `/checks/pdf` answering to anyone who typed the URL —
+the exact shape of every permission bug that has reached the owner. Both routes now 403 unless the rule says
+yes, and the page simply stops offering a button that would 403. Absent rather than greyed out: a disabled
+button nobody may ever press is a standing question, and this one is settled.
+
+### On the running app
+
+The harness asks the ROUTES now, not just the page — a new `dl-xlsx` / `dl-pdf` probe, where a non-200 makes
+every cell false, so `served` means exactly *this role got the file*:
+
+| | Excel button | PDF button | `/checks/xlsx` | `/checks/pdf` |
+| --- | --- | --- | --- | --- |
+| **Admin Ana** | ✓ | ✓ | 200 · 8,615 B | 200 · 6,414 B |
+| **Rey Gil** (Payment Approver) | ✓ | ✓ | 200 · 8,614 B | 200 · 6,414 B |
+| **Michelle Cotura** (Accounting) | — | — | **403** | **403** |
+| Allan Ramos (Purchaser) | — | — | **403** | **403** |
+
+Michelle's Check monitoring page is otherwise untouched — 19 upcoming, ₱180,292.39 still to clear, the search
+box, the grouping, the `unconfirmed` notice, all of it. She works the register; she does not carry it out. Rey
+Gil's PDF still comes out whole, cash block and all: Outstanding Check 50,210.75 · Available Bank Balance
+**+49,789.25** · Available Funds **+672,147.65** · Funding Shortfall **+491,855.26**.
+
+Seven new tests — the whole grid at once, so the Accounting cell is asserted rather than merely absent, plus one
+that pins `canAttachCheck` and `canDownloadCheckRegister` apart. 477 pass.
+
+## 2026-09-08 · The cash position goes on the file too
+
+The owner: *"include cash position in the printed or downloaded file."*
+
+I had left it out on purpose, and said so — two days earlier the same panel became an admin / Payment Approver
+thing (*"do not show to accounting role or any one not given the authority"*), and a download carrying it would
+have handed the bank balance to Accounting by the back door.
+
+So it goes on the file **under the same rule as the screen**. `canSeeCashPosition` decides in both routes exactly
+as it does on the page: an admin and the Payment Approver get the ten lines; Accounting gets the register and no
+bank balance. That is the only reading of the two instructions that does not undo one with the other.
+
+### The figures are the WHOLE register's, and the sheet says so
+
+This is the trap. The download carries whatever the screen was filtered to — but Outstanding Check and Accounts
+Payable are facts about **every** open check, so they are built from `checkWatchSummary(rows)` over the
+unfiltered register. A search box that moved the bank balance would be alarming and wrong.
+
+Confirmed on the running app: with a search and without, the block is identical to the centavo.
+
+And because a printed cash position is read away from the app, by somebody who cannot click anything to find
+out, the sheet explains itself:
+
+> Outstanding Check and Accounts Payable come from the whole register, not the rows above; Receivables from the
+> Management Dashboard. Cash in Bank, Cash on Hand and Expected Collections were entered by hand — last by
+> Reyjellan Gil on 2026-09-08.
+
+The three hand-entered lines are named because a stale one is the only way this can be quietly wrong.
+
+### One list of lines, three places
+
+`cashPositionLines()` is the panel's ten rows in the panel's order, read by the spreadsheet and the PDF alike —
+a printed sheet and a screen that disagree about a bank balance is the worst kind of difference, quotable and
+wrong. The signed figures keep the owner's *"+ or - indicator"*, with a true minus sign.
+
+### On the running app
+
+| | Excel | PDF |
+| --- | --- | --- |
+| **Admin** | cash block ✓ | cash block ✓ |
+| **Payment Approver** | cash block ✓ | cash block ✓ |
+| **Accounting** | register only | register only |
+
+Downloaded and read back: Cash in Bank 100,000.00 · Available Bank Balance **+49,789.25** · Receivables
+622,358.40 · Available Funds **+672,147.65** · Accounts Payable 180,292.39 · Funding Shortfall **+491,855.26** —
+and 100,000 − 50,210.75 and 672,147.65 − 180,292.39 both come out right. Accounting's workbook has no CASH
+POSITION row at all; their PDF is 2,196 bytes against the admin's 3,743.
+
+Four new tests, 470 pass.
+## 2026-09-08 · The check register, downloadable — as Excel and as PDF
+
+The owner, on Check monitoring: *"add an option to download in excel file and pdf file."*
+
+### It downloads the register you are LOOKING at
+
+Not "all checks". By the time somebody wants a file they have already picked a tab, searched it, sorted it and
+grouped it, and that arrangement is the thing they want on paper. So the table puts its view state in the query
+string and both routes rebuild it through `buildCheckRegisterView` — the same search, sort and group functions
+the screen itself uses. Two implementations of "sorted by clearing date" would drift the first time either was
+touched.
+
+Every file says what it is, in its own header and in the PDF's page footer:
+
+> Checks still to clear · 17 rows · sorted by Amount descending · grouped by Company · matching "harness" · as of
+> 2026-09-08
+
+The search terms are in there deliberately. A printed page that silently omits half the register is worse than
+one that admits what it left out.
+
+### One row shape, two formats
+
+`check-register-export.ts` flattens a row once, and both the spreadsheet and the PDF read it — otherwise the two
+drift into disagreeing about the same register, which is the sort of difference nobody notices until it is
+quoted at somebody. The columns are the screen's own, minus the Actions column (a button is not a fact) and the
+photo link (a dead link the moment it leaves the app).
+
+**Amount stays a NUMBER in Excel**, which is the whole reason for offering a spreadsheet rather than only a PDF.
+The notes the screen prints *under* the date — moved from, date corrected by, unconfirmed — have nowhere to go
+in a fixed grid, so they join Remarks, where they read as sentences.
+
+### What is NOT in it
+
+The **Cash position** panel. That is the bank balance, and two days ago it became an admin / Payment Approver
+thing; a download carrying it would have handed it to Accounting by the back door. The harness grid shows the
+shape of that: Accounting gets both buttons, no panel, and no figures in the payload.
+
+| | page | Excel · PDF | cash panel | figures sent |
+| --- | --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | ✓ | ✓ |
+| **Payment Approver** | ✓ | ✓ | ✓ | ✓ |
+| **Accounting** | ✓ | ✓ | — | — |
+| Purchaser, Warehouse, Sales, Engineer | — | — | — | — |
+
+The routes enforce it themselves rather than trusting the missing button: **403** for the Purchaser and Sales,
+**200** for the three the page is open to.
+
+### The PDF found a bad row
+
+Rendered and read back, the register printed **`not-a-date`** in the Date Paid/Cleared column — a deliberately
+hostile fixture carrying a garbage clearing date. It is not information, and printing it just moves the
+confusion onto paper, so a date cell now holds a real calendar day or nothing at all.
+
+Downloaded from the running app and read back: 19 rows by default; `?q=harness&sort=amount&dir=desc&group=company`
+gives 17 rows in company groups with subtotals, largest first. The PDF comes out as two landscape pages, grouped
+by clearing month with subtotals and a total.
+
+Thirteen new tests, 466 pass.
+## 2026-09-07 · "Already recorded on another purchase order" — asked per PO, and it says which
+
+The owner, on PO-AFBM20260000609: *"check the error Check No. 0000486718 is already recorded on another
+purchase order."*
+
+### The question was asked of the wrong thing
+
+The test compared this purchase-request ROW against every other row. But `purchase-batch.ts` says it plainly:
+
+> *every member PurchaseRequest carries the SAME `po` JSON (with the combined lines and one PO number)*
+
+A **combined PO is several rows and one purchase order.** Each of those rows renders its own check control on the
+order page, so a check attached from two of them is one check, on one PO, sitting on two rows — and the old test
+reported it as a duplicate of itself. It also counted **cancelled and rejected** requests, where no money ever
+moved: a PO cancelled and re-raised with the same check is one payment, and being told otherwise sends somebody
+hunting for a second one.
+
+The unit is now the purchase order: its batch id, else its PO number, else the row's own id for a request with
+no PO yet.
+
+### And the message could not be checked
+
+*"…is already recorded on another purchase order"* names nothing, so there was no way to go and look — which is
+exactly what the owner asked to do. It now reads:
+
+> Check No. 0000486718 is also recorded on **PO-AFBM20260000610**. One of the two is the wrong photo, unless this
+> check really did pay both.
+
+Named, and not phrased as a verdict: one check paying two POs is unusual, not impossible, and the screen should
+not tell somebody they are wrong about their own payment.
+
+### Verified against real rows, through the query the route runs
+
+Seeded into the database and read back with the route's own `findMany`:
+
+- a **combined PO** whose check sits on two member rows, plus a **cancelled** PO that once carried the same
+  check → **no warning**. Under the old rule both fired.
+- the same, plus a genuine second live PO → **`["PO-AFBM20260000777"]`**, named.
+
+Ten new tests, 453 pass.
+
+### Worth knowing
+
+The issue is computed and STORED at the moment of reading — deliberately, since it needs every other PO's
+numbers. So a warning already stored on a check keeps its old wording, and its old verdict, until somebody
+presses **Re-read** on that check. For PO-AFBM20260000609 that is the way to find out what this now says.
 ## 2026-09-07 · A remark stopped hiding the item's code
 
 The owner: *"when user make an input in the remarks, it shows no SKU, although the item is stored in inventory

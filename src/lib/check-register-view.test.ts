@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   searchCheckRows, sortCheckRows, groupCheckRows, DEFAULT_CHECK_SORT,
+  buildCheckRegisterView, coerceCheckSort, coerceCheckDir, coerceCheckGroup, coerceCheckTab,
 } from "./check-register-view";
 import type { CheckWatchRow } from "./check-monitor";
 
@@ -168,6 +169,82 @@ describe("grouping", () => {
     for (const by of ["none", "company", "status", "month"] as const) {
       const n = groupCheckRows(REGISTER, by).reduce((s, g) => s + g.rows.length, 0);
       expect(n, by).toBe(REGISTER.length);
+    }
+  });
+});
+
+/**
+ * The owner: *"add an option to download in excel file and pdf file."*
+ *
+ * A download of "the register" is useless if it is not the register on screen,
+ * so the export rebuilds the view from the URL through these same functions.
+ * What is asserted here is that the rebuild really is the same arrangement.
+ */
+describe("rebuilding the view for a download", () => {
+  it("defaults to exactly what the screen opens with", () => {
+    const v = buildCheckRegisterView(REGISTER);
+    expect(v.tab).toBe("open");
+    expect(v.groups).toHaveLength(1);
+    expect(v.groups[0].rows.map((r) => r.prId))
+      .toEqual(sortCheckRows(REGISTER, DEFAULT_CHECK_SORT.key, DEFAULT_CHECK_SORT.dir).map((r) => r.prId));
+  });
+
+  it("splits the two tabs the way the screen does", () => {
+    const rows = [...REGISTER, row({ prId: "done", state: "cleared", clearedOn: "2026-09-01" })];
+    expect(buildCheckRegisterView(rows, { tab: "open" }).count).toBe(REGISTER.length);
+    const cleared = buildCheckRegisterView(rows, { tab: "cleared" });
+    expect(cleared.count).toBe(1);
+    expect(cleared.groups[0].rows[0].prId).toBe("done");
+  });
+
+  it("applies the search, the sort and the grouping together", () => {
+    const v = buildCheckRegisterView(REGISTER, { query: "tozen", sort: "amount", dir: "desc", group: "company" });
+    expect(v.count).toBe(2);
+    expect(v.groups.map((g) => g.label)).toEqual(["TOZEN PHILIPPINES INC."]);
+    expect(v.groups[0].rows.map((r) => r.amount)).toEqual([2160.54, 2081.25]);
+    expect(v.total).toBeCloseTo(4241.79, 2);
+  });
+
+  /**
+   * A printed page that silently omits half the register is worse than one that
+   * says what it left out — so the arrangement, and any search, is on the page.
+   */
+  it("describes itself, search included", () => {
+    const v = buildCheckRegisterView(REGISTER, { query: " tozen ", sort: "amount", dir: "desc", group: "company" });
+    expect(v.caption).toContain("Checks still to clear");
+    expect(v.caption).toContain("2 rows");
+    expect(v.caption).toContain("sorted by Amount descending");
+    expect(v.caption).toContain("grouped by Company");
+    expect(v.caption).toContain('matching "tozen"');
+    // …and says nothing about a search nobody made.
+    expect(buildCheckRegisterView(REGISTER).caption).not.toContain("matching");
+    expect(buildCheckRegisterView(REGISTER, { tab: "cleared" }).caption).toContain("Cleared checks");
+  });
+
+  it("counts one row as one row", () => {
+    expect(buildCheckRegisterView(REGISTER, { query: "486726" }).caption).toContain("1 row ");
+  });
+});
+
+/**
+ * Everything in the URL is a stranger's string. Each coercer falls back to what
+ * the screen itself opens with, so a mangled link downloads the default register
+ * rather than an empty file or an error.
+ */
+describe("reading the view back off a URL", () => {
+  it("takes the values it knows", () => {
+    expect(coerceCheckSort("amount")).toBe("amount");
+    expect(coerceCheckDir("desc")).toBe("desc");
+    expect(coerceCheckGroup("month")).toBe("month");
+    expect(coerceCheckTab("cleared")).toBe("cleared");
+  });
+
+  it("falls back to the screen's own defaults for anything else", () => {
+    for (const junk of ["", "nonsense", null, undefined, "__proto__", "constructor"]) {
+      expect(coerceCheckSort(junk), String(junk)).toBe(DEFAULT_CHECK_SORT.key);
+      expect(coerceCheckDir(junk), String(junk)).toBe(DEFAULT_CHECK_SORT.dir);
+      expect(coerceCheckGroup(junk), String(junk)).toBe("none");
+      expect(coerceCheckTab(junk), String(junk)).toBe("open");
     }
   });
 });

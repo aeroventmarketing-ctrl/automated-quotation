@@ -2,7 +2,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { Card, CardContent } from "@/components/ui/card";
-import { canAttachCheck } from "@/lib/voucher-check";
+import { canAttachCheck, canDownloadCheckRegister } from "@/lib/voucher-check";
 import { checkWatchSummary, CHECK_NOTICE_DAYS } from "@/lib/check-monitor";
 import { loadCheckRegister } from "@/lib/check-register";
 import { PH_TIME_ZONE } from "@/lib/utils";
@@ -41,6 +41,9 @@ export default async function ChecksPage() {
     accounting: userHasWorkflowRole(assignments, viewer.id, "accounting"),
   };
   const showCash = canSeeCashPosition(cashActor);
+  // …and so is taking the register away: *"admin/payment approver can download.
+  // accounting role has mo capability to download."*
+  const canDownload = canDownloadCheckRegister(cashActor);
 
   if (!canView) {
     return (
@@ -98,7 +101,7 @@ export default async function ChecksPage() {
         </Card>
       ) : (
         <>
-          <CheckMonitor rows={rows} summary={summary} admin={admin} todayYMD={todayYMD} />
+          <CheckMonitor rows={rows} summary={summary} admin={admin} canDownload={canDownload} todayYMD={todayYMD} />
           {cash && <CashPositionPanel pos={cash} admin={canEditCashPosition(cashActor)} />}
         </>
       )}

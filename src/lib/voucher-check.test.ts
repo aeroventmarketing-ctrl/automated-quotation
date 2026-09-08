@@ -7,6 +7,7 @@ import {
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
   clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt, isClearingYMD,
   hasUnlimitedCheckReads, checkReadsUsed, checkReadsLeft, canReadCheckAgain, nextCheckReadCount,
+  canDownloadCheckRegister,
   type CheckDoc,
   type CheckRead,
 } from "./voucher-check";
@@ -75,6 +76,32 @@ describe("who may attach a check photo", () => {
   for (const [who, opts, expected] of CAN) {
     it(who, () => expect(canAttachCheck(opts)).toBe(expected));
   }
+});
+
+describe("who may download the check register", () => {
+  // *"admin/payment approver can download. accounting role has mo capability to
+  // download."* The whole grid at once, so the Accounting cell is asserted and
+  // not merely absent.
+  const CAN: Array<[string, Parameters<typeof canDownloadCheckRegister>[0], boolean]> = [
+    ["Admin", { admin: true }, true],
+    ["Payment Approver", { paymentApprover: true }, true],
+    ["Accounting", { accounting: true }, false],
+    // An admin who also holds Accounting is still an admin.
+    ["an admin who is also Accounting", { admin: true, accounting: true }, true],
+    ["nobody in particular", {}, false],
+    ["no actor at all", undefined, false],
+  ];
+  for (const [who, actor, expected] of CAN) {
+    it(who, () => expect(canDownloadCheckRegister(actor)).toBe(expected));
+  }
+
+  it("is narrower than seeing the page", () => {
+    // Accounting may open Check monitoring and may not carry it out. If these
+    // two ever agree again, one of them was widened by accident.
+    const acct = { admin: false, workflowRoles: ["accounting"] };
+    expect(canAttachCheck(acct)).toBe(true);
+    expect(canDownloadCheckRegister({ accounting: true })).toBe(false);
+  });
 });
 
 describe("when a check is expected", () => {
@@ -547,10 +574,29 @@ describe("what the read is cross-examined against", () => {
     expect(ok({ read }).map((i) => i.key)).toContain("account");
   });
 
-  it("flags a check number already recorded on another PO", () => {
-    // Leading zeros and any formatting are ignored on both sides.
-    expect(ok({ usedCheckNos: ["486722"] }).map((i) => i.key)).toContain("duplicate");
-    expect(ok({ usedCheckNos: ["0000486723"] })).toEqual([]);
+  /**
+   * WHICH other PO is the whole point. "Already recorded on another purchase
+   * order" is a claim the reader cannot check, and the owner asked exactly that
+   * about a live one. Deciding *whether* there is a duplicate now belongs to
+   * `otherPurchaseOrdersWithCheck`, which can see the whole table; this only
+   * says it well.
+   */
+  it("names the other PO, so the claim can be checked", () => {
+    const [issue] = ok({ duplicateOnPos: ["PO-AFBM20260000610"] });
+    expect(issue.key).toBe("duplicate");
+    expect(issue.message).toContain("0000486722");
+    expect(issue.message).toContain("PO-AFBM20260000610");
+    expect(issue.message).not.toMatch(/another purchase order\.?$/);
+  });
+
+  it("names both when a check somehow reached two", () => {
+    const [issue] = ok({ duplicateOnPos: ["PO-A", "PO-B"] });
+    expect(issue.message).toContain("PO-A and PO-B");
+  });
+
+  it("says nothing when there is no other PO", () => {
+    expect(ok({ duplicateOnPos: [] })).toEqual([]);
+    expect(ok({})).toEqual([]);
   });
 
   it("flags a photo the model wasn't sure of", () => {
