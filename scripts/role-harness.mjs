@@ -142,14 +142,24 @@ const PROBES = [
     open: (t) => !t.includes("don't have access to check monitoring"),
     panel: (t) => t.includes("Cash position"),
     edit: (t) => /Cash position[\s\S]{0,4000}?\bEdit\b/.test(t),
-    // *"add an option to download in excel file and pdf file."* Offered to
-    // everyone the page is open to, and to nobody else — the routes enforce the
-    // same rule server-side, so a missing button is a UI bug, not a leak.
+    // *"admin/payment approver can download. accounting role has mo capability
+    // to download."* So these two follow `panel`, not `open`: Accounting works
+    // the register on screen and is offered no way to carry it out.
     excel: (t) => /\bExcel\b/.test(t),
     pdf: (t) => /\bPDF\b/.test(t),
   }, raw: {
     figuresSent: (html) => /Available Bank Balance|Funding Shortfall|fundingShortfall/.test(html),
   } },
+  /**
+   * …and the same question asked of the ROUTES, not the page.
+   *
+   * A probe that only read the two buttons would pass on a page that hid them
+   * while the route still handed the file to anyone who typed the URL — which is
+   * the shape of every permission bug that has reached the owner. A non-200
+   * makes every cell false, so `served` is exactly "this role got the file".
+   */
+  { path: "/checks/xlsx?tab=open", label: "dl-xlsx", checks: { served: () => true } },
+  { path: "/checks/pdf?tab=open", label: "dl-pdf", checks: { served: () => true } },
   /**
    * The Articles / Description cell — *"disallow editing in articles/description
    * to all roles including the purchaser role. Let all roles choose from drop

@@ -1,14 +1,15 @@
 /**
  * The check register as a PDF — see the xlsx route beside this one for why the
- * view is rebuilt from the query string rather than exported whole, and why the
- * Cash position goes only to the two people the panel itself is for.
+ * view is rebuilt from the query string rather than exported whole, why
+ * downloading is admin / Payment Approver only, and why the Cash position goes
+ * only to the two people the panel itself is for.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import React from "react";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck } from "@/lib/voucher-check";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { canDownloadCheckRegister } from "@/lib/voucher-check";
 import { loadCheckRegister } from "@/lib/check-register";
 import { buildCheckRegisterView, coerceCheckSort, coerceCheckDir, coerceCheckGroup, coerceCheckTab } from "@/lib/check-register-view";
 import { checkExportFileName } from "@/lib/check-register-export";
@@ -26,16 +27,15 @@ export async function GET(req: NextRequest) {
   if (!viewer) return new NextResponse("Unauthorized", { status: 401 });
   const assignments = await getWorkflowRoles();
   const admin = isAdmin(viewer);
-  const allowed = canAttachCheck({
-    admin,
-    workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => userHasWorkflowRole(assignments, viewer.id, r)),
-  });
-  if (!allowed) return new NextResponse("You don't have access to check monitoring.", { status: 403 });
-  const showCash = canSeeCashPosition({
+  const actor = {
     admin,
     paymentApprover: userHasWorkflowRole(assignments, viewer.id, "payment_approver"),
     accounting: userHasWorkflowRole(assignments, viewer.id, "accounting"),
-  });
+  };
+  if (!canDownloadCheckRegister(actor)) {
+    return new NextResponse("You don't have access to download the check register.", { status: 403 });
+  }
+  const showCash = canSeeCashPosition(actor);
 
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const rows = await loadCheckRegister(todayYMD);

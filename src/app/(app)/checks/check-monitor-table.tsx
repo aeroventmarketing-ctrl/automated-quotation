@@ -56,11 +56,18 @@ export function CheckMonitor({
   rows,
   summary,
   admin,
+  canDownload,
   todayYMD,
 }: {
   rows: CheckWatchRow[];
   summary: CheckWatchSummary;
   admin: boolean;
+  /**
+   * Admin / Payment Approver. Accounting reads the register here and does not
+   * take it away — *"accounting role has mo capability to download."* The routes
+   * enforce it; this only stops offering a button that would answer 403.
+   */
+  canDownload: boolean;
   todayYMD: string;
 }) {
   const router = useRouter();
@@ -208,23 +215,29 @@ export function CheckMonitor({
             the arrangement on screen — tab, search, sort, grouping — so the file
             is the register the person is looking at, not a different one. Plain
             links: a download is a GET, and a button that fetches a blob would
-            only get in the way of "open in a new tab". */}
-        <span className="inline-flex items-center gap-1">
-          <a
-            href={`/checks/xlsx?${exportQuery}`}
-            className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
-            title="Download this register as an Excel file"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
-          </a>
-          <a
-            href={`/checks/pdf?${exportQuery}`}
-            className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
-            title="Download this register as a PDF"
-          >
-            <FileText className="h-3.5 w-3.5" /> PDF
-          </a>
-        </span>
+            only get in the way of "open in a new tab".
+
+            Absent entirely for Accounting rather than shown-and-disabled: a
+            greyed button they may never press is a standing question, and the
+            answer is settled. */}
+        {canDownload && (
+          <span className="inline-flex items-center gap-1">
+            <a
+              href={`/checks/xlsx?${exportQuery}`}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
+              title="Download this register as an Excel file"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+            </a>
+            <a
+              href={`/checks/pdf?${exportQuery}`}
+              className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
+              title="Download this register as a PDF"
+            >
+              <FileText className="h-3.5 w-3.5" /> PDF
+            </a>
+          </span>
+        )}
       </div>
 
       {query.trim() && (

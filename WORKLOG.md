@@ -1,3 +1,53 @@
+## 2026-09-08 · Downloading the register is the two who sign for money
+
+The owner, answering the question I left open yesterday: *"admin/payment approver can download. accounting role
+has mo capability to download."*
+
+I had put the cash position on the file **under the same rule as the screen** — admin and Payment Approver get
+the ten lines, Accounting gets the register and no bank balance — and said so, in case they meant the other
+thing. They meant something narrower still: Accounting does not get the **file** at all.
+
+So there is now a third rule, `canDownloadCheckRegister`, beside `canAttachCheck` in `voucher-check.ts`:
+
+| | see Check monitoring | download it | see the cash position |
+| --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | ✓ |
+| **Payment Approver** | ✓ | ✓ | ✓ |
+| **Accounting** | ✓ | — | — |
+| everyone else | — | — | — |
+
+Three columns, three functions. `canDownloadCheckRegister` and `canSeeCashPosition` would answer identically
+today and are still separate on purpose: one is *may this person hold a copy of the register*, the other *may
+this person see the bank balance*. Every widening of the check rules so far has been about Accounting, and one
+shared function is how the next one drags the other along without anybody noticing.
+
+### The routes are the rule; the buttons are only manners
+
+Hiding the two links would have left `/checks/xlsx` and `/checks/pdf` answering to anyone who typed the URL —
+the exact shape of every permission bug that has reached the owner. Both routes now 403 unless the rule says
+yes, and the page simply stops offering a button that would 403. Absent rather than greyed out: a disabled
+button nobody may ever press is a standing question, and this one is settled.
+
+### On the running app
+
+The harness asks the ROUTES now, not just the page — a new `dl-xlsx` / `dl-pdf` probe, where a non-200 makes
+every cell false, so `served` means exactly *this role got the file*:
+
+| | Excel button | PDF button | `/checks/xlsx` | `/checks/pdf` |
+| --- | --- | --- | --- | --- |
+| **Admin Ana** | ✓ | ✓ | 200 · 8,615 B | 200 · 6,414 B |
+| **Rey Gil** (Payment Approver) | ✓ | ✓ | 200 · 8,614 B | 200 · 6,414 B |
+| **Michelle Cotura** (Accounting) | — | — | **403** | **403** |
+| Allan Ramos (Purchaser) | — | — | **403** | **403** |
+
+Michelle's Check monitoring page is otherwise untouched — 19 upcoming, ₱180,292.39 still to clear, the search
+box, the grouping, the `unconfirmed` notice, all of it. She works the register; she does not carry it out. Rey
+Gil's PDF still comes out whole, cash block and all: Outstanding Check 50,210.75 · Available Bank Balance
+**+49,789.25** · Available Funds **+672,147.65** · Funding Shortfall **+491,855.26**.
+
+Seven new tests — the whole grid at once, so the Accounting cell is asserted rather than merely absent, plus one
+that pins `canAttachCheck` and `canDownloadCheckRegister` apart. 477 pass.
+
 ## 2026-09-08 · The cash position goes on the file too
 
 The owner: *"include cash position in the printed or downloaded file."*

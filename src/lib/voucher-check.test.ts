@@ -7,6 +7,7 @@ import {
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
   clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt, isClearingYMD,
   hasUnlimitedCheckReads, checkReadsUsed, checkReadsLeft, canReadCheckAgain, nextCheckReadCount,
+  canDownloadCheckRegister,
   type CheckDoc,
   type CheckRead,
 } from "./voucher-check";
@@ -75,6 +76,32 @@ describe("who may attach a check photo", () => {
   for (const [who, opts, expected] of CAN) {
     it(who, () => expect(canAttachCheck(opts)).toBe(expected));
   }
+});
+
+describe("who may download the check register", () => {
+  // *"admin/payment approver can download. accounting role has mo capability to
+  // download."* The whole grid at once, so the Accounting cell is asserted and
+  // not merely absent.
+  const CAN: Array<[string, Parameters<typeof canDownloadCheckRegister>[0], boolean]> = [
+    ["Admin", { admin: true }, true],
+    ["Payment Approver", { paymentApprover: true }, true],
+    ["Accounting", { accounting: true }, false],
+    // An admin who also holds Accounting is still an admin.
+    ["an admin who is also Accounting", { admin: true, accounting: true }, true],
+    ["nobody in particular", {}, false],
+    ["no actor at all", undefined, false],
+  ];
+  for (const [who, actor, expected] of CAN) {
+    it(who, () => expect(canDownloadCheckRegister(actor)).toBe(expected));
+  }
+
+  it("is narrower than seeing the page", () => {
+    // Accounting may open Check monitoring and may not carry it out. If these
+    // two ever agree again, one of them was widened by accident.
+    const acct = { admin: false, workflowRoles: ["accounting"] };
+    expect(canAttachCheck(acct)).toBe(true);
+    expect(canDownloadCheckRegister({ accounting: true })).toBe(false);
+  });
 });
 
 describe("when a check is expected", () => {

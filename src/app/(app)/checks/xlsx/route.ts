@@ -8,11 +8,14 @@
  * implementations of "sorted by clearing date" would drift the first time either
  * was touched.
  *
+ * Downloading is narrower than the page: *"admin/payment approver can download.
+ * accounting role has mo capability to download."* Accounting sees the register
+ * on screen and cannot take a copy of it away, so this route answers **403** to
+ * them — hiding the two buttons is not the rule, this is.
+ *
  * The **Cash position** panel rides along — the owner's *"include cash position
- * in the printed or downloaded file."* — but only for the people the panel
- * itself is for. `canSeeCashPosition` decides here exactly as it does on screen,
- * so the download cannot become a way round a rule the owner set two days ago:
- * Accounting gets the register, and no bank balance.
+ * in the printed or downloaded file."* — for everyone the file now reaches,
+ * which after that ruling is the same two people the panel itself is for.
  *
  * Its figures come from the WHOLE register, never from the filtered view. A
  * search box that changed "Outstanding Check" would be alarming and wrong.
@@ -20,8 +23,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canAttachCheck } from "@/lib/voucher-check";
+import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
+import { canDownloadCheckRegister } from "@/lib/voucher-check";
 import { loadCheckRegister } from "@/lib/check-register";
 import { buildCheckRegisterView, coerceCheckSort, coerceCheckDir, coerceCheckGroup, coerceCheckTab, CHECK_GROUP_LABEL } from "@/lib/check-register-view";
 import { checkRegisterRow, CHECK_EXPORT_HEADERS, checkExportFileName, cashPositionLines, cashPositionNote } from "@/lib/check-register-export";
@@ -36,18 +39,17 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const viewer = await getCurrentUser();
   if (!viewer) return new NextResponse("Unauthorized", { status: 401 });
-  // The same audience as the page itself — Accounting, the Payment Approver, an
-  // admin. A download must never be a way around a screen.
+  // Narrower than the page. The ROLE itself, not `canAttachCheck` — which reads
+  // true for Accounting, who may see this register but not carry it out.
   const assignments = await getWorkflowRoles();
   const admin = isAdmin(viewer);
   const paymentApprover = userHasWorkflowRole(assignments, viewer.id, "payment_approver");
   const accounting = userHasWorkflowRole(assignments, viewer.id, "accounting");
-  const allowed = canAttachCheck({
-    admin,
-    workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => userHasWorkflowRole(assignments, viewer.id, r)),
-  });
-  if (!allowed) return new NextResponse("You don't have access to check monitoring.", { status: 403 });
-  const showCash = canSeeCashPosition({ admin, paymentApprover, accounting });
+  const actor = { admin, paymentApprover, accounting };
+  if (!canDownloadCheckRegister(actor)) {
+    return new NextResponse("You don't have access to download the check register.", { status: 403 });
+  }
+  const showCash = canSeeCashPosition(actor);
 
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const rows = await loadCheckRegister(todayYMD);

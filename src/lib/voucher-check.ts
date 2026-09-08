@@ -394,6 +394,25 @@ export function canAttachCheck(opts: { admin: boolean; workflowRoles: string[] }
 }
 
 /**
+ * Who may take the register OFF the screen — as an Excel file or a PDF.
+ *
+ * The owner: *"admin/payment approver can download. accounting role has mo
+ * capability to download."* So: **admin and the Payment Approver, nobody else.**
+ * Accounting keeps the page — they attach and read the checks, they need the
+ * schedule in front of them — but not the file.
+ *
+ * Narrower than `canAttachCheck` and deliberately its OWN rule rather than a
+ * second call to `canSeeCashPosition`, which today would answer identically.
+ * They are different questions: one is "may this person hold a copy of the
+ * register", the other "may this person see the bank balance". The cash block
+ * happens to travel with the file, which is exactly why the next widening of
+ * either must not silently drag the other along.
+ */
+export function canDownloadCheckRegister(actor?: CheckActor): boolean {
+  return !!actor?.admin || !!actor?.paymentApprover;
+}
+
+/**
  * The status from which a check is expected to exist. The check is written as
  * part of *Voucher & Check Prepared* and signed at *Voucher & Check Signed*, so a
  * PO that has reached VOUCHER_SIGNED should have its photo.
