@@ -6,15 +6,17 @@
  * same grouping, same columns. Landscape because nine columns of a payment
  * register on portrait A4 is a wall of wrapped text.
  *
- * Deliberately NOT here: the Cash position panel under the register. That is the
- * bank balance, and it belongs to an admin or the Payment Approver only.
+ * The Cash position rides along when the reader is one of the two it belongs to
+ * — the owner's *"include cash position in the printed or downloaded file."* The
+ * route decides who; this only draws it.
  */
 import React from "react";
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { COMPANY } from "@/lib/config";
 import type { CheckRegisterView, CheckGroupBy } from "@/lib/check-register-view";
 import { CHECK_GROUP_LABEL } from "@/lib/check-register-view";
-import { CHECK_EXPORT_HEADERS, checkRegisterTextRow } from "@/lib/check-register-export";
+import { CHECK_EXPORT_HEADERS, checkRegisterTextRow, cashPositionLines, cashPositionNote, signedAmount } from "@/lib/check-register-export";
+import type { CashPosition } from "@/lib/cash-position";
 
 const s = StyleSheet.create({
   page: { padding: 24, fontSize: 8, color: "#111" },
@@ -30,6 +32,10 @@ const s = StyleSheet.create({
   grand: { flexDirection: "row", borderTopWidth: 2, borderColor: "#000", paddingVertical: 4, marginTop: 8, fontWeight: "bold" },
   h: { fontSize: 7, color: "#666" },
   foot: { position: "absolute", bottom: 12, left: 24, right: 24, fontSize: 6.5, color: "#777", textAlign: "center" },
+  cashTitle: { fontSize: 10, fontWeight: "bold", marginTop: 14, marginBottom: 3 },
+  cashRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 1.5, borderBottomWidth: 0.5, borderColor: "#eee" },
+  cashNote: { fontSize: 6.5, color: "#777", marginTop: 5 },
+  cashBox: { width: "58%" },
 });
 
 /** Nine columns, widths chosen for what actually sits in them. */
@@ -50,7 +56,13 @@ function HeaderRow() {
   );
 }
 
-export function CheckRegisterPdf({ view, group, todayYMD }: { view: CheckRegisterView; group: CheckGroupBy; todayYMD: string }) {
+export function CheckRegisterPdf({ view, group, todayYMD, cash }: {
+  view: CheckRegisterView;
+  group: CheckGroupBy;
+  todayYMD: string;
+  /** Omitted for a reader the panel is not for — see the route. */
+  cash?: CashPosition | null;
+}) {
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={s.page}>
@@ -97,6 +109,25 @@ export function CheckRegisterPdf({ view, group, todayYMD }: { view: CheckRegiste
               <Text style={cell(4)}>{fmt(view.total)}</Text>
             </View>
           </>
+        )}
+
+        {/* The cash position, kept together on one page: half a balance sheet
+            at a page break is worse than a second page. Its figures are the
+            WHOLE register's, which is why the note says so — a reader holding
+            the paper cannot click anything to find out. */}
+        {cash && (
+          <View style={s.cashBox} wrap={false}>
+            <Text style={s.cashTitle}>Cash position</Text>
+            {cashPositionLines(cash).map((l) => (
+              <View key={l.label} style={s.cashRow}>
+                <Text style={l.strong ? { fontWeight: "bold" } : undefined}>{l.label}</Text>
+                <Text style={l.strong ? { fontWeight: "bold" } : undefined}>
+                  {l.signed ? signedAmount(l.value) : fmt(l.value)}
+                </Text>
+              </View>
+            ))}
+            <Text style={s.cashNote}>{cashPositionNote(cash)}</Text>
+          </View>
         )}
 
         {/* Says what the page does NOT contain, so nobody reads a filtered

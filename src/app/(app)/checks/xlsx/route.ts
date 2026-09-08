@@ -8,10 +8,14 @@
  * implementations of "sorted by clearing date" would drift the first time either
  * was touched.
  *
- * NOT included: the Cash position panel underneath the register. That is the
- * bank balance, and it belongs to an admin or the Payment Approver only (see
- * `canSeeCashPosition`); a download that carried it would hand it to Accounting
- * by the back door.
+ * The **Cash position** panel rides along — the owner's *"include cash position
+ * in the printed or downloaded file."* — but only for the people the panel
+ * itself is for. `canSeeCashPosition` decides here exactly as it does on screen,
+ * so the download cannot become a way round a rule the owner set two days ago:
+ * Accounting gets the register, and no bank balance.
+ *
+ * Its figures come from the WHOLE register, never from the filtered view. A
+ * search box that changed "Outstanding Check" would be alarming and wrong.
  */
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
@@ -20,7 +24,10 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { canAttachCheck } from "@/lib/voucher-check";
 import { loadCheckRegister } from "@/lib/check-register";
 import { buildCheckRegisterView, coerceCheckSort, coerceCheckDir, coerceCheckGroup, coerceCheckTab, CHECK_GROUP_LABEL } from "@/lib/check-register-view";
-import { checkRegisterRow, CHECK_EXPORT_HEADERS, checkExportFileName } from "@/lib/check-register-export";
+import { checkRegisterRow, CHECK_EXPORT_HEADERS, checkExportFileName, cashPositionLines, cashPositionNote } from "@/lib/check-register-export";
+import { checkWatchSummary } from "@/lib/check-monitor";
+import { getCashPosition, computeCashPosition, canSeeCashPosition, EMPTY_CASH_POSITION } from "@/lib/cash-position";
+import { getReceivablesOutstanding } from "@/lib/receivables";
 import { PH_TIME_ZONE } from "@/lib/utils";
 import { COMPANY } from "@/lib/config";
 
@@ -32,11 +39,15 @@ export async function GET(req: NextRequest) {
   // The same audience as the page itself — Accounting, the Payment Approver, an
   // admin. A download must never be a way around a screen.
   const assignments = await getWorkflowRoles();
+  const admin = isAdmin(viewer);
+  const paymentApprover = userHasWorkflowRole(assignments, viewer.id, "payment_approver");
+  const accounting = userHasWorkflowRole(assignments, viewer.id, "accounting");
   const allowed = canAttachCheck({
-    admin: isAdmin(viewer),
+    admin,
     workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => userHasWorkflowRole(assignments, viewer.id, r)),
   });
   if (!allowed) return new NextResponse("You don't have access to check monitoring.", { status: 403 });
+  const showCash = canSeeCashPosition({ admin, paymentApprover, accounting });
 
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   const rows = await loadCheckRegister(todayYMD);
@@ -103,6 +114,38 @@ export async function GET(req: NextRequest) {
   gt.getCell(AMOUNT_COL).value = view.total;
   gt.getCell(AMOUNT_COL).numFmt = money;
   gt.eachCell((c) => (c.border = { top: { style: "double" } }));
+
+  /**
+   * The cash position, under the table — for the two it belongs to.
+   *
+   * Built from `checkWatchSummary(rows)` over the WHOLE register, not the view:
+   * Outstanding Check and Accounts Payable are facts about every open check, and
+   * a search box must not move them.
+   */
+  if (showCash) {
+    const summary = checkWatchSummary(rows);
+    const [saved, receivables] = await Promise.all([
+      getCashPosition().catch(() => EMPTY_CASH_POSITION),
+      getReceivablesOutstanding().catch(() => 0),
+    ]);
+    const pos = computeCashPosition(saved, {
+      firstPriority: summary.firstPriorityAmount,
+      totalPayables: summary.openAmount,
+      receivables,
+    });
+    ws.addRow([]);
+    const head = ws.addRow(["CASH POSITION"]);
+    head.font = { bold: true, size: 12 };
+    for (const line of cashPositionLines(pos)) {
+      const r = ws.addRow([line.label]);
+      if (line.strong) r.font = { bold: true };
+      r.getCell(AMOUNT_COL).value = line.value;
+      r.getCell(AMOUNT_COL).numFmt = money;
+    }
+    const note = ws.addRow([cashPositionNote(pos)]);
+    note.font = { size: 8, italic: true };
+    ws.mergeCells(note.number, 1, note.number, COLS);
+  }
 
   const buf = await wb.xlsx.writeBuffer();
   return new NextResponse(buf as ArrayBuffer, {

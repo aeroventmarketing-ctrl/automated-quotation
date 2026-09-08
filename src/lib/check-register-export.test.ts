@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { CHECK_EXPORT_HEADERS, checkRegisterRow, checkRegisterTextRow, checkExportFileName } from "./check-register-export";
+import {
+  CHECK_EXPORT_HEADERS, checkRegisterRow, checkRegisterTextRow, checkExportFileName,
+  cashPositionLines, cashPositionNote, signedAmount,
+} from "./check-register-export";
+import { computeCashPosition, EMPTY_CASH_POSITION } from "./cash-position";
 import type { CheckWatchRow } from "./check-monitor";
 
 const row = (over: Partial<CheckWatchRow> = {}): CheckWatchRow => ({
@@ -72,5 +76,63 @@ describe("a register row, flattened for a file", () => {
   it("names the file so four of them in a folder can be told apart", () => {
     expect(checkExportFileName("open", "2026-09-08", "xlsx")).toBe("check-register-to-clear-2026-09-08.xlsx");
     expect(checkExportFileName("cleared", "2026-09-08", "pdf")).toBe("check-register-cleared-2026-09-08.pdf");
+  });
+});
+
+
+/**
+ * The owner: *"include cash position in the printed or downloaded file."*
+ *
+ * The same ten lines as the panel under the register, so a printed sheet and the
+ * screen can never be quoted against each other. WHO gets it is decided in the
+ * routes by `canSeeCashPosition`, exactly as on screen.
+ */
+describe("the cash position on a file", () => {
+  const pos = computeCashPosition(
+    { ...EMPTY_CASH_POSITION, cob: 100000, coh: 0, cashGcashChecking: 0, updatedByName: "Reyjellan Gil", updatedAt: "2026-09-04T00:55:00.000Z" },
+    { firstPriority: 0, totalPayables: 1416209.72, receivables: 3081290.06 },
+  );
+
+  it("is the panel's ten lines, in the panel's order and under the owner's names", () => {
+    expect(cashPositionLines(pos).map((l) => l.label)).toEqual([
+      "OUTSTANDING CHECK", "Cash in Bank", "Available Bank Balance", "Cash on Hand", "Receivables",
+      "Expected Collections", "Available Cash Balance", "Available Funds", "Accounts Payable", "Funding Shortfall",
+    ]);
+  });
+
+  /** The owner's own screenshot, line for line. */
+  it("carries the owner's own figures", () => {
+    const by = Object.fromEntries(cashPositionLines(pos).map((l) => [l.label, l.value]));
+    expect(by["Cash in Bank"]).toBe(100000);
+    expect(by["Available Bank Balance"]).toBe(100000);
+    expect(by["Receivables"]).toBe(3081290.06);
+    expect(by["Available Funds"]).toBeCloseTo(3181290.06, 2);
+    expect(by["Accounts Payable"]).toBe(1416209.72);
+    expect(by["Funding Shortfall"]).toBeCloseTo(1765080.34, 2);
+  });
+
+  /** *"Put a + or - indicator"* — a true minus, and the amount itself unsigned. */
+  it("signs the figures that can go either way", () => {
+    expect(signedAmount(1765080.34)).toBe("+1,765,080.34");
+    expect(signedAmount(-50210.75)).toBe("\u221250,210.75");
+    expect(signedAmount(0)).toBe("0.00");
+    // …and only those lines are marked as signed.
+    const signed = cashPositionLines(pos).filter((l) => l.signed).map((l) => l.label);
+    expect(signed).toEqual(["Available Bank Balance", "Available Cash Balance", "Available Funds", "Funding Shortfall"]);
+  });
+
+  /**
+   * A printed sheet is read away from the app by somebody who cannot click
+   * anything, so it has to explain itself — especially that its totals are the
+   * WHOLE register's, not the rows printed above them.
+   */
+  it("explains where the figures came from, and who typed the hand-entered ones", () => {
+    const note = cashPositionNote(pos);
+    expect(note).toContain("the whole register, not the rows above");
+    expect(note).toContain("Reyjellan Gil");
+    expect(note).toContain("2026-09-04");
+    // …and says plainly when nobody has set them.
+    expect(cashPositionNote(computeCashPosition(EMPTY_CASH_POSITION, { firstPriority: 0, totalPayables: 0, receivables: 0 })))
+      .toContain("have not been set yet");
   });
 });

@@ -1,3 +1,52 @@
+## 2026-09-08 · The cash position goes on the file too
+
+The owner: *"include cash position in the printed or downloaded file."*
+
+I had left it out on purpose, and said so — two days earlier the same panel became an admin / Payment Approver
+thing (*"do not show to accounting role or any one not given the authority"*), and a download carrying it would
+have handed the bank balance to Accounting by the back door.
+
+So it goes on the file **under the same rule as the screen**. `canSeeCashPosition` decides in both routes exactly
+as it does on the page: an admin and the Payment Approver get the ten lines; Accounting gets the register and no
+bank balance. That is the only reading of the two instructions that does not undo one with the other.
+
+### The figures are the WHOLE register's, and the sheet says so
+
+This is the trap. The download carries whatever the screen was filtered to — but Outstanding Check and Accounts
+Payable are facts about **every** open check, so they are built from `checkWatchSummary(rows)` over the
+unfiltered register. A search box that moved the bank balance would be alarming and wrong.
+
+Confirmed on the running app: with a search and without, the block is identical to the centavo.
+
+And because a printed cash position is read away from the app, by somebody who cannot click anything to find
+out, the sheet explains itself:
+
+> Outstanding Check and Accounts Payable come from the whole register, not the rows above; Receivables from the
+> Management Dashboard. Cash in Bank, Cash on Hand and Expected Collections were entered by hand — last by
+> Reyjellan Gil on 2026-09-08.
+
+The three hand-entered lines are named because a stale one is the only way this can be quietly wrong.
+
+### One list of lines, three places
+
+`cashPositionLines()` is the panel's ten rows in the panel's order, read by the spreadsheet and the PDF alike —
+a printed sheet and a screen that disagree about a bank balance is the worst kind of difference, quotable and
+wrong. The signed figures keep the owner's *"+ or - indicator"*, with a true minus sign.
+
+### On the running app
+
+| | Excel | PDF |
+| --- | --- | --- |
+| **Admin** | cash block ✓ | cash block ✓ |
+| **Payment Approver** | cash block ✓ | cash block ✓ |
+| **Accounting** | register only | register only |
+
+Downloaded and read back: Cash in Bank 100,000.00 · Available Bank Balance **+49,789.25** · Receivables
+622,358.40 · Available Funds **+672,147.65** · Accounts Payable 180,292.39 · Funding Shortfall **+491,855.26** —
+and 100,000 − 50,210.75 and 672,147.65 − 180,292.39 both come out right. Accounting's workbook has no CASH
+POSITION row at all; their PDF is 2,196 bytes against the admin's 3,743.
+
+Four new tests, 470 pass.
 ## 2026-09-08 · The check register, downloadable — as Excel and as PDF
 
 The owner, on Check monitoring: *"add an option to download in excel file and pdf file."*
