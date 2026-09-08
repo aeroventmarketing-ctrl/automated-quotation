@@ -154,3 +154,72 @@ export function groupCheckRows(rows: CheckWatchRow[], by: CheckGroupBy): CheckGr
   }
   return out;
 }
+
+// --- The same view, rebuilt from a URL ----------------------------------------
+//
+// The owner: *"add an option to download in excel file and pdf file."*
+//
+// A download of "the register" is useless if it is not the register the person
+// is LOOKING at — they have already searched it, sorted it and grouped it, and
+// that arrangement is the thing they want on paper. So the table puts its view
+// state in the query string and the export routes rebuild it here, through the
+// very same functions the screen uses. Two implementations of "sorted by
+// clearing date" would drift the first time either was touched.
+
+/** Which half of the register: the open checks or the cleared ones. */
+export type CheckTab = "open" | "cleared";
+
+const SORT_KEYS: readonly CheckSortKey[] = ["poDate", "company", "poNumber", "checkNo", "amount", "clearing", "form", "status"];
+const GROUP_KEYS: readonly CheckGroupBy[] = ["none", "company", "status", "month"];
+
+/** Every coercer falls back to what the screen itself opens with. */
+export const coerceCheckSort = (v: string | null | undefined): CheckSortKey =>
+  (SORT_KEYS as readonly string[]).includes(String(v)) ? (v as CheckSortKey) : DEFAULT_CHECK_SORT.key;
+export const coerceCheckDir = (v: string | null | undefined): SortDir =>
+  v === "asc" || v === "desc" ? v : DEFAULT_CHECK_SORT.dir;
+export const coerceCheckGroup = (v: string | null | undefined): CheckGroupBy =>
+  (GROUP_KEYS as readonly string[]).includes(String(v)) ? (v as CheckGroupBy) : "none";
+export const coerceCheckTab = (v: string | null | undefined): CheckTab => (v === "cleared" ? "cleared" : "open");
+
+export interface CheckRegisterView {
+  tab: CheckTab;
+  groups: CheckGroup[];
+  /** Rows that survived the tab and the search — what the export is OF. */
+  count: number;
+  /** Their total value. */
+  total: number;
+  /** A human sentence describing the arrangement, for the file's own header. */
+  caption: string;
+}
+
+/**
+ * Tab, then search, then sort, then group — the order the screen does it in, and
+ * the order that makes a group's total mean "of what you can see".
+ */
+export function buildCheckRegisterView(
+  rows: CheckWatchRow[],
+  opts: { tab?: CheckTab; query?: string; sort?: CheckSortKey; dir?: SortDir; group?: CheckGroupBy } = {},
+): CheckRegisterView {
+  const tab = opts.tab ?? "open";
+  const sort = opts.sort ?? DEFAULT_CHECK_SORT.key;
+  const dir = opts.dir ?? DEFAULT_CHECK_SORT.dir;
+  const group = opts.group ?? "none";
+  const query = opts.query ?? "";
+
+  const inTab = rows.filter((r) => (tab === "cleared" ? r.state === "cleared" : r.state !== "cleared"));
+  const shown = sortCheckRows(searchCheckRows(inTab, query), sort, dir);
+  const groups = groupCheckRows(shown, group);
+  const total = Math.round(shown.reduce((s, r) => s + (r.amount ?? 0), 0) * 100) / 100;
+
+  const parts = [
+    tab === "cleared" ? "Cleared checks" : "Checks still to clear",
+    `${shown.length} row${shown.length === 1 ? "" : "s"}`,
+    `sorted by ${CHECK_SORT_LABEL[sort]} ${dir === "asc" ? "ascending" : "descending"}`,
+  ];
+  if (group !== "none") parts.push(`grouped by ${CHECK_GROUP_LABEL[group]}`);
+  // The search terms belong in the caption: a printed page that silently omits
+  // half the register is worse than one that says what it left out.
+  if (query.trim()) parts.push(`matching "${query.trim()}"`);
+
+  return { tab, groups, count: shown.length, total, caption: parts.join(" · ") };
+}

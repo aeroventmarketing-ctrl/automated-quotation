@@ -142,6 +142,11 @@ const PROBES = [
     open: (t) => !t.includes("don't have access to check monitoring"),
     panel: (t) => t.includes("Cash position"),
     edit: (t) => /Cash position[\s\S]{0,4000}?\bEdit\b/.test(t),
+    // *"add an option to download in excel file and pdf file."* Offered to
+    // everyone the page is open to, and to nobody else — the routes enforce the
+    // same rule server-side, so a missing button is a UI bug, not a leak.
+    excel: (t) => /\bExcel\b/.test(t),
+    pdf: (t) => /\bPDF\b/.test(t),
   }, raw: {
     figuresSent: (html) => /Available Bank Balance|Funding Shortfall|fundingShortfall/.test(html),
   } },

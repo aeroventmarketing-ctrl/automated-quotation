@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, Image as ImageIcon, PenLine, Search, Undo2 } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CalendarClock, CheckCircle2, FileSpreadsheet, FileText, Image as ImageIcon, PenLine, Search, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,6 +81,14 @@ export function CheckMonitor({
   // Search, then sort, then group — in that order, so a group's total counts only what
   // survived the search and groups follow whatever the sort decided.
   const shown = sortCheckRows(searchCheckRows(tabRows, query), sort.key, sort.dir);
+  /**
+   * The arrangement on screen, as a query string the export routes rebuild from.
+   * Everything the eye is filtering by has to travel, or the file that arrives
+   * is a different register from the one that was asked for.
+   */
+  const exportQuery = new URLSearchParams({
+    tab, q: query, sort: sort.key, dir: sort.dir, group: groupBy,
+  }).toString();
   const groups = groupCheckRows(shown, groupBy);
   const colSpan = admin ? 10 : 9;
   const keyOf = (r: CheckWatchRow) => `${r.prId}:${r.path}`;
@@ -195,6 +203,28 @@ export function CheckMonitor({
             ))}
           </select>
         </label>
+
+        {/* *"add an option to download in excel file and pdf file."* Both carry
+            the arrangement on screen — tab, search, sort, grouping — so the file
+            is the register the person is looking at, not a different one. Plain
+            links: a download is a GET, and a button that fetches a blob would
+            only get in the way of "open in a new tab". */}
+        <span className="inline-flex items-center gap-1">
+          <a
+            href={`/checks/xlsx?${exportQuery}`}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
+            title="Download this register as an Excel file"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
+          </a>
+          <a
+            href={`/checks/pdf?${exportQuery}`}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent"
+            title="Download this register as a PDF"
+          >
+            <FileText className="h-3.5 w-3.5" /> PDF
+          </a>
+        </span>
       </div>
 
       {query.trim() && (

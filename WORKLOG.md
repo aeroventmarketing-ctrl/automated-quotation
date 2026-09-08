@@ -1,3 +1,61 @@
+## 2026-09-08 · The check register, downloadable — as Excel and as PDF
+
+The owner, on Check monitoring: *"add an option to download in excel file and pdf file."*
+
+### It downloads the register you are LOOKING at
+
+Not "all checks". By the time somebody wants a file they have already picked a tab, searched it, sorted it and
+grouped it, and that arrangement is the thing they want on paper. So the table puts its view state in the query
+string and both routes rebuild it through `buildCheckRegisterView` — the same search, sort and group functions
+the screen itself uses. Two implementations of "sorted by clearing date" would drift the first time either was
+touched.
+
+Every file says what it is, in its own header and in the PDF's page footer:
+
+> Checks still to clear · 17 rows · sorted by Amount descending · grouped by Company · matching "harness" · as of
+> 2026-09-08
+
+The search terms are in there deliberately. A printed page that silently omits half the register is worse than
+one that admits what it left out.
+
+### One row shape, two formats
+
+`check-register-export.ts` flattens a row once, and both the spreadsheet and the PDF read it — otherwise the two
+drift into disagreeing about the same register, which is the sort of difference nobody notices until it is
+quoted at somebody. The columns are the screen's own, minus the Actions column (a button is not a fact) and the
+photo link (a dead link the moment it leaves the app).
+
+**Amount stays a NUMBER in Excel**, which is the whole reason for offering a spreadsheet rather than only a PDF.
+The notes the screen prints *under* the date — moved from, date corrected by, unconfirmed — have nowhere to go
+in a fixed grid, so they join Remarks, where they read as sentences.
+
+### What is NOT in it
+
+The **Cash position** panel. That is the bank balance, and two days ago it became an admin / Payment Approver
+thing; a download carrying it would have handed it to Accounting by the back door. The harness grid shows the
+shape of that: Accounting gets both buttons, no panel, and no figures in the payload.
+
+| | page | Excel · PDF | cash panel | figures sent |
+| --- | --- | --- | --- | --- |
+| **Admin** | ✓ | ✓ | ✓ | ✓ |
+| **Payment Approver** | ✓ | ✓ | ✓ | ✓ |
+| **Accounting** | ✓ | ✓ | — | — |
+| Purchaser, Warehouse, Sales, Engineer | — | — | — | — |
+
+The routes enforce it themselves rather than trusting the missing button: **403** for the Purchaser and Sales,
+**200** for the three the page is open to.
+
+### The PDF found a bad row
+
+Rendered and read back, the register printed **`not-a-date`** in the Date Paid/Cleared column — a deliberately
+hostile fixture carrying a garbage clearing date. It is not information, and printing it just moves the
+confusion onto paper, so a date cell now holds a real calendar day or nothing at all.
+
+Downloaded from the running app and read back: 19 rows by default; `?q=harness&sort=amount&dir=desc&group=company`
+gives 17 rows in company groups with subtotals, largest first. The PDF comes out as two landscape pages, grouped
+by clearing month with subtotals and a total.
+
+Thirteen new tests, 466 pass.
 ## 2026-09-07 · "Already recorded on another purchase order" — asked per PO, and it says which
 
 The owner, on PO-AFBM20260000609: *"check the error Check No. 0000486718 is already recorded on another
