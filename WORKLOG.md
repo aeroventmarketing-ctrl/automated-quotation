@@ -1,3 +1,113 @@
+## 2026-09-10 · The approver alarm stops reading the whole database every 30 seconds
+
+The owner, looking at a Supabase bill: *"are we successful in lowering the cost?"*
+
+Half. The 4 Sep work halved the daily egress — ~385 GB/day before it, ~190 GB/day after, holding across four
+working days — but 190 GB/day is still 24× the included allowance, and I could only account for about 5 GB of
+it by reading code. So I stopped guessing and asked Postgres.
+
+### Asking the right question
+
+The Supabase usage page breaks egress down by type. **99.9% was "Shared Pooler"** — rows travelling from
+Postgres to the app. Storage was 319 MB against 442 GB. Every file theory I had was wrong, and the storefront
+(one listed product, one photo) never mattered at all.
+
+`pg_stat_statements` had been keeping the tally since 19 June. Ranked by rows shipped, the giveaway was not the
+top line but the whole column:
+
+| rows/call | 908 · 936 · 914 · 960 · 1023 · 6290 · 7722 · 8164 |
+| --- | --- |
+
+Nothing there is fetching a record. Each one is fetching an entire table and filtering it in JavaScript.
+
+### The single biggest consumer in the database
+
+`ApproverAlarm` is mounted in the app-wide layout, so it runs on every page for every signed-in user, polling
+`/api/pending-approvals` every 30 seconds. Each poll ran:
+
+```ts
+prisma.quotation.findMany({
+  include: { inquiry: { include: { customer: true } }, items: true },
+  orderBy: { createdAt: "desc" },
+})
+```
+
+No `where`, no `select`, no `take`. Every quotation ever written, every inquiry, every customer and **every
+quotation item in the database** — then a loop threw nearly all of it away.
+
+Postgres had it at **531 million rows over 584,734 calls and 9.1 hours of execution**, plus a further ~620
+million rows in the QuotationItem relation load. That relation appears as a dozen separate entries in the stats
+because Prisma's `IN (...)` list changes length with the number of parents, so each length fingerprints
+differently — which is exactly why no single line looked alarming.
+
+584,734 calls ÷ 83 days = 7,045 a day. At one poll per 30 seconds that is seven people for eight hours. The team.
+
+### Two changes, neither of which moves the gate
+
+**A necessary condition, asked in SQL.** `isSaleConfirmed` returns false immediately unless the sale carries a
+PO, so a row without `sale.po` can never survive the loop. Filtering on it in the query cannot drop an order the
+loop would have kept. It is deliberately *necessary* rather than *sufficient* — a JSON-null PO and a sale with
+no arrangement still come back, and are still rejected below by the untouched gate.
+
+I checked that rather than assuming it, against real Postgres, across all eight shapes a sale can take:
+
+| | JS gate | SQL filter | |
+| --- | --- | --- | --- |
+| terms + PO | true | true | exact |
+| cash + PO + payment | true | true | exact |
+| cash + PO, no payment | false | true | superset (safe) |
+| terms, PO JSON null | false | true | superset (safe) |
+| terms, no PO key | false | false | exact |
+| no sale / no arrangement / no classification | false | false | exact |
+
+No row where the gate says yes and the filter says no. That is the only failure that would have mattered.
+
+**`select` instead of the full row.** Only the seven fields the loop reads; `items` narrows to the three that
+`isStockOnlyOrder` and `isDuctHardwareStockOnly` actually take, and the customer to its `company`.
+
+### The alarm rings for exactly the same people, about exactly the same orders
+
+I ran the old function — the unfiltered query with the loop copied verbatim — beside the new one for **all 14
+users**, and diffed the output:
+
+```
+ Michelle Cotura | old 13 | new 13 | identical
+ Sam Sales       | old  1 | new  1 | identical
+ Elena Cruz      | old  1 | new  1 | identical
+ …11 others      | old  0 | new  0 | identical
+
+ IDENTICAL for all 14 users
+```
+
+And `pending-approvals.test.ts` now pins the invariant the filter leans on: a confirmed sale always carries a
+PO. If `isSaleConfirmed` is ever relaxed, that test fails next to the reason — otherwise the filter would begin
+silently dropping orders from the alarm, and an approver would simply never be told.
+
+486 tests pass. No migration.
+
+### What it saves, measured on production
+
+Per poll, from the live database:
+
+| | quotations | items | bytes |
+| --- | --- | --- | --- |
+| **before** | 1,200 | 8,487 | **12 MB** |
+| **after** | 191 | 372 | **845 kB** |
+
+A 93% cut. At 7,045 polls a day that is **84.5 GB/day → 5.9 GB/day — about 78 GB/day off a 190 GB/day bill**,
+or roughly 40% of everything the app was spending, from one query.
+
+Worth recording that I had estimated this at 15–20% from the code alone and was well under. The 1,200 rows are
+every quotation ever written; only 191 are confirmed orders, and those carry 372 items between them against
+8,487 in the table — unconfirmed multi-line quotes are most of the weight, and none of them could ever have rung
+an alarm.
+
+### Not done, deliberately
+
+The alarm never pauses on a hidden tab, so a forgotten one polls all night. `AutoRefresh` does pause — but the
+alarm is a *siren*, whose whole purpose is to reach someone looking at another tab. Slowing or pausing it is a
+behaviour change for the owner to make, not a performance tweak, so it stays as it is and is flagged instead.
+
 ## 2026-09-08 · Downloading the register is the two who sign for money
 
 The owner, answering the question I left open yesterday: *"admin/payment approver can download. accounting role
