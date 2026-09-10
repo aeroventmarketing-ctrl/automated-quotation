@@ -31,9 +31,26 @@ export async function nextProductSku(tx: Prisma.TransactionClient): Promise<stri
   return `PRD${n}`;
 }
 
-/** All active products, alphabetically, with their supplier links. */
+/**
+ * All active products, alphabetically, with their supplier links.
+ *
+ * The `select` is not decoration. This is read by the order page, the MRF page,
+ * requisitions and purchasing — pages that re-render on a timer — so it runs
+ * thousands of times a day, and Postgres ranks it among the largest sources of
+ * rows leaving the database. It has always returned a `ProductRow`, so the three
+ * columns dropped here (`active`, which the `where` already pins, and the two
+ * timestamps) were being fetched and discarded by the mapping below on every one
+ * of those calls.
+ *
+ * Keep this list and `ProductRow` in step: a field added to one and not the
+ * other is a type error rather than a silently empty column.
+ */
 export async function getProducts(): Promise<ProductRow[]> {
-  const list = await prisma.product.findMany({ where: { active: true }, orderBy: { name: "asc" } });
+  const list = await prisma.product.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, sku: true, name: true, unit: true, category: true, note: true, suppliers: true },
+  });
   return list.map((p) => ({
     id: p.id,
     sku: p.sku,

@@ -1,3 +1,84 @@
+## 2026-09-10 · My Dashboard stops reading every quotation's workflow to add up money
+
+Second round on the egress bill. The owner picked **#2 — `getProducts()`** off my list, and following it led
+somewhere much more expensive.
+
+### Ranking by rows was the wrong lens, and it cost me a target
+
+My shortlist came from `pg_stat_statements` ordered by **rows shipped**. That put Product at #2 — 403 million
+rows, 430,613 calls. But a row is not a unit of cost: a Quotation carries the entire order workflow as JSON and
+weighs about 10 kB; a Product is a few hundred bytes. Re-reckoned in **bytes**, Product is worth perhaps
+1–2 GB/day, and its real fix — caching the catalogue across requests — would have meant a new `unstable_cache`
+pattern and an invalidation obligation at fourteen write sites, for about 1% of the bill. Bad trade.
+
+The same re-reckoning pointed at rank 3, and rank 3 is `finance-monitor`.
+
+### The same query, on the app's home page
+
+`getFinanceMonitor()` runs on **My Dashboard**, which re-renders whenever any of the four tables it watches
+moves — with seven people working, that is often. It was fetching **every quotation's `classification`**, the
+whole order workflow, to find the couple of hundred that are confirmed orders:
+
+```ts
+prisma.quotation.findMany({          // no `where` at all
+  select: { id, classification, total, discountPct, vatMode, quoteNumber, inquiry: {...} },
+})
+```
+
+and, beside it, every active `StockItem` as a **whole row** to build a list of names and quantities.
+
+`receivables.ts` — read by the Cash position under the check register and by the Management Dashboard — had the
+same shape and the same missing `where`.
+
+### The fix is the one already proved on the alarm
+
+All three loops open with `isSaleConfirmed`, which returns false unless the sale carries a PO. So the same
+**necessary condition** goes to Postgres — `classification -> sale -> po is not null` — and cannot drop a
+quotation the loop would have kept. The gates themselves are untouched and still run on everything that comes
+back. That filter was verified against real Postgres across all eight shapes a sale can take when the alarm was
+fixed; this reuses it rather than inventing a second one.
+
+Plus two honest `select`s: `StockItem` down to the five fields `lowStock` reads, and `getProducts` down to the
+seven fields `ProductRow` has always returned — the three it dropped were being fetched and discarded by its own
+mapping on every call.
+
+### Nothing on a screen moved
+
+Old query beside new, on real data:
+
+```
+ same  receivables outstanding                     old 622358.4 / new 622358.4
+ same  every PO-bearing quotation still fetched    0 missing
+ same  finance-monitor figures                     outstanding 622358.4 · billed 8722358.4
+ same  getProducts output                          11 products
+```
+
+₱622,358.40 is the same Receivables figure that printed on the cash position two days ago. And the role harness
+— every role, every screen — came back **byte-identical to the pre-change run**.
+
+486 tests pass; lint and build clean. No migration.
+
+### What it saves, measured — and where my estimate was wrong
+
+I guessed 35 GB/day from row weights. Measured on production it is about **8 GB/day**. I was optimistic by
+roughly four times, and the reason is worth writing down.
+
+| per render | now | after |
+| --- | --- | --- |
+| finance monitor (quotations) | 3,250 kB | **1,097 kB** |
+| low-stock rows | 341 kB | **74 kB** |
+| **My Dashboard total** | **3,591 kB** | **1,171 kB** |
+
+A 67% cut — but the row count falls from 1,200 to 191, which is 16%. **Bytes do not follow rows here, and they
+fall the other way**: the 191 survivors are precisely the confirmed orders, and a confirmed order is the one
+carrying a full order workflow in its `classification`. 16% of the rows, 34% of the bytes. Every quotation the
+filter removes was a cheap one.
+
+So: ~7.3 GB/day from the finance monitor, ~0.9 GB/day from the stock rows, and a smaller unmeasured amount from
+receivables, whose query does not appear in the top 25 at all.
+
+Twice now I have mis-ranked this work by reasoning from row counts — first putting Product second, then
+over-valuing this fix fourfold. The lesson is the same both times: **measure the bytes, never infer them.**
 ## 2026-09-10 · The approver alarm stops reading the whole database every 30 seconds
 
 The owner, looking at a Supabase bill: *"are we successful in lowering the cost?"*
