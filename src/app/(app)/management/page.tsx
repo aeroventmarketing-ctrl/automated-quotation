@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw, Store } from "lucide-react";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -138,10 +139,21 @@ export default async function ManagementPage() {
     // revision reopens the inquiry (status leaves WON), so a WON filter drops
     // confirmed, already-paid orders. isSaleConfirmed below is the real gate,
     // exactly as the departmental P&L does it.
+    //
+    // Same pair of narrowings as `lib/finance-monitor`, which this page is a
+    // twin of — the `where` is the necessary condition behind `isSaleConfirmed`
+    // below (false unless the sale carries a PO), so it cannot drop a quotation
+    // the loop would have kept, and the gate still runs on everything returned.
     prisma.quotation.findMany({
+      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
-    prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
+    // Only the five fields the low-stock filter and its rows read.
+    prisma.stockItem.findMany({
+      where: { active: true, ...createdFilter },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, unit: true, quantity: true, reorderLevel: true },
+    }).catch(() => []),
     // Entitlement is computed from the confirmed sales themselves (rules 1–6 in
     // `lib/sales-commission`), not read off the Commission table — that table
     // only records what was PAID. No go-live filter: a commission is money

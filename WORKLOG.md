@@ -1,3 +1,97 @@
+## 2026-09-10 · My Dashboard's half of the alarm query (owner-approved, frozen file)
+
+The other half of the fingerprint. `my-dashboard.ts:213` was the **byte-identical** Prisma call the approver
+alarm used, so the two shared one `pg_stat_statements` entry — 531 million rows over 584,734 calls — and fixing
+the alarm alone left this half still running at the same 12 MB per render.
+
+Same fix, third and fourth time: the `sale.po` **necessary condition** in SQL, and a `select` of exactly the
+fields the loop reads (`items` narrowed to the three that `isStockOnlyOrder`, `isBoughtInOnlyOrder` and
+`isDuctHardwareStockOnly` take; `total` / `discountPct` / `vatMode` for `payableTotal(q)` further down).
+
+`src/lib/my-dashboard.ts` is frozen — **the Phase 3 Materials feed is built from this exact query** — so this
+was done only after the owner approved it, and verified harder than the rest.
+
+### Proved by swapping the query underneath a real dashboard
+
+Not by reasoning about it. `git stash` puts the old query back, the whole payload is dumped for every user, the
+new query goes back, and the two are diffed:
+
+| | users | pending | materialsFeed |
+| --- | --- | --- | --- |
+| old (unfiltered) | 14 | 227 | 35 |
+| new (narrowed) | 14 | 227 | 35 |
+| | | **byte-identical** | |
+
+The first run of this came back identical across **137,707 bytes** of dashboard JSON — but with
+`materialsFeed: 0`, because the harness seed has no MRFs. An equivalence test that never exercises the frozen
+path proves nothing about it, so five MRFs were seeded onto a confirmed order — one in each state
+(`requested`, `issued`, `partial`, `completed`, `purchasing`) — and the diff re-run. **35 material notes, still
+byte-identical.**
+
+Separately: of the 21 quotations, 19 are confirmed orders the loop could keep, and the new query fetches
+exactly 19. **Nothing reachable is dropped.**
+
+The role harness came back identical to the pre-change run, and 486 tests, lint and build are clean. No
+migration.
+## 2026-09-10 · The Management Dashboard's twin, and a correction to what the alarm fix bought
+
+Round three. It began with a mechanical sweep instead of my judgement, which is how it found both the next fix
+and a mistake in the last report.
+
+### 171 findMany calls, sorted by what they fail to narrow
+
+A script reads each call's argument object — balancing braces, so a relation's `where` is not mistaken for the
+call's own — and asks two questions: does it narrow the ROWS, and does it narrow the COLUMNS.
+
+| | |
+| --- | --- |
+| every row **and** every column | **6** |
+| every row, narrowed columns | 33 |
+| a whole table in some way | 88 of 171 |
+
+(The first version of the script flagged all 171, because collapsing nested braces ate the outer object too. A
+sweep that indicts everything has found nothing.)
+
+### The fix: `management/page.tsx` is a literal twin of `finance-monitor`
+
+Same variable names, same comment, same `isSaleConfirmed` gate — and the same two unnarrowed reads: every
+quotation's `classification`, and every active `StockItem` as a whole row for a list of names and quantities. It
+gets the identical pair of narrowings, already proved twice.
+
+Rendered on the running app for two roles: **200, tiles intact, Receivables ₱622,358.40** — the same figure the
+finance-monitor equivalence check and the cash position PDF produce, computed independently by this page.
+
+### The correction: rank 1 was never the alarm alone
+
+`my-dashboard.ts:213` is not merely similar to the approver alarm's old query. It is the **byte-identical Prisma
+call**:
+
+```ts
+prisma.quotation.findMany({
+  include: { inquiry: { include: { customer: true } }, items: true },
+  orderBy: { createdAt: "desc" },
+})
+```
+
+Identical text means one `pg_stat_statements` fingerprint. So rank 1's 584,734 calls were the alarm **and** My
+Dashboard summed, and attributing all of them — and all 78 GB/day — to the alarm was wrong.
+
+The alarm is still almost certainly the larger share: it polls every 30 seconds from *every* page, while My
+Dashboard re-renders only when someone is on it and its watch token moves. But the split is unknown, the
+remainder is still being paid at the same 12 MB per render, and the 11 Sep bar will therefore measure the
+alarm's share only, not the range I quoted.
+
+`src/lib/my-dashboard.ts` is frozen — the Phase 3 Materials feed is built from this very query — so it waits for
+the owner. The change would be the one already proved: the `sale.po` necessary condition, and `items` narrowed
+to three fields. The loop at line 218 opens with `isSaleConfirmed`, exactly as the alarm's did.
+
+### Still standing
+
+`sales-summary.ts:94`, `sales-report.ts:70` and `inherited-workflow-scan.ts:85` read every quotation. Each needs
+its own gate checked before the `sale.po` filter can be called safe there — it is only sound where
+`isSaleConfirmed` is the gate, and I am not assuming that a fourth time.
+
+486 tests pass; lint and build clean. No migration.
 ## 2026-09-10 · My Dashboard stops reading every quotation's workflow to add up money
 
 Second round on the egress bill. The owner picked **#2 — `getProducts()`** off my list, and following it led
