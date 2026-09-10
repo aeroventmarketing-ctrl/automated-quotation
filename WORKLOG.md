@@ -1,3 +1,38 @@
+## 2026-09-10 · My Dashboard's half of the alarm query (owner-approved, frozen file)
+
+The other half of the fingerprint. `my-dashboard.ts:213` was the **byte-identical** Prisma call the approver
+alarm used, so the two shared one `pg_stat_statements` entry — 531 million rows over 584,734 calls — and fixing
+the alarm alone left this half still running at the same 12 MB per render.
+
+Same fix, third and fourth time: the `sale.po` **necessary condition** in SQL, and a `select` of exactly the
+fields the loop reads (`items` narrowed to the three that `isStockOnlyOrder`, `isBoughtInOnlyOrder` and
+`isDuctHardwareStockOnly` take; `total` / `discountPct` / `vatMode` for `payableTotal(q)` further down).
+
+`src/lib/my-dashboard.ts` is frozen — **the Phase 3 Materials feed is built from this exact query** — so this
+was done only after the owner approved it, and verified harder than the rest.
+
+### Proved by swapping the query underneath a real dashboard
+
+Not by reasoning about it. `git stash` puts the old query back, the whole payload is dumped for every user, the
+new query goes back, and the two are diffed:
+
+| | users | pending | materialsFeed |
+| --- | --- | --- | --- |
+| old (unfiltered) | 14 | 227 | 35 |
+| new (narrowed) | 14 | 227 | 35 |
+| | | **byte-identical** | |
+
+The first run of this came back identical across **137,707 bytes** of dashboard JSON — but with
+`materialsFeed: 0`, because the harness seed has no MRFs. An equivalence test that never exercises the frozen
+path proves nothing about it, so five MRFs were seeded onto a confirmed order — one in each state
+(`requested`, `issued`, `partial`, `completed`, `purchasing`) — and the diff re-run. **35 material notes, still
+byte-identical.**
+
+Separately: of the 21 quotations, 19 are confirmed orders the loop could keep, and the new query fetches
+exactly 19. **Nothing reachable is dropped.**
+
+The role harness came back identical to the pre-change run, and 486 tests, lint and build are clean. No
+migration.
 ## 2026-09-10 · The Management Dashboard's twin, and a correction to what the alarm fix bought
 
 Round three. It began with a mechanical sweep instead of my judgement, which is how it found both the next fix

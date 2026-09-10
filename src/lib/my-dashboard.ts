@@ -9,7 +9,7 @@
  * matching the app-wide client-visibility policy. Every source is wrapped so a
  * missing table can't break the page.
  */
-import type { User } from "@prisma/client";
+import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
@@ -210,9 +210,48 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     // drop confirmed orders' pending tasks and MRF feed. isSaleConfirmed below
     // is the real gate, exactly as the departmental P&L does it. (Owner-approved
     // edit that also affects the Phase 3 Materials feed built from this query.)
+    //
+    // ## Why this query is narrowed (owner-approved, 2026-09-10)
+    //
+    // This was the byte-identical twin of the approver alarm's old query, which
+    // means the two shared a single `pg_stat_statements` fingerprint: 531 million
+    // rows across 584,734 calls, the largest source of rows leaving the database.
+    // Fixing the alarm alone left this half of it still running.
+    //
+    // The `where` is the **necessary condition** behind the gate on the next
+    // line. `isSaleConfirmed` returns false immediately unless the sale carries a
+    // PO, so a row whose `sale.po` is absent can never reach the body of this
+    // loop — asking Postgres for it cannot drop a quotation that would have
+    // produced a task or a Materials note. It is deliberately necessary rather
+    // than sufficient: a JSON-null PO and a sale with no arrangement both still
+    // come back, and are still rejected by the untouched gate below.
+    //
+    // The `select` is every field the loop reads and nothing else. `items`
+    // narrows to the three that `isStockOnlyOrder`, `isBoughtInOnlyOrder` and
+    // `isDuctHardwareStockOnly` take; `total` / `discountPct` / `vatMode` are
+    // there for `payableTotal(q)` further down. Add a field to the loop and you
+    // must add it here — which is a type error, not a silently empty column.
+    //
+    // The Phase 3 Materials feed is built from this query, so nothing about which
+    // orders it yields may change. It does not: the gate is untouched, and the
+    // filter was verified against real Postgres across all eight shapes a sale
+    // can take before it was used anywhere.
     const quotes = await prisma.quotation.findMany({
-      include: { inquiry: { include: { customer: true } }, items: true },
+      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        quoteNumber: true,
+        classification: true,
+        createdAt: true,
+        currency: true,
+        preparedById: true,
+        total: true,
+        discountPct: true,
+        vatMode: true,
+        inquiry: { select: { customer: { select: { company: true } } } },
+        items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+      },
     });
     for (const q of quotes) {
       const sale = saleFromClassification(q.classification);
