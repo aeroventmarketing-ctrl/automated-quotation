@@ -11,7 +11,22 @@ interface Pending {
   anchor: string; // phase-card id to scroll to on the order page (e.g. "phase-2")
 }
 
-const POLL_MS = 30_000; // re-check for new approvals every 30s
+const POLL_MS = 30_000; // re-check for new approvals every 30s while the tab is on screen
+/**
+ * …and every two minutes while it is not — the owner's *"slowdown 30s to 2 mins"*.
+ *
+ * This alarm is mounted in the app-wide layout, so it polls from every page, for
+ * every signed-in user, and it never stopped: a tab left open overnight went on
+ * asking twice a minute until morning.
+ *
+ * It deliberately does NOT pause the way `AutoRefresh` does. This is a siren, and
+ * its whole purpose is to reach somebody who is looking at a different tab —
+ * pausing while hidden would silence it exactly when it is needed. Slowing it is
+ * the compromise: an approval that lands while you are away now rings within two
+ * minutes rather than thirty seconds, and coming back to the tab checks at once
+ * rather than waiting out the remainder of a sleep.
+ */
+const HIDDEN_POLL_MS = 120_000;
 const ALARM_MS = 20_000; // sound + flashing window last 20s
 
 // One shared AudioContext, unlocked (resumed) on any user interaction so alarms
@@ -158,11 +173,33 @@ export function ApproverAlarm() {
         /* ignore network hiccups */
       }
     }
-    check();
-    const iv = window.setInterval(check, POLL_MS);
+    // A self-scheduling timeout rather than a fixed interval, so the gap can
+    // change with visibility (see HIDDEN_POLL_MS).
+    let timer: number | undefined;
+    const gap = () => (typeof document !== "undefined" && document.hidden ? HIDDEN_POLL_MS : POLL_MS);
+    const schedule = () => {
+      if (!active) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void run(), gap());
+    };
+    const run = async () => {
+      await check();
+      schedule();
+    };
+
+    void run();
+
+    // Back on screen: ask immediately and return to the fast cadence, instead of
+    // sitting out however much of a two-minute sleep is left.
+    const onVisible = () => {
+      if (!document.hidden) void run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       active = false;
-      window.clearInterval(iv);
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [ring]);
 

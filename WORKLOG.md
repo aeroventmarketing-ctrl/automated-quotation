@@ -1,3 +1,39 @@
+## 2026-09-10 · The approver alarm slows down while you are not looking
+
+The owner: *"Slowdown 30s to 2 mins."*
+
+The alarm is mounted in the app-wide layout, so it polls from every page for every signed-in user — and it never
+stopped. A tab left open overnight went on asking twice a minute until morning, for sixteen hours in which
+nobody could possibly hear it.
+
+**It still does not pause.** That distinction is the whole design. `AutoRefresh` pauses while hidden because a
+stale screen nobody is looking at costs nothing; this is a *siren*, and its entire purpose is to reach someone
+who is looking at a different tab. Pausing it would silence it exactly when it is needed. Slowing it is the
+compromise the owner chose: an approval that lands while you are away now rings within two minutes instead of
+thirty seconds.
+
+Coming back to the tab checks **immediately**, rather than serving out whatever is left of a two-minute sleep —
+otherwise returning to the page could have felt slower than before.
+
+That meant replacing the fixed `setInterval` with a self-scheduling timeout, since the gap now varies.
+
+### Measured in a browser, because a cadence is not something to read off the source
+
+Playwright overrides `document.hidden`, counts real requests to `/api/pending-approvals`, and watches the clock:
+
+| | polls | expected |
+| --- | --- | --- |
+| 70s on screen | 3 | 2–3 (30s cadence, unchanged) |
+| 150s hidden | 2 | 1–2 (120s cadence) |
+| returning to the tab | 1 | 1, immediate |
+
+The extra poll in the hidden window is the 30-second timer that was already scheduled when the tab went away;
+every one after it is two minutes apart.
+
+For a tab forgotten overnight that is 1,920 polls down to 480 — and since each is now 845 kB rather than 12 MB,
+the two fixes compound: what was ~23 GB of overnight egress per abandoned tab is now about 0.4 GB.
+
+486 tests pass; lint and build clean. No migration.
 ## 2026-09-10 · My Dashboard's half of the alarm query (owner-approved, frozen file)
 
 The other half of the fingerprint. `my-dashboard.ts:213` was the **byte-identical** Prisma call the approver
