@@ -5,6 +5,7 @@
  * the same cards from one source of truth. Scoped to post-go-live activity while
  * the alerts go-live gate is on, exactly like the Management Dashboard.
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
@@ -69,10 +70,30 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     // revision reopens the inquiry (status leaves WON), so a WON filter drops
     // confirmed, already-paid orders. isSaleConfirmed below is the real gate,
     // exactly as the departmental P&L does it.
+    //
+    // The `where` is the same necessary condition the approver alarm uses, for
+    // the same reason. `isSaleConfirmed` below returns false immediately unless
+    // the sale carries a PO, so a row whose `sale.po` is absent can never survive
+    // this loop — asking Postgres for it cannot drop a quotation the loop would
+    // have kept, and the real gate is untouched and still runs on everything that
+    // comes back.
+    //
+    // It matters here more than anywhere: this runs on My Dashboard, the app's
+    // home page, which re-renders whenever any of the four tables it watches
+    // moves. Without the filter it fetched EVERY quotation's `classification` —
+    // the whole order workflow, kilobytes each — to find the couple of hundred
+    // that are confirmed orders.
     prisma.quotation.findMany({
+      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
       select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
-    prisma.stockItem.findMany({ where: { active: true, ...createdFilter }, orderBy: { name: "asc" } }).catch(() => []),
+    // Only the five fields the low-stock filter and its rows read — this was
+    // taking whole StockItem rows for a list of names and quantities.
+    prisma.stockItem.findMany({
+      where: { active: true, ...createdFilter },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, unit: true, quantity: true, reorderLevel: true },
+    }).catch(() => []),
     // Entitlement is computed (rules 1-6 in `lib/sales-commission`), not read off
     // the Commission table — that table only records what was PAID. No go-live
     // filter: a commission is money someone earned, not an alert to silence.

@@ -11,6 +11,7 @@
  * it. Two screens quoting the same label at different numbers is the kind of
  * thing that quietly destroys trust in every other figure on the page.
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { saleFromClassification, isSaleConfirmed, collectedTotal, type SaleRecord } from "@/lib/sale";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
@@ -66,7 +67,17 @@ export const RECEIVABLE_EPSILON = 0.005;
 export async function getReceivablesOutstanding(): Promise<number> {
   const alertGate = await getAlertGoLive().catch(() => null);
   const goLiveFloorYMD = alertGate?.on ? manilaYMD(alertGate.at) : null;
+  // `countsAsReceivable` starts with `isSaleConfirmed`, which is false unless the
+  // sale carries a PO — so a quotation without `sale.po` can never reach the
+  // total below, and asking Postgres for that condition cannot change the figure.
+  // The gate itself is untouched and still runs on every row this returns.
+  //
+  // Worth the filter because this is read by the Cash position under the check
+  // register and by the Management Dashboard, and it was fetching every
+  // quotation's `classification` — the entire order workflow — to add up a
+  // couple of hundred balances.
   const quotes = await prisma.quotation.findMany({
+    where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
     select: { classification: true, total: true, discountPct: true, vatMode: true },
   });
   let outstanding = 0;
