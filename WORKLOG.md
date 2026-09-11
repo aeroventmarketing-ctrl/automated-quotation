@@ -1,3 +1,58 @@
+## 2026-09-11 · The PO form says WHY it has no supplier to suggest
+
+The owner: *"error in requisitions when requestor put a label in remarks, supplier cannot be detected in
+purchasing."*
+
+### I could not reproduce the remark breaking it
+
+It looked like a re-run of the SKU bug (#506), where a remark glued onto the item name broke a lookup keyed on
+that name. It is not, and the evidence is worth keeping so nobody spends the afternoon on it again:
+
+- **On the running app**, two department requisitions for the same catalogued product — one with the remark
+  *"(for the front office)"*, one without — behave **identically**: both narrow the list to one supplier and
+  auto-fill it.
+- **Both lookups were fuzzed** against 8 product names × ~20 remark shapes (numbers, sizes, dates, model codes
+  that belong to a *different* product, `N/A`, `x2`): **296 combinations, zero wrong matches.** `matchKey`
+  tokenises and guards on model codes, so trailing text in parentheses simply adds tokens it ignores.
+
+### What was actually wrong: two silent states that look the same
+
+Building the fixture is what found it. The supplier box comes up empty for two unrelated reasons, fixed in two
+different places, and the form told you apart from neither:
+
+| | what you saw | what was wrong |
+| --- | --- | --- |
+| No supplier saved on the product | the full list, **and no message at all** | nobody has said who sells it |
+| Saved supplier not in the registry | *"Showing 0 suppliers that carry these products"* | the company was never registered |
+
+The second is the sharper failure. My own first fixture hit it — I pointed a product at `GOLDEN PACIFIC INC`
+while the registry only held `HARNESS STEEL CORP`, and the screen said *"Showing 0 suppliers"*, which is a
+description of the symptom and not one word about the cause. I read it as the reported bug for a while. Anyone
+would.
+
+Both now say what to do, and the second **names the company** — the one fact that turns "detection is broken"
+into "add GOLDEN PACIFIC INC to the supplier list":
+
+> GOLDEN PACIFIC INC carries these products but isn't in the supplier list — add it under Admin › Suppliers, or
+> type a company here.
+
+> No supplier is saved for these items yet, so every supplier is listed. Set one on the Products page and it
+> will be suggested here next time.
+
+Nothing is role-gated: every role that reaches the PO form sees the same explanation, which is the owner's
+*"reflect the rectification available to all roles using the requisitions and purchasing."*
+
+### The harness could not have caught any of this
+
+Its products carried **no suppliers at all**, so supplier detection was untestable — "0 suppliers" there meant
+"the fixture is empty", and a real regression would have looked exactly the same. The seed now gives every
+catalogued product a registered supplier, plus four requisitions covering the whole matrix: plain, with a
+remark, uncatalogued, and saved-but-unregistered.
+
+500 tests pass; lint and build clean. No migration.
+
+**Still open:** if a specific item and remark really does fail, the exact text of both would settle it in
+minutes — none of the shapes tried here does.
 ## 2026-09-11 · A check discrepancy can be answered, not just reported
 
 The owner, on a check whose three figures all disagreed: *"add an option for admin/payment approver to approve

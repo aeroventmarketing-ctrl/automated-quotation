@@ -353,6 +353,14 @@ async function seed() {
   // item with no code anywhere — stocked but never given a SKU — and adding it
   // to the catalogue would quietly give it one, taking the "shows nothing" case
   // with it. The `sku` probe caught exactly that.
+  // Its supplier is deliberately NOT in the registry below, so the PO form has
+  // to explain the difference between "nobody sells this" and "the company that
+  // does was never registered" — the two states that used to look identical.
+  await p.product.upsert({
+    where: { id: "harness-prd-PRD10006" },
+    update: { name: "HARNESS UNREGISTERED ITEM", sku: "PRD10006", unit: "pc", active: true, suppliers: [{ supplierId: "x", company: "GOLDEN PACIFIC INC", price: 50 }] },
+    create: { id: "harness-prd-PRD10006", name: "HARNESS UNREGISTERED ITEM", sku: "PRD10006", unit: "pc", active: true, suppliers: [{ supplierId: "x", company: "GOLDEN PACIFIC INC", price: 50 }] },
+  });
   for (const [name, sku, unit] of [
     ["GI SHEET 24GA", "PRD10001", "pc"],
     ["BELT B-50", "PRD10002", "pc"],
@@ -362,7 +370,20 @@ async function seed() {
     // typed into the row, because the remark is glued onto the item name.
     ["VIBRATION ISOLATOR - 80kg SPRING ELEMENT ONLY", "PRD10005", "pc"],
   ]) {
-    await p.product.upsert({ where: { id: `harness-prd-${sku}` }, update: { name, sku, unit, active: true }, create: { id: `harness-prd-${sku}`, name, sku, unit, active: true } });
+    // A supplier on every catalogued product. Without one the supplier lookup
+    // has nothing to find and "supplier not detected" reads the same whether the
+    // lookup is broken or the catalogue is simply empty — which is exactly how
+    // the remark bug stayed invisible here.
+    // The company must ALSO exist in the supplier registry (`suppliers` AppSetting,
+    // seeded below) — the PO form offers the INTERSECTION of "registered supplier"
+    // and "carries this product", so a product pointing at a company nobody has
+    // registered shows "0 suppliers" and looks exactly like the bug under test.
+    const suppliers = [{ supplierId: "s-harness", company: "HARNESS STEEL CORP", code: sku, price: 100 }];
+    await p.product.upsert({
+      where: { id: `harness-prd-${sku}` },
+      update: { name, sku, unit, active: true, suppliers },
+      create: { id: `harness-prd-${sku}`, name, sku, unit, active: true, suppliers },
+    });
   }
 
   // SKUs on purpose: the item code beside a requisition / MRF / PO line is looked
@@ -432,6 +453,30 @@ async function seed() {
       confidence: 0.95, warnings: [], issues: [], readByName: "Michelle Cotura", readAt: "",
     },
   });
+  // Two department requisitions for the SAME catalogued product, differing only
+  // in whether the requestor typed a remark — the owner's *"when requestor put a
+  // label in remarks, supplier cannot be detected in purchasing."* Side by side,
+  // because "no supplier offered" reads identically whether the lookup is broken
+  // or the product simply has none; only the pair tells them apart.
+  for (const [note, item] of [
+    ["HARNESS-SUP-PLAIN", "10 pc · HARNESS OFFICE PAPER"],
+    ["HARNESS-SUP-REMARK", "10 pc · HARNESS OFFICE PAPER (for the front office)"],
+    // Nobody sells it as far as the catalogue knows — not catalogued at all.
+    ["HARNESS-SUP-NONE", "2 pc · CUTTING DISC 4in (for grinder)"],
+    // Somebody sells it, but that company was never registered.
+    ["HARNESS-SUP-UNREG", "1 pc · HARNESS UNREGISTERED ITEM (blue)"],
+  ]) {
+    await p.purchaseRequest.create({ data: {
+      kind: "department", dept: "office", items: [item], note, status: "APPROVED",
+      // A dept requisition at APPROVED is only Plant-Manager-approved and stays
+      // in the Pending bucket until the Approver's PO approval lands — see
+      // `statusBucket`. Without this stamp the PO editor never opens and the
+      // fixture cannot reach the thing it exists to test.
+      chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+      createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+    } });
+  }
+
   // The owner's OTHER screenshot: a check that disagrees with itself AND with
   // the PO — peso box ₱14,886.07, words ₱14,814.07, PO net ₱14,866.07. Nothing
   // can be re-read here (no API key in this environment), so the issue is seeded
