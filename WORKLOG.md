@@ -1,3 +1,81 @@
+## 2026-09-11 · The Management Dashboard asks before it fetches, and reminders stop polling an invisible tab
+
+Two of the three remaining non-frozen items from the round-four survey. Both remove queries rather
+than making them cheaper, and neither needs a migration.
+
+### The Management Dashboard was the last list page on a plain timer
+
+`<AutoRefresh seconds={60} />`, no `watch` — so 60 full renders an hour per open tab, each one
+rebuilding the P&L, the receivables, the vouchers, the stock alerts and the commissions whether or
+not a single row had moved. It is the widest read in the app, and it was the only list page still
+paying for every tick.
+
+It now watches a new `management` scope. The 60-second interval stays: with `watch` the tick is a
+**93-byte** question and the rebuild happens only when the answer changes.
+
+The scope is six counters, and one of them is new. `stockItems` is watched **directly** rather
+than through `stockActions`, because not every change writes a movement: an admin editing an
+item's reorder level, name or unit on the Inventory page writes only the StockItem, and the
+low-stock card is built from exactly those fields. Watching the movements alone would have left
+that card stale until something unrelated happened to move.
+
+`User` is deliberately left out — the page reads it only for names beside figures, and a renamed
+member of staff showing their old name until the next order moves is not a stale dashboard.
+
+### The index I proposed was aimed at the wrong thing
+
+The survey found two `Schedule` queries with **493,155 calls returning zero rows**, and the
+obvious reading was a missing index. It was not. `CalendarReminders` polls every 60 seconds and —
+unlike `AutoRefresh`, and unlike the approver alarm after #511 — **never paused while the tab was
+hidden**. Two tabs left open were asking twice a minute around the clock, for ever.
+
+An index would have made a pointless question cheaper to answer. The poll now stops while the tab
+is hidden, and checks **immediately** on return, so a reminder that fell due while you were away is
+on screen when you get back rather than up to a minute later.
+
+It pauses rather than slows, which is the opposite of what #511 did to the approver alarm — and
+for the reason that decided that one. The alarm is a siren whose whole job is to reach someone
+looking at a different tab, so it may only slow down. This is a stack of cards in the corner of
+*this* page: while the tab is hidden there is nothing for it to draw on.
+
+### Measured in a browser, not reasoned about
+
+**Management, idle for 130 seconds with the page open:**
+
+| | per two 60s ticks |
+| --- | --- |
+| `/api/changes` polls | 2 |
+| change-token aggregates | 12 (6 per poll) |
+| **full page rebuilds** | **0** |
+
+The token was also checked directly: identical on two consecutive reads with nothing happening,
+and moving in exactly the `stockItems` position — and nowhere else — after a direct
+`update "StockItem" set "updatedAt" = now()`. An unknown scope still answers `"?"`, so a page
+asking for one this deployment has not got falls back to the timer instead of being handed
+someone else's token.
+
+**Reminders:**
+
+| phase | polls |
+| --- | --- |
+| visible, 130s | 3 (load + 2 ticks) |
+| **hidden, 130s** | **0** |
+| on return | 1, within 3s |
+
+The first attempt at that test used Playwright's `bringToFront()` and reported "2 polls while
+hidden" — headless Chromium keeps every page `visible`, so the branch was never exercised. Driving
+`document.hidden` directly is what actually tests the code.
+
+### Not done, and why
+
+`getProductOptions()` — a narrow `{id, sku, name, unit}` read to replace `getProducts()` where the
+supplier JSON is fetched and discarded — is **not** in this change. Its two real beneficiaries are
+`orders/[id]/page.tsx:150`, which is a frozen file, and the MRF print sheet, which is Materials
+territory. Shipping a helper whose only safe caller is none at all is worse than not shipping it;
+it waits for the owner's word on the frozen file.
+
+523 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · My Dashboard stops reading every quotation six times to draw one page
 
 Round four of the egress work. Supabase egress on 11 September — the first day after the earlier

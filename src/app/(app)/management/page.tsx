@@ -615,8 +615,10 @@ export default async function ManagementPage() {
 
   return (
     <div className="space-y-6">
-      {/* Gentler interval than the operational pages — the P&L is query-heavy. */}
-      <AutoRefresh seconds={60} />
+      {/* The heaviest read in the app, so it asks before it fetches. The 60s
+          interval stays — with `watch` that tick is a ~100-byte question, and
+          the expensive rebuild happens only when a row has actually moved. */}
+      <AutoRefresh seconds={60} watch="management" />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Management Dashboard</h1>

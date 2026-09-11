@@ -62,7 +62,7 @@ describe("the change token", () => {
   });
 
   it("knows which scopes exist", () => {
-    for (const s of ["orders", "purchasing", "checks", "requisitions", "cash-requests", "calendar", "my-dashboard"]) {
+    for (const s of ["orders", "purchasing", "checks", "requisitions", "cash-requests", "calendar", "my-dashboard", "management"]) {
       expect(isChangeScope(s), s).toBe(true);
     }
     // A page asking for a scope this deployment has not got must be told so,
