@@ -28,7 +28,7 @@
 import { prisma } from "@/lib/db";
 
 /** What a page watches. Each is one or more tables it is built from. */
-export type ChangeScope = "orders" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard";
+export type ChangeScope = "orders" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management";
 
 /**
  * The token could not be read, so the caller should behave as it did before —
@@ -59,6 +59,19 @@ const schedules: Counter = async () => {
   const r = await prisma.schedule.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
   return { n: r._count._all, at: r._max.updatedAt };
 };
+/**
+ * Stock levels, watched directly rather than through `stockActions`.
+ *
+ * Most quantity changes do write a StockAction, but not all of them: an admin
+ * editing an item's reorder level, name or unit on the Inventory page writes
+ * only the StockItem. The Management Dashboard's low-stock card is built from
+ * exactly those fields, so watching the movements alone would leave it stale
+ * until something unrelated happened to move.
+ */
+const stockItems: Counter = async () => {
+  const r = await prisma.stockItem.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
+  return { n: r._count._all, at: r._max.updatedAt };
+};
 
 /**
  * Which tables each page is built from.
@@ -76,6 +89,19 @@ const SCOPES: Record<ChangeScope, Counter[]> = {
   calendar: [schedules],
   // The one screen that genuinely spans the app.
   "my-dashboard": [quotations, purchaseRequests, cashRequests, stockActions],
+  /**
+   * The Management Dashboard — the widest read in the app, and until now the
+   * only list page still refreshing on a plain timer. At 60 seconds that is 60
+   * full renders an hour per open tab, each one rebuilding the P&L, the
+   * receivables, the vouchers and the commissions whether or not a single row
+   * had moved.
+   *
+   * `User` is deliberately left out. The page reads it only for names beside
+   * figures, and a renamed member of staff showing their old name until the next
+   * order or payment moves is not a stale dashboard — it is not worth a sixth
+   * aggregate on every poll.
+   */
+  management: [quotations, purchaseRequests, cashRequests, stockActions, stockItems, schedules],
 };
 
 export function isChangeScope(v: string | null | undefined): v is ChangeScope {

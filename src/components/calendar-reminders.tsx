@@ -14,6 +14,7 @@ interface Reminder {
   calendar: string | null;
 }
 
+/** Re-check for reminders every minute — but only while the tab is on screen. */
 const POLL_MS = 60_000;
 const DISMISS_KEY = "calendar_reminders_dismissed";
 const MS_PH = 8 * 3600 * 1000;
@@ -54,9 +55,29 @@ export function CalendarReminders() {
 
   useEffect(() => {
     setDismissed(readDismissed());
-    load();
-    const iv = window.setInterval(load, POLL_MS);
-    return () => window.clearInterval(iv);
+    const hidden = () => typeof document !== "undefined" && document.hidden;
+
+    // Paused while the tab is hidden — not slowed, the way the approver alarm is.
+    //
+    // That alarm is a siren whose whole job is to reach someone looking at a
+    // different tab, so it may only slow down. This is a stack of cards in the
+    // corner of THIS page: while the tab is hidden there is nothing for it to
+    // draw on, so every poll it makes is spent asking a question nobody can see
+    // the answer to. Two tabs left open were asking twice a minute, around the
+    // clock — 493,000 queries over the last measured window, every one of them
+    // returning no rows at all.
+    //
+    // Coming back checks at once, so a reminder that fell due while you were
+    // away is on screen when you return rather than up to a minute later.
+    const tick = () => { if (!hidden()) void load(); };
+    tick();
+    const iv = window.setInterval(tick, POLL_MS);
+    const onVisible = () => { if (!document.hidden) void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(iv);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [load]);
 
   function dismiss(key: string) {
