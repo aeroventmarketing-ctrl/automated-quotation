@@ -25,6 +25,63 @@ import { saveCashPositionAction } from "../orders/actions";
  * Balance*; the owner resolved it — the bank-only one is **Available Bank
  * Balance**, which is also what it measures: Cash in Bank less what clears now.
  */
+const peso = (n: number) => formatCurrency(n, "PHP");
+
+/**
+ * A figure that can go either way, with its sign in front — the owner's
+ * *"Put a + or - indicator"*. A true minus sign, not a hyphen, and the amount
+ * itself unsigned so the two never read as "₱-−123".
+ */
+const signedPeso = (n: number) => `${n > 0 ? "+" : n < 0 ? "\u2212" : ""}${peso(Math.abs(n))}`;
+
+/**
+ * One line of the sheet. `tone` mirrors the owner's own highlighting.
+ *
+ * `signed` marks the figures that can genuinely go either way: they carry a
+ * leading + or −, and are highlighted **green above zero, red below** — the
+ * owner's rule. The rows that can only ever be positive (Cash in Bank, the
+ * totals from the register) are left plain, because a "+" on every line
+ * teaches the eye to stop seeing it.
+ */
+function Row({ label, value, tone, strong, indent, signed }: {
+  label: string; value: number; tone?: string; strong?: boolean; indent?: boolean; signed?: boolean;
+}) {
+  const signTone = value > 0 ? "bg-emerald-100 text-emerald-900" : value < 0 ? "bg-destructive/10 text-destructive" : "";
+  return (
+    <div className={`flex items-baseline justify-between gap-4 rounded px-2 py-1 ${(signed ? signTone : tone) ?? ""}`}>
+      <span className={`${strong ? "font-semibold" : ""} ${indent ? "pl-3 text-muted-foreground" : ""}`}>{label}</span>
+      <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{signed ? signedPeso(value) : peso(value)}</span>
+    </div>
+  );
+}
+
+/**
+ * One typed figure.
+ *
+ * **Declared here, at module scope, and that is the whole point.** It used to be
+ * defined inside `CashPositionPanel`, which made it a BRAND-NEW component type on
+ * every render — and typing a character re-renders. React compares types by
+ * identity, so a new type means unmount-and-remount rather than update: the input
+ * was destroyed and rebuilt after every keystroke, taking the caret with it. The
+ * owner had to *"type 1 character then left click alternately"*.
+ *
+ * Nothing about the markup was wrong, which is why it reads as a mystery. Keep
+ * this outside the component and it cannot come back.
+ */
+function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex items-center justify-between gap-3 px-2 py-1">
+      <span className="text-muted-foreground">{label}</span>
+      <Input
+        className="h-8 w-40 text-right tabular-nums"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+
 export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: boolean }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -33,14 +90,6 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
   const [f, setF] = useState({
     cob: String(pos.cob), coh: String(pos.coh), cashGcashChecking: String(pos.cashGcashChecking),
   });
-
-  const peso = (n: number) => formatCurrency(n, "PHP");
-  /**
-   * A figure that can go either way, with its sign in front — the owner's
-   * *"Put a + or - indicator"*. A true minus sign, not a hyphen, and the amount
-   * itself unsigned so the two never read as "₱-−123".
-   */
-  const signedPeso = (n: number) => `${n > 0 ? "+" : n < 0 ? "\u2212" : ""}${peso(Math.abs(n))}`;
 
   async function save() {
     setBusy(true);
@@ -60,39 +109,6 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
     }
   }
 
-  /**
-   * One line of the sheet. `tone` mirrors the owner's own highlighting.
-   *
-   * `signed` marks the figures that can genuinely go either way: they carry a
-   * leading + or −, and are highlighted **green above zero, red below** — the
-   * owner's rule. The rows that can only ever be positive (Cash in Bank, the
-   * totals from the register) are left plain, because a "+" on every line
-   * teaches the eye to stop seeing it.
-   */
-  const Row = ({ label, value, tone, strong, indent, signed }: {
-    label: string; value: number; tone?: string; strong?: boolean; indent?: boolean; signed?: boolean;
-  }) => {
-    const signTone = value > 0 ? "bg-emerald-100 text-emerald-900" : value < 0 ? "bg-destructive/10 text-destructive" : "";
-    return (
-      <div className={`flex items-baseline justify-between gap-4 rounded px-2 py-1 ${(signed ? signTone : tone) ?? ""}`}>
-        <span className={`${strong ? "font-semibold" : ""} ${indent ? "pl-3 text-muted-foreground" : ""}`}>{label}</span>
-        <span className={`tabular-nums ${strong ? "font-semibold" : ""}`}>{signed ? signedPeso(value) : peso(value)}</span>
-      </div>
-    );
-  };
-
-  const Field = ({ label, k }: { label: string; k: keyof typeof f }) => (
-    <label className="flex items-center justify-between gap-3 px-2 py-1">
-      <span className="text-muted-foreground">{label}</span>
-      <Input
-        className="h-8 w-40 text-right tabular-nums"
-        inputMode="decimal"
-        value={f[k]}
-        onChange={(e) => setF({ ...f, [k]: e.target.value })}
-      />
-    </label>
-  );
-
   return (
     <Card>
       <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 space-y-0 pb-2">
@@ -111,13 +127,13 @@ export function CashPositionPanel({ pos, admin }: { pos: CashPosition; admin: bo
 
         {editing ? (
           <>
-            <Field label="Cash in Bank" k="cob" />
+            <Field label="Cash in Bank" value={f.cob} onChange={(v) => setF((p) => ({ ...p, cob: v }))} />
             <Row label="Available Bank Balance" value={Number(f.cob) - pos.firstPriority} strong signed />
-            <Field label="Cash on Hand" k="coh" />
+            <Field label="Cash on Hand" value={f.coh} onChange={(v) => setF((p) => ({ ...p, coh: v }))} />
             {/* Receivables is linked, not typed — shown here so the running
                 total the owner is editing against still adds up. */}
             <Row label="Receivables" value={pos.receivables} indent />
-            <Field label="Expected Collections" k="cashGcashChecking" />
+            <Field label="Expected Collections" value={f.cashGcashChecking} onChange={(v) => setF((p) => ({ ...p, cashGcashChecking: v }))} />
             {err && <p className="px-2 text-xs text-destructive">{err}</p>}
             <div className="flex justify-end gap-1.5 px-2 pt-2">
               <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditing(false); setErr(null); }}>Cancel</Button>
