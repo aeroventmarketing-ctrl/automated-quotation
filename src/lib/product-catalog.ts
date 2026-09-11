@@ -61,3 +61,38 @@ export async function getProducts(): Promise<ProductRow[]> {
     suppliers: coerceProductSuppliers(p.suppliers),
   }));
 }
+
+/**
+ * Just enough of a product to NAME it: the four fields an autocomplete, a
+ * barcode scan and an MRF suggestion actually read.
+ *
+ * Structurally a `ScanProduct` (`lib/product-scan`) and a `CatalogueProduct`
+ * (`lib/mrf-suggest`), which is what lets it be passed straight to both.
+ */
+export interface ProductOption {
+  id: string;
+  sku: string | null;
+  name: string;
+  unit: string;
+}
+
+/**
+ * The same catalogue as `getProducts`, without the supplier links.
+ *
+ * `suppliers` is a JSON column — every supplier, price and lead time for every
+ * product — and the pages that only need to offer a name were paying for all of
+ * it and throwing it away. The order page fetched the lot and mapped it down to
+ * exactly these four fields on the very next line, on a page that re-renders on
+ * a timer.
+ *
+ * Use `getProducts` where a PRICE or a SUPPLIER is needed (purchasing,
+ * requisitions, the P&L cost resolvers, the Products page). Use this where the
+ * product is only being named.
+ */
+export async function getProductOptions(): Promise<ProductOption[]> {
+  return prisma.product.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, sku: true, name: true, unit: true },
+  });
+}

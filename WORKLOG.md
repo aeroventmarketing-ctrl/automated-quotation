@@ -1,3 +1,111 @@
+## 2026-09-11 · The quotation builder asks before it fetches
+
+The last page in the app still refreshing on a plain timer. I had set it aside as needing its own
+look, because it is an editing surface rather than a list — and the look turned up two things worth
+recording.
+
+### What a builder render actually costs
+
+**133 queries.** The quotation and its lines, the templates, and **every active catalogue item**
+with its `specs` JSON and a price lookup each. On the bare 8-second default that ran 450 times an
+hour per open tab — and the harness has an empty `CatalogueItem` table, so production pays more
+than 133.
+
+### The comment that said this page must not be refreshed
+
+The autosave carries a deliberate `{ revalidate: false }` and explains itself:
+
+> *Auto-save skips revalidation so the route the user is editing isn't refreshed mid-edit (which
+> would re-run mount effects and reset fields like the header units).*
+
+Someone hit a real bug there. But the page also carried a bare `<AutoRefresh />` refreshing that
+same route every eight seconds regardless — so either the protection was incomplete and editors
+were silently losing fields, or the hazard does not apply to this path.
+
+**It does not, and that was checked rather than argued.** `router.refresh()` re-renders server
+components without remounting, so the builder's `useState` — including the lazily-initialised
+`units` the comment names — is untouched. A value typed into a field was verified in a browser to
+survive four consecutive refreshes. No live bug; the `revalidate: false` remains correct for the
+action path, which is a different thing.
+
+### The measurement corrected the reasoning
+
+I expected `watch` to save nothing while someone types, on the grounds that the autosave writes the
+quotation and moves the token. That is wrong, and the browser said so:
+
+| 26 seconds of… | change polls | page rebuilds |
+| --- | --- | --- |
+| **reading** | 4 | **0** |
+| **editing** | 3 | **1** |
+| *(plain timer, either case)* | — | *4* |
+
+The autosave fires four seconds after the **last** edit, so a burst of typing is one write, one
+token move, one refresh — not one per tick. The comment in the code was rewritten to say what was
+measured rather than what I predicted.
+
+The edit survived the refresh in this run too.
+
+It watches the existing `orders` scope rather than a new one: the builder is built from templates,
+catalogue and settings that only an admin changes, plus the one table that actually moves under it.
+
+523 tests pass; lint and build clean. No migration.
+
+## 2026-09-11 · The order page asks before it fetches, and stops pulling supplier prices it never shows
+
+The two frozen-file items from the round-four survey, done with the owner's approval for these
+specific changes. Both are data-fetching only: no step, gate, actor or stage progression moves.
+
+### The fastest refresh in the app was the only one not asking first
+
+`orders/[id]` carried a bare `<AutoRefresh />` — the 8-second default, with no `watch`. Every eight
+seconds, per open tab, it rebuilt the entire order: the workflow and its stamps, the department job
+orders, the MRFs and their stock availability, the Phase 4 purchasing chain and the commission.
+450 rebuilds an hour, of which perhaps a handful returned anything different.
+
+It now watches a new `order-detail` scope. **Four tables**, because an order page is not built from
+one: almost everything lives in `Quotation.classification`, but the Phase 4 chain is
+`PurchaseRequest` rows and the MRF panels show live availability, which moves on `StockAction` and
+on a direct `StockItem` edit. Leaving any out would freeze one panel of a page whose whole purpose
+is showing several departments what the others just did.
+
+### The order page was pulling every supplier's price to spell a product's name
+
+`getProducts()` returns each product's `suppliers` JSON — every supplier, price and lead time — and
+line 150 mapped it down to `{id, sku, name, unit}` on the very next line. The page names products;
+it never prices them. `getProductOptions()` selects those four columns and nothing else.
+
+**The saving is on the Postgres → app hop, not the browser payload.** The rendered page carries
+**zero** `supplierId` either way — it was already narrowed before being sent to the client. What
+was being paid for was the column leaving the database, which is the Shared Pooler egress Supabase
+bills at 99.1%. The page did not shrink, and should not have.
+
+### Proved before and after, on the same data
+
+Sixteen renders — four orders (including a delivered one and a live production one) × four roles
+(Admin, Warehouse, Purchaser, Engineer):
+
+| | result |
+| --- | --- |
+| visible text, all 16 | **identical** once seeded timestamps are normalised |
+| `productOptions` in the RSC payload | **identical** — 14 name+unit pairs, matching all 14 active products |
+
+The first pass reported four pages differing; the differences were `7:38 PM` against `7:35 PM` on a
+fixture the harness re-seeds at each boot — two harness boots, not two behaviours.
+
+**And the watch does not cost anyone their update.** With the page open and nothing happening:
+
+| | change polls | page rebuilds |
+| --- | --- | --- |
+| idle, 30s | 3 | **0** |
+| after a write to the order | 3 | **1**, within one poll |
+
+Every order-workflow write goes through `prisma.quotation.update`, so `@updatedAt` moves on all of
+them; the one `$executeRaw` in the codebase is an advisory lock, not a write. A second viewer still
+sees a colleague's action within eight seconds — the difference is that they no longer pay for the
+other 449 rebuilds an hour.
+
+523 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · The Management Dashboard asks before it fetches, and reminders stop polling an invisible tab
 
 Two of the three remaining non-frozen items from the round-four survey. Both remove queries rather
