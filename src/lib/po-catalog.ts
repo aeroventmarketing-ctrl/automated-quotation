@@ -4,6 +4,7 @@
  * Matching tolerates order-reference suffixes on the line description.
  */
 import type { POLine } from "@/lib/purchase-order";
+import { itemNameCandidates } from "@/lib/item-sku";
 
 export type CatalogPrices = Record<string, Record<string, number>>; // productNameLower → companyLower → price
 export type CatalogSuppliers = Record<string, string[]>; // productNameLower → supplier company[]
@@ -52,7 +53,11 @@ const hasDigit = (t: string) => /\d/.test(t);
  * matching a different model (e.g. 24CDH). A match that agrees on the model code
  * always beats a generic / substring match, so the specific variant wins.
  */
-export function matchKey(description: string, keys: string[]): string | undefined {
+/**
+ * Match ONE exact string. Split out so `matchKey` can run it over the line with
+ * its remark peeled off, which is the form that decides.
+ */
+function fuzzyKey(description: string, keys: string[]): string | undefined {
   const desc = description.trim().toLowerCase();
   if (!desc) return undefined;
   if (keys.includes(desc)) return desc;
@@ -89,6 +94,54 @@ export function matchKey(description: string, keys: string[]): string | undefine
     if (sc > score) { score = sc; best = key; }
   }
   return best;
+}
+
+/**
+ * Best product-name key for a requisition / PO line — **read off the article, not
+ * the remark**.
+ *
+ * The owner's rule, stated exactly: *"the system should read the details of
+ * Articles/Description only, remarks should not be included. If the details are
+ * articles/description+remarks, supplier do not show."*
+ *
+ * A requisition line is COMPOSED, not stored: `mrfItemLine` writes
+ * `"<qty> <unit> · <description> (<remark>)"`, so by the time it reaches here the
+ * person's remark is glued to the item name. The matcher below is fuzzy and
+ * tokenised, and a remark that happens to mention a SIZE quietly hands the line
+ * to the wrong product:
+ *
+ * > `INDUCTION MOTOR 2 HP, 1PH, 4 POLE (replace the 1 HP unit)`
+ *
+ * matched the **1 HP** product — its every model code ("1", "hp") appears in the
+ * line, courtesy of the remark. The wrong product means the wrong supplier, or
+ * none at all, which is precisely what was reported.
+ *
+ * So the order is:
+ *
+ *  1. **An exact name, tried on every candidate.** A product genuinely called
+ *     "MOTOR (3-PHASE)" keeps its own row rather than being peeled into another
+ *     item's — peeling must never beat a real name.
+ *  2. **Fuzzy on the article alone**, remark removed. The owner's rule, and the
+ *     answer in almost every case.
+ *  3. **Fuzzy on the whole line**, last. Only reachable when the article alone
+ *     matched nothing, so it can rescue odd historic data without ever
+ *     overruling step 2.
+ */
+export function matchKey(description: string, keys: string[]): string | undefined {
+  const candidates = itemNameCandidates(description).map((c) => c.trim()).filter(Boolean);
+  if (!candidates.length) return undefined;
+  // 1 — a real name, whichever candidate carries it.
+  for (const c of candidates) {
+    const exact = c.toLowerCase();
+    if (keys.includes(exact)) return exact;
+  }
+  // 2 then 3 — the article first, the whole line only as a fallback.
+  const peeled = candidates.slice(1);
+  for (const c of [...peeled, candidates[0]]) {
+    const hit = fuzzyKey(c, keys);
+    if (hit) return hit;
+  }
+  return undefined;
 }
 
 /** The catalogue price for a line description + supplier (order-suffix tolerant). */

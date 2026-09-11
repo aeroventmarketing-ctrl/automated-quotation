@@ -151,3 +151,63 @@ describe("withReferencePrices — seeding a new PO", () => {
     expect(out[0].unitPrice).toBe("128");
   });
 });
+
+/**
+ * The owner's rule, stated exactly: *"the system should read the details of
+ * Articles/Description only, remarks should not be included. If the details are
+ * articles/description+remarks, supplier do not show. If articles/description
+ * only then the supplier shows."*
+ *
+ * A requisition line reaches the matcher as `"<description> (<remark>)"`, so
+ * without this the person's own note is matched as if it were part of the item
+ * name — and a remark that mentions a SIZE hands the line to a different product.
+ */
+describe("the article decides, the remark is ignored", () => {
+  const KEYS = [
+    "induction motor 1 hp, 1ph, 4 pole",
+    "induction motor 2 hp, 1ph, 4 pole",
+    "gi sheet 24ga",
+    "gi sheet 26ga",
+    "belt b-50",
+    "belt b-60",
+    "harness office paper",
+  ];
+
+  it("does not hand a 2 HP line to the 1 HP product because the remark said 1 HP", () => {
+    // The case that was silently wrong: every code in the 1 HP product's name
+    // ("1", "hp") appeared in the line, courtesy of the remark.
+    const desc = "INDUCTION MOTOR 2 HP, 1PH, 4 POLE (replace the 1 HP unit)";
+    expect(matchKey(desc, KEYS)).toBe("induction motor 2 hp, 1ph, 4 pole");
+  });
+
+  it("reads the same answer with the remark as without it", () => {
+    const PAIRS: Array<[string, string]> = [
+      ["GI SHEET 24GA", "26GA is also fine"],
+      ["BELT B-50", "use B-60 if not available"],
+      ["HARNESS OFFICE PAPER", "for the front office"],
+      ["INDUCTION MOTOR 2 HP, 1PH, 4 POLE", "urgent — needed by 9/15"],
+    ];
+    for (const [article, remark] of PAIRS) {
+      const plain = matchKey(article, KEYS);
+      const remarked = matchKey(`${article} (${remark})`, KEYS);
+      expect(remarked, `${article} (${remark})`).toBe(plain);
+      expect(plain, article).toBe(article.toLowerCase());
+    }
+  });
+
+  it("a product whose real name ends in brackets keeps its own row", () => {
+    // Peeling must never beat a genuine name — otherwise this line would be
+    // peeled to "induction motor" and matched against whatever came first.
+    const keys = [...KEYS, "induction motor 2 hp (teco)"];
+    expect(matchKey("INDUCTION MOTOR 2 HP (TECO)", keys)).toBe("induction motor 2 hp (teco)");
+  });
+
+  it("still matches an order-reference suffix, which is not a remark", () => {
+    // The suffix the PO builder itself appends — peeling handles it the same way.
+    expect(matchKey("BELT B-50 (JO 2600080)", KEYS)).toBe("belt b-50");
+  });
+
+  it("gives up rather than guessing when the article names nothing", () => {
+    expect(matchKey("SOMETHING NOBODY SELLS (urgent)", KEYS)).toBeUndefined();
+  });
+});

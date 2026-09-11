@@ -18,7 +18,7 @@ import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPu
 import { orderBoughtInLines } from "@/lib/department-pnl";
 import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
-import { REF_PRICE_KEY } from "@/lib/po-catalog";
+import { REF_PRICE_KEY, matchKey } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy } from "@/lib/voucher-check";
 import { getPaymentTerms } from "@/lib/payment-terms";
@@ -118,15 +118,19 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   const scanProducts = products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }));
   const suppliersByProduct = new Map<string, string[]>();
   for (const p of products) suppliersByProduct.set(p.name.trim().toLowerCase(), p.suppliers.map((s) => s.company).filter(Boolean));
-  const productNamesByLen = [...suppliersByProduct.keys()].sort((a, b) => b.length - a.length);
+  // One answer to "who carries this line", not two. This used to run its own
+  // exact-then-substring lookup, which is a different algorithm from the
+  // `matchKey` the PO form itself uses — so a line could be offered a supplier in
+  // one place and not the other. It also had no idea about remarks: the owner's
+  // rule is that the article decides and the remark is ignored, and `matchKey`
+  // now implements exactly that.
+  const supplierKeys = [...suppliersByProduct.keys()];
   const suppliersForItem = (itemStr: string): string[] => {
     if (isIssuedFromStockLine(itemStr)) return []; // issued-from-stock record, not purchased
-    const desc = poLineFromPRItem(stripToPurchasePrefix(itemStr)).description.trim().toLowerCase();
-    if (!desc) return [];
-    const exact = suppliersByProduct.get(desc);
-    if (exact) return exact;
-    const hit = productNamesByLen.find((n) => n.length >= 3 && (desc.includes(n) || n.includes(desc)));
-    return hit ? suppliersByProduct.get(hit) ?? [] : [];
+    const desc = poLineFromPRItem(stripToPurchasePrefix(itemStr)).description;
+    if (!desc.trim()) return [];
+    const key = matchKey(desc, supplierKeys);
+    return key ? suppliersByProduct.get(key) ?? [] : [];
   };
   // Catalogue prices: product name → supplier company → unit price. Used to
   // pre-fill PO line prices for the purchaser's reference.

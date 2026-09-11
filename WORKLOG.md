@@ -1,3 +1,54 @@
+## 2026-09-11 · The article decides the supplier; the remark is ignored
+
+The owner, after I reported I could not reproduce it: *"in requisitions, the system should read the details of
+Articles/Description only, remarks should not be included. If the details are articles/description+remarks,
+supplier do not show. If articles/description only then the supplier shows."*
+
+They were right and my previous fuzzing was too gentle. **The remark only breaks the match when the catalogue
+holds a near-identical sibling and the remark happens to name it** — which a real parts list does constantly and
+my test catalogue did not:
+
+> `INDUCTION MOTOR 2 HP, 1PH, 4 POLE (replace the 1 HP unit)`
+
+matched the **1 HP** product. The matcher's cross-model guard asks that every code in the product's name appear
+in the line; "1" and "hp" both did — put there by the remark. Wrong product, therefore wrong supplier, or none
+at all when the sibling's supplier differs. Yesterday's 296 combinations all passed because every remark I
+invented was *about* the item rather than about another one.
+
+### The rule, implemented as stated
+
+`matchKey` now reads the **article**, not the whole line:
+
+1. **An exact name, tried on every candidate** — a product genuinely called "MOTOR (3-PHASE)" keeps its own row.
+   Peeling must never beat a real name.
+2. **Fuzzy on the article alone**, remark removed. The owner's rule, and the answer nearly always.
+3. **Fuzzy on the whole line**, last — only reachable when the article matched nothing, so it can still rescue
+   odd historic data without ever overruling step 2.
+
+It reuses `itemNameCandidates`, the peeling written for the SKU bug (#506) — the same defect, one lookup further
+on. One definition of "the item without its remark" rather than two that can drift.
+
+### …and the purchasing page stops asking a different question
+
+`suppliersForItem` there ran its own exact-then-substring lookup — a **different algorithm** from the `matchKey`
+the PO form uses, so a line could be offered a supplier in one place and not the other. It now calls the same
+function. One answer to "who carries this line".
+
+### Proved by reverting it
+
+Not asserted — measured, on the same page with the same data, with the 1 HP deliberately given a supplier that
+is NOT in the registry so a wrong match is visible rather than silent:
+
+| | product matched | supplier box |
+| --- | --- | --- |
+| **before** | 1 HP — wrong | nothing offered, nothing filled |
+| **after** | 2 HP — right | *Showing 1 supplier* · **HARNESS STEEL CORP** prefilled |
+
+Giving the two motors the SAME supplier — the obvious fixture — would have passed either way and proved
+nothing. That is worth remembering: a fixture where the bug is invisible is not a test.
+
+Five new cases pin the rule, including the sibling clash and the bracketed product name that must not be peeled.
+505 tests pass; lint and build clean. No migration.
 ## 2026-09-11 · The PO form says WHY it has no supplier to suggest
 
 The owner: *"error in requisitions when requestor put a label in remarks, supplier cannot be detected in

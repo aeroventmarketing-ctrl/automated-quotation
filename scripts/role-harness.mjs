@@ -363,6 +363,15 @@ async function seed() {
   });
   for (const [name, sku, unit] of [
     ["GI SHEET 24GA", "PRD10001", "pc"],
+    // Two sizes of one motor, so a remark that mentions the OTHER size has
+    // something to be wrongly matched against. This pair is the bug: every model
+    // code in the 1 HP name appeared in a 2 HP line whose remark said "1 HP".
+    // NOTE: the 1 HP is given the UNREGISTERED supplier a few lines below, so
+    // matching the wrong size is VISIBLE on screen — "isn't in the supplier list"
+    // instead of "Showing 1 supplier". Same supplier on both would have let the
+    // wrong product pass the test.
+    ["INDUCTION MOTOR 1 HP, 1PH, 4 POLE", "PRD10007", "unit"],
+    ["INDUCTION MOTOR 2 HP, 1PH, 4 POLE", "PRD10008", "unit"],
     ["BELT B-50", "PRD10002", "pc"],
     // Catalogue-only: not stocked, so it exercises the product half of the join.
     ["HARNESS OFFICE PAPER", "PRD10004", "ream"],
@@ -378,7 +387,9 @@ async function seed() {
     // seeded below) — the PO form offers the INTERSECTION of "registered supplier"
     // and "carries this product", so a product pointing at a company nobody has
     // registered shows "0 suppliers" and looks exactly like the bug under test.
-    const suppliers = [{ supplierId: "s-harness", company: "HARNESS STEEL CORP", code: sku, price: 100 }];
+    const suppliers = sku === "PRD10007"
+      ? [{ supplierId: "x", company: "GOLDEN PACIFIC INC", code: sku, price: 100 }]
+      : [{ supplierId: "s-harness", company: "HARNESS STEEL CORP", code: sku, price: 100 }];
     await p.product.upsert({
       where: { id: `harness-prd-${sku}` },
       update: { name, sku, unit, active: true, suppliers },
@@ -465,6 +476,9 @@ async function seed() {
     ["HARNESS-SUP-NONE", "2 pc · CUTTING DISC 4in (for grinder)"],
     // Somebody sells it, but that company was never registered.
     ["HARNESS-SUP-UNREG", "1 pc · HARNESS UNREGISTERED ITEM (blue)"],
+    // The owner's case: a remark naming the OTHER size. Read as article+remark
+    // this matched the 1 HP product; read as the article alone it is the 2 HP.
+    ["HARNESS-SUP-SIZE", "1 unit · INDUCTION MOTOR 2 HP, 1PH, 4 POLE (replace the 1 HP unit)"],
   ]) {
     await p.purchaseRequest.create({ data: {
       kind: "department", dept: "office", items: [item], note, status: "APPROVED",
