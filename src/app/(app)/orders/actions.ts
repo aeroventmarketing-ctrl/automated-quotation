@@ -76,7 +76,7 @@ import {
 } from "@/lib/delivery-multibatch";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
-import { buildCommissions, allDeals } from "@/lib/sales-commission";
+import { buildCommissionsFresh, allDeals } from "@/lib/sales-commission";
 import { applyStockChange } from "@/lib/inventory";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
@@ -135,7 +135,7 @@ async function ensureCommissionRow(quotationId: string): Promise<void> {
   try {
     const q = await prisma.quotation.findUnique({ where: { id: quotationId }, include: { preparedBy: true } });
     if (!q) return;
-    const deal = await buildCommissions({ salespersonId: q.preparedById })
+    const deal = await buildCommissionsFresh({ salespersonId: q.preparedById })
       .then((v) => allDeals(v).find((d) => d.kind === "order" && d.refId === quotationId) ?? null);
     if (!deal) return; // no confirmed sale to commission
     await prisma.commission.upsert({
@@ -4874,7 +4874,7 @@ async function commissionAmountApproved(quotationId: string, wf: { commission?: 
   if (wf.commission?.approvedAt) return true;
   const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
   if (!quote?.preparedById) return false;
-  return await buildCommissions({ salespersonId: quote.preparedById })
+  return await buildCommissionsFresh({ salespersonId: quote.preparedById })
     .then((v) => allDeals(v).some((d) => d.kind === "order" && d.refId === quotationId && d.approved))
     .catch(() => false);
 }

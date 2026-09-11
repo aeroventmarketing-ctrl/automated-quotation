@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { buildCommissions, allDeals, isPayable, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
+import { buildCommissionsFresh, allDeals, isPayable, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -56,7 +56,7 @@ export async function payDealCommission(
   paid: boolean,
 ): Promise<void> {
   const user = await assertAccounting();
-  const deal = allDeals(await buildCommissions()).find(
+  const deal = allDeals(await buildCommissionsFresh()).find(
     (d) => d.kind === kind && d.refId === refId && d.payeeKind === payeeKind,
   );
   if (!deal) throw new Error("That sale is no longer in the commission list.");
@@ -119,7 +119,7 @@ export async function payDealCommission(
 export async function payAllForSalesperson(salespersonId: string): Promise<{ paid: number; total: number; error?: string }> {
   const user = await assertAccounting();
   const today = commissionToday();
-  const due = allDeals(await buildCommissions({ salespersonId })).filter((d) => isPayable(d, today));
+  const due = allDeals(await buildCommissionsFresh({ salespersonId })).filter((d) => isPayable(d, today));
   if (due.length === 0) return { paid: 0, total: 0, error: "Nothing is awaiting payout for this salesperson." };
 
   const now = new Date();

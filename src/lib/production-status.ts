@@ -10,6 +10,8 @@
  *
  * An order leaves the list when it is DELIVERED, whatever its job orders say.
  */
+import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readOrderWorkflow, PRODUCTION_DEPTS, stageIndex, type OrderStage, type OrderWorkflow } from "@/lib/order-workflow";
@@ -81,7 +83,16 @@ export function productionRowsForOrder(ref: ProductionOrderRef, wf: OrderWorkflo
   });
 }
 
-export async function getProductionStatus(): Promise<ProductionStatus> {
+/**
+ * Memoised for the length of one request.
+ *
+ * Both dashboards render this card, and My Dashboard reached it twice in a
+ * single render — two identical whole-table reads, measured in the Postgres log.
+ * There is no write path anywhere near this function (it is a pure read used to
+ * draw a card), so there is nothing a second call could observe that the first
+ * one missed.
+ */
+export const getProductionStatus = cache(async function getProductionStatus(): Promise<ProductionStatus> {
   // Today in Manila (PH) so the deadline maths matches the rest of the app.
   const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
@@ -89,8 +100,17 @@ export async function getProductionStatus(): Promise<ProductionStatus> {
   // revision reopens the inquiry (status leaves WON), so a WON filter drops
   // confirmed orders that are still in production. isSaleConfirmed below is the
   // real gate, exactly as the departmental P&L does it.
+  //
+  // The `where` is a NECESSARY CONDITION for that gate, not a second opinion on
+  // it: `isSaleConfirmed` returns false immediately unless the sale carries a
+  // PO, so a row whose `sale.po` is absent can never survive the loop below.
+  // Asking Postgres for it therefore cannot drop an order this card would have
+  // shown — and the real gate still runs, unchanged, on everything that returns.
+  // Without it this read every quotation's whole `classification` — the entire
+  // order workflow, kilobytes each — to find the handful still on the shop floor.
   const wonQuotes = await prisma.quotation
     .findMany({
+      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
       select: {
         id: true,
         classification: true,
@@ -126,4 +146,4 @@ export async function getProductionStatus(): Promise<ProductionStatus> {
   nearDue.sort(bySoonest);
   onTime.sort(bySoonest);
   return { onTime, nearDue, late };
-}
+});

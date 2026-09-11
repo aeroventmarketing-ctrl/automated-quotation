@@ -1,3 +1,78 @@
+## 2026-09-11 · My Dashboard stops reading every quotation six times to draw one page
+
+Round four of the egress work. Supabase egress on 11 September — the first day after the earlier
+fixes — was **44.74 GB**, against 250 GB included for the month. The earlier merges were real, but
+they took the top off a much larger number.
+
+### Two thirds of the ranking was a graveyard
+
+`pg_stat_statements` had not been reset since **19 June**, so its 84-day totals were mostly
+*pre-fix* traffic. The top of the list proved it:
+
+| # | pct | what it actually is | status |
+| --- | --- | --- | --- |
+| 1 | 24.9% (11 TB) | `/orders` as it stood before #495 | **dead since 4 Sep** |
+| 4 | 3.4% (1,475 GB) | `pending-approvals.ts` + `my-dashboard.ts`, before #508 | **dead since 10 Sep** |
+| 5 | 2.6% (1,133 GB) | `production-status.ts` | **live** |
+
+Rows 1 and 4 were identified by diffing `71a3fec^` and `75a8a78^` — both are
+`include: {...}, orderBy: { createdAt: "desc" }` with no `where`, which Prisma emits as
+`WHERE 1=1`. Row 4 was two byte-identical call sites sharing one fingerprint, the same collision
+as last round. **28.3% of the ranking was traffic that no longer exists**, which is exactly what
+a stale `stats_reset` buys you.
+
+### What was actually live, measured instead of inferred
+
+The app was run against a Postgres with `log_min_duration_statement = 0` and the SQL read back.
+One render of My Dashboard issued **six unfiltered whole-table `Quotation` scans**:
+
+- **4× `buildCommissions`** — the approvals feed, the payout tile, the finance-monitor cards and
+  the page itself each call it, and nothing memoises it. Four identical reads of every quotation,
+  `classification` and all, to draw one page.
+- **2× `getProductionStatus`** — unfiltered, for the handful of orders still on the shop floor.
+
+### The fix, and the trap inside it
+
+Both now carry the same **necessary-condition** filter the other five confirmed-order queries
+use: `isSaleConfirmed` returns false without a PO, so `classification -> sale -> po` cannot drop a
+row the loop would have kept. The real gate still runs, untouched, on everything returned.
+
+`buildCommissions` is memoised with `cache()`, keyed on the **salesperson id, never on `opts`** —
+`cache()` compares arguments by identity, so four callers passing four `{}` literals would miss
+every time, which is the bug being fixed.
+
+The trap: **a server action and the re-render `revalidatePath` triggers are one request**, so they
+share one cache scope. `payDealCommission` reads the view, marks a commission paid, then
+re-renders `/commissions` — and would have been handed its own pre-write answer. The row would
+still say *unpaid* until someone refreshed by hand, and the button would look broken. So write
+paths call `buildCommissionsFresh`, which never populates the memo; the render after them finds it
+empty and reads fresh. **A test asserts this against the source**, because nothing else would
+catch it — not the compiler, not the build, only the screen, occasionally. It was confirmed to
+fail on a deliberate regression before being kept.
+
+### Proved on the harness
+
+| | unfiltered whole-table scans | `buildCommissions` reads |
+| --- | --- | --- |
+| **before** | **6** | **4** |
+| **after** | **0** | **2** |
+
+`getProductionStatus` is still read once per dashboard — the memo dedupes it across the two
+dashboards, not within one — but it is filtered now.
+
+Equivalence was checked by reverting and re-rendering on the same data: `/commissions`,
+`/my-dashboard`, `/dashboard` and `/management` produce **identical money figures in identical
+order** (210, 86, 21 and 68 of them), and the production card's rows match exactly.
+
+### One claim withdrawn before it was acted on
+
+An earlier reading had `/management` firing **64 `Product` and 100 `StockItem` queries per
+render**. It was wrong: Next.js streams, so work lands after the response and the line-number
+buckets swept the tail into the last page measured. An **isolated** `/management` render is 328
+statements with **zero** of either. There is no such N+1.
+
+523 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · A commission is payable only once its release day arrives
 
 The owner, on a ₱9,586.15 voucher offered on 11 September: *"Desiree Enigo 9586.15 Cash Voucher commission is
