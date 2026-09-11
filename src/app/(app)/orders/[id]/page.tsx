@@ -36,7 +36,7 @@ import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems, withSpecDetail } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
-import { getProducts } from "@/lib/product-catalog";
+import { getProductOptions } from "@/lib/product-catalog";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { getHideOrderProgress, progressHiddenFor } from "@/lib/order-progress-visibility";
 import { saleFromClassification, collectedTotal, closeDocsState, saleDocReadsFromClassification, PAYMENT_KIND_LABEL } from "@/lib/sale";
@@ -147,7 +147,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   }));
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.
-  const productOptions = await getProducts().then((ps) => ps.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))).catch(() => []);
+  //
+  // `getProductOptions`, not `getProducts`: this page names products, it never
+  // prices them. The full read carries every product's `suppliers` JSON — each
+  // supplier, price and lead time — which the mapping here threw away on the
+  // very next line, on a page that re-renders on a timer.
+  const productOptions = await getProductOptions().catch(() => []);
   // Sales commission — the entitlement is COMPUTED (rules 1–6 in
   // `lib/sales-commission`: the salesperson's month must clear ₱1M, the client
   // must have fully paid, and it is 1.5% of the net), so this reads the same
@@ -869,7 +874,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="space-y-5">
-      <AutoRefresh />
+      {/* Watched, not on a plain timer. Every eight seconds this page rebuilt
+          the whole order — workflow, job orders, MRFs, the purchasing chain,
+          the stock availability and the commission — whether or not anything
+          had moved. The tick is now a ~100-byte question; the rebuild happens
+          when the order or its purchase requests actually change. */}
+      <AutoRefresh watch="order-detail" />
       <Link href="/orders" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Orders
       </Link>

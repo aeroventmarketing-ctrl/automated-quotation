@@ -1,3 +1,59 @@
+## 2026-09-11 · The order page asks before it fetches, and stops pulling supplier prices it never shows
+
+The two frozen-file items from the round-four survey, done with the owner's approval for these
+specific changes. Both are data-fetching only: no step, gate, actor or stage progression moves.
+
+### The fastest refresh in the app was the only one not asking first
+
+`orders/[id]` carried a bare `<AutoRefresh />` — the 8-second default, with no `watch`. Every eight
+seconds, per open tab, it rebuilt the entire order: the workflow and its stamps, the department job
+orders, the MRFs and their stock availability, the Phase 4 purchasing chain and the commission.
+450 rebuilds an hour, of which perhaps a handful returned anything different.
+
+It now watches a new `order-detail` scope. **Four tables**, because an order page is not built from
+one: almost everything lives in `Quotation.classification`, but the Phase 4 chain is
+`PurchaseRequest` rows and the MRF panels show live availability, which moves on `StockAction` and
+on a direct `StockItem` edit. Leaving any out would freeze one panel of a page whose whole purpose
+is showing several departments what the others just did.
+
+### The order page was pulling every supplier's price to spell a product's name
+
+`getProducts()` returns each product's `suppliers` JSON — every supplier, price and lead time — and
+line 150 mapped it down to `{id, sku, name, unit}` on the very next line. The page names products;
+it never prices them. `getProductOptions()` selects those four columns and nothing else.
+
+**The saving is on the Postgres → app hop, not the browser payload.** The rendered page carries
+**zero** `supplierId` either way — it was already narrowed before being sent to the client. What
+was being paid for was the column leaving the database, which is the Shared Pooler egress Supabase
+bills at 99.1%. The page did not shrink, and should not have.
+
+### Proved before and after, on the same data
+
+Sixteen renders — four orders (including a delivered one and a live production one) × four roles
+(Admin, Warehouse, Purchaser, Engineer):
+
+| | result |
+| --- | --- |
+| visible text, all 16 | **identical** once seeded timestamps are normalised |
+| `productOptions` in the RSC payload | **identical** — 14 name+unit pairs, matching all 14 active products |
+
+The first pass reported four pages differing; the differences were `7:38 PM` against `7:35 PM` on a
+fixture the harness re-seeds at each boot — two harness boots, not two behaviours.
+
+**And the watch does not cost anyone their update.** With the page open and nothing happening:
+
+| | change polls | page rebuilds |
+| --- | --- | --- |
+| idle, 30s | 3 | **0** |
+| after a write to the order | 3 | **1**, within one poll |
+
+Every order-workflow write goes through `prisma.quotation.update`, so `@updatedAt` moves on all of
+them; the one `$executeRaw` in the codebase is an advisory lock, not a write. A second viewer still
+sees a colleague's action within eight seconds — the difference is that they no longer pay for the
+other 449 rebuilds an hour.
+
+523 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · The Management Dashboard asks before it fetches, and reminders stop polling an invisible tab
 
 Two of the three remaining non-frozen items from the round-four survey. Both remove queries rather

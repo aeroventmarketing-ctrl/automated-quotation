@@ -28,7 +28,7 @@
 import { prisma } from "@/lib/db";
 
 /** What a page watches. Each is one or more tables it is built from. */
-export type ChangeScope = "orders" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management";
+export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management";
 
 /**
  * The token could not be read, so the caller should behave as it did before —
@@ -82,6 +82,23 @@ const stockItems: Counter = async () => {
  */
 const SCOPES: Record<ChangeScope, Counter[]> = {
   orders: [quotations],
+  /**
+   * One order, open on screen — the busiest page in the app and, at eight
+   * seconds, the fastest refresh in it. Rebuilding it means the whole workflow,
+   * the job orders, the MRFs, the purchasing chain, stock availability and the
+   * commission, all recomputed.
+   *
+   * FOUR tables, because an order page is not built from one. Almost everything
+   * on it lives in `Quotation.classification` — every stage stamp, job order,
+   * material request and delivery batch — but the Phase 4 chain is
+   * `PurchaseRequest` rows, and the MRF panels show live stock availability,
+   * which moves when material is issued (`StockAction`) or an item is edited
+   * directly (`StockItem`).
+   *
+   * Leaving any of them out would freeze one panel of a page whose whole purpose
+   * is showing several departments what the others have just done.
+   */
+  "order-detail": [quotations, purchaseRequests, stockActions, stockItems],
   purchasing: [purchaseRequests],
   checks: [purchaseRequests],
   requisitions: [purchaseRequests],
