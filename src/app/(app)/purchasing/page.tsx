@@ -20,7 +20,7 @@ import { poBatchId } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy } from "@/lib/voucher-check";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
@@ -297,6 +297,9 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         canRemoveCheck: canAttachCheckHere && checkRemovableAt(status, { isDept: bIsDept, poApproved: isPoApproved(anchor.chainLog) }, checkActor),
         // …and the same two are outside the per-photo AI read allowance.
         unlimitedCheckReads: hasUnlimitedCheckReads(checkActor),
+        // …and are the two who may answer a discrepancy — at any stage, so a
+        // wrong figure on a completed PO can still be put right.
+        canApproveCheckIssue: canApproveCheckDiscrepancy(checkActor),
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",

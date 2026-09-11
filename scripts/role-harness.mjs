@@ -108,6 +108,28 @@ const PROBES = [
     doneViewOnly: (t) => near(t, "HARNESS-DONE", /Check not attached/) && !near(t, "HARNESS-DONE", /Attach check|Add check/),
   } },
   /**
+   * *"Add an option for admin/payment approver to approve or edit the
+   * discrepancy."*
+   *
+   * Three separate questions, which is why they are three cells: everyone who
+   * can see the PO must still SEE what disagrees (hiding it from the people who
+   * handle the check would be the opposite of the ask), while only an admin and
+   * the Payment Approver get the two controls. Anchored to the PO number, so a
+   * button belonging to some other row cannot answer for this one.
+   */
+  { path: "/purchasing", label: "discrepancy", checks: {
+    row: (t) => t.includes("HARNESS-CHK-TALLY"),
+  }, raw: {
+    // Read off the RSC payload, NOT the rendered text. This row lives in a
+    // client-rendered tab, so the two buttons never appear in the HTML a scraper
+    // sees — probing for their labels would print a column of falses that look
+    // like a permission bug and are not (the same trap the Budgeted tab sets,
+    // above). What IS in the payload is the server's own answer, per role, which
+    // is the permission question. The BUTTONS are checked in a real browser.
+    warned: (h) => h.includes("Nothing tallies"),
+    mayApprove: (h) => /"note\\*"?:\\*"HARNESS-CHK-TALLY[\s\S]{0,4000}?canApproveCheckIssue\\*":\\*"?true/.test(h),
+  } },
+  /**
    * The AI read allowance — *"3 tries in every row or every attachment.
    * Admin/payment approved still allowed unlimited number of tries."*
    *
@@ -410,6 +432,27 @@ async function seed() {
       confidence: 0.95, warnings: [], issues: [], readByName: "Michelle Cotura", readAt: "",
     },
   });
+  // The owner's OTHER screenshot: a check that disagrees with itself AND with
+  // the PO — peso box ₱14,886.07, words ₱14,814.07, PO net ₱14,866.07. Nothing
+  // can be re-read here (no API key in this environment), so the issue is seeded
+  // exactly as a real read would have stored it, and the two new controls —
+  // *"approve or edit the discrepancy"* — have something to act on.
+  await p.purchaseRequest.create({ data: {
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    note: "HARNESS-CHK-TALLY", status: "CASH_RELEASED",
+    po: { ...poFor("HARNESS-CHK-TALLY"), supplier: { company: "GOLDEN PACIFIC INC" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    voucherCheckDocs: [{
+      ...checkDoc("0000486692", "2026-09-12", 14814.07),
+      read: {
+        ...checkDoc("0000486692", "2026-09-12", 14814.07).read,
+        amountFigures: 14886.07, amountFromWords: 14814.07,
+        issues: [{ key: "amount", message: "Nothing tallies: the peso box reads ₱14,886.07, the words read ₱14,814.07, and this PO's net is ₱14,866.07." }],
+      },
+    }],
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
   // One check in the owner's reported state: a clearing date the model wrote
   // itself, with no DATE-box digits behind it — the shape that put 17 October
   // in the register as 17 July, reading "49 days ago".

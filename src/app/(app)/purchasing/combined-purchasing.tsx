@@ -92,6 +92,8 @@ export interface BatchCard {
   canReadCheck: boolean;
   /** …and their reads don't count against the per-photo AI allowance. */
   unlimitedCheckReads: boolean;
+  /** …and they may accept a discrepancy, or correct a misread figure. */
+  canApproveCheckIssue: boolean;
   canRemoveCheck: boolean;
 }
 
@@ -488,6 +490,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             canRead={batch.canReadCheck}
             canRemove={batch.canRemoveCheck}
             unlimitedReads={batch.unlimitedCheckReads}
+            canApproveIssue={batch.canApproveCheckIssue}
             canView={showSupplier}
             netAmount={totals.net}
           />

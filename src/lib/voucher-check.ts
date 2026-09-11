@@ -122,6 +122,58 @@ export interface CheckDateFix {
   at: string; // ISO
 }
 
+/**
+ * A person corrected the AMOUNT the read got wrong — the owner's *"add an option
+ * for admin/payment approver to approve or edit the discrepancy."*
+ *
+ * The same shape and the same reasoning as `CheckDateFix`: a correction says the
+ * check was always for this figure and the reading was wrong. `was` keeps the
+ * misread on the record, because the point of correcting it is not to pretend
+ * the AI never said it.
+ *
+ * This is the figure the register, the cash position and the duplicate test all
+ * go on once it exists — see `effectiveCheckAmount`.
+ */
+export interface CheckAmountFix {
+  amount: number; // what the check is actually for
+  /** What the reading had claimed. */
+  was: number | null;
+  byName: string;
+  at: string; // ISO
+}
+
+/** …and the check NUMBER, when the photo was misread there instead. */
+export interface CheckNoFix {
+  checkNo: string; // as printed on the check
+  was: string | null;
+  byName: string;
+  at: string; // ISO
+}
+
+/**
+ * An admin or the Payment Approver has looked at what disagreed and accepted it.
+ *
+ * It changes no figure. The warning stays on screen and stays readable — it just
+ * stops being a question, and says who answered it. The owner's ruling on that
+ * was explicit: the discrepancy *"becomes approved by X, everywhere"*, on the PO
+ * card and on Check Monitoring alike, rather than disappearing. A disagreement
+ * about money that vanishes when someone clicks a button is worse than one that
+ * nags.
+ *
+ * `keys` is what makes this safe. It records WHICH issues were on the check at
+ * the moment of approval, so a discrepancy found later — a duplicate check number
+ * recorded on another PO next week, say — is not silently covered by an approval
+ * given for something else. Anything not in this list still shows amber.
+ */
+export interface CheckIssueApproval {
+  /** The `CheckIssue.key`s this approval covers. */
+  keys: string[];
+  byName: string;
+  at: string; // ISO
+  /** Why it is acceptable, if the approver said. */
+  note?: string;
+}
+
 /** The bank cleared it. Recorded by a person, because only the bank knows. */
 export interface CheckCleared {
   on: string; // YMD it actually cleared
@@ -158,6 +210,12 @@ export interface CheckDoc {
    * reschedule — see `effectiveClearingYMD`.
    */
   dateFix?: CheckDateFix;
+  /** A person corrected the amount the read got wrong — see `effectiveCheckAmount`. */
+  amountFix?: CheckAmountFix;
+  /** …and the check number — see `effectiveCheckNo`. */
+  checkNoFix?: CheckNoFix;
+  /** An admin / the Payment Approver accepted what disagreed, as it stands. */
+  issueApproval?: CheckIssueApproval;
   /** Every time the clearing date was moved, oldest first. */
   reschedules?: CheckReschedule[];
   /** Set once the bank has cleared it — moves the check to the Cleared tab. */
@@ -216,6 +274,58 @@ export function printedClearingYMD(doc: CheckDoc): string | null {
 export function effectiveClearingYMD(doc: CheckDoc): string | null {
   const moved = doc.reschedules?.length ? doc.reschedules[doc.reschedules.length - 1].to : null;
   return moved ?? printedClearingYMD(doc);
+}
+
+/**
+ * What this check is for: a person's correction if one was made, otherwise what
+ * the AI read.
+ *
+ * The same precedence as the date, for the same reason — a person who has the
+ * photo in front of them beats a model that had a photograph of it. Everything
+ * that quotes a check amount must come through here, or the register and the PO
+ * card will disagree about the same check.
+ */
+export function effectiveCheckAmount(doc: CheckDoc): number | null {
+  return doc.amountFix?.amount ?? doc.read?.amount ?? null;
+}
+
+/** Likewise the check number — a correction beats the reading. */
+export function effectiveCheckNo(doc: CheckDoc): string | null {
+  return doc.checkNoFix?.checkNo ?? doc.read?.checkNo ?? null;
+}
+
+/**
+ * Who may accept a discrepancy, or correct what the read got wrong: **an admin
+ * and the Payment Approver** — the owner's *"add an option for admin/payment
+ * approver to approve or edit the discrepancy."*
+ *
+ * Narrower than attaching a check, which Accounting also does. Accepting a
+ * disagreement about how much a check is for, or overruling the reading of it,
+ * is a decision about money rather than paperwork — so it sits with the two who
+ * sign for it, exactly as the cash position does.
+ */
+export function canApproveCheckDiscrepancy(actor?: CheckActor): boolean {
+  return !!actor?.admin || !!actor?.paymentApprover;
+}
+
+/**
+ * Is this issue covered by the approval on the check?
+ *
+ * False for an issue that appeared AFTER the approval was given — see
+ * `CheckIssueApproval.keys`. Approving "nothing tallies" must not also wave
+ * through a duplicate check number discovered next week.
+ */
+export function issueApproved(doc: CheckDoc, key: string): boolean {
+  return !!doc.issueApproval?.keys?.includes(key);
+}
+
+/**
+ * The issues on this check that nobody has accepted yet — what is still a
+ * question. An empty list on a check that HAS issues means every one of them was
+ * approved.
+ */
+export function openCheckIssues(doc: CheckDoc): CheckIssue[] {
+  return (doc.read?.issues ?? []).filter((i) => !issueApproved(doc, i.key));
 }
 
 function coerceRead(v: unknown): CheckRead | undefined {
@@ -277,6 +387,38 @@ function coerceDateFix(v: unknown): CheckDateFix | undefined {
   return { ymd: str("ymd"), was: str("was") || null, byName: str("byName"), at: str("at") };
 }
 
+function coerceAmountFix(v: unknown): CheckAmountFix | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  const num = (k: string) => (typeof o[k] === "number" && Number.isFinite(o[k]) ? (o[k] as number) : null);
+  const amount = num("amount");
+  // A correction with no figure corrects nothing, and a negative one is not a
+  // check — drop it rather than let it reach the register's totals.
+  if (amount === null || amount < 0) return undefined;
+  return { amount, was: num("was"), byName: str("byName"), at: str("at") };
+}
+
+function coerceCheckNoFix(v: unknown): CheckNoFix | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  if (!str("checkNo")) return undefined;
+  return { checkNo: str("checkNo"), was: str("was") || null, byName: str("byName"), at: str("at") };
+}
+
+function coerceIssueApproval(v: unknown): CheckIssueApproval | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : "");
+  const keys = Array.isArray(o.keys) ? o.keys.filter((k): k is string => typeof k === "string" && !!k) : [];
+  // An approval covering nothing is not an approval. Without this a malformed
+  // record would read as "approved" while `issueApproved` said false for every
+  // issue — two answers to the same question.
+  if (!keys.length) return undefined;
+  return { keys, byName: str("byName"), at: str("at"), ...(str("note") ? { note: str("note") } : {}) };
+}
+
 function coerceCleared(v: unknown): CheckCleared | undefined {
   if (!v || typeof v !== "object") return undefined;
   const o = v as Record<string, unknown>;
@@ -299,6 +441,9 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
   if (typeof o.path !== "string" || !o.path) return null;
   const read = coerceRead(o.read);
   const dateFix = coerceDateFix(o.dateFix);
+  const amountFix = coerceAmountFix(o.amountFix);
+  const checkNoFix = coerceCheckNoFix(o.checkNoFix);
+  const issueApproval = coerceIssueApproval(o.issueApproval);
   const reschedules = coerceReschedules(o.reschedules);
   const cleared = coerceCleared(o.cleared);
   const readError = coerceReadError(o.readError);
@@ -315,6 +460,9 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
       : {}),
     ...(readError ? { readError } : {}),
     ...(dateFix ? { dateFix } : {}),
+    ...(amountFix ? { amountFix } : {}),
+    ...(checkNoFix ? { checkNoFix } : {}),
+    ...(issueApproval ? { issueApproval } : {}),
     ...(reschedules.length ? { reschedules } : {}),
     ...(cleared ? { cleared } : {}),
   };
@@ -331,11 +479,17 @@ export function coerceCheckDoc(v: unknown): CheckDoc | null {
 export function checkNumbers(docs: CheckDoc[]): string[] {
   const out: string[] = [];
   for (const d of docs) {
-    const raw = d.read?.checkNo;
-    if (!raw) continue;
-    out.push(raw);
-    const canonical = formatCheckNo(raw);
-    if (canonical && canonical !== raw) out.push(canonical);
+    // A corrected number, when there is one: somebody who fixed a misread number
+    // then searched for the number they typed must find this PO. The misread is
+    // kept too, so a search for what is still written in someone's notebook —
+    // or in a message sent before the correction — also lands here.
+    const corrected = d.checkNoFix?.checkNo;
+    for (const raw of [corrected, d.read?.checkNo]) {
+      if (!raw || out.includes(raw)) continue;
+      out.push(raw);
+      const canonical = formatCheckNo(raw);
+      if (canonical && canonical !== raw && !out.includes(canonical)) out.push(canonical);
+    }
   }
   return out;
 }

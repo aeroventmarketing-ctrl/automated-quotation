@@ -54,7 +54,7 @@ import { getFanMotorBrand } from "@/lib/fan-motor-brand";
 import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, canAttachCheck, canApproveCheckDiscrepancy, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, effectiveCheckAmount, effectiveCheckNo, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { saveCashPosition, canEditCashPosition } from "@/lib/cash-position";
 import { getProducts } from "@/lib/product-catalog";
@@ -2686,6 +2686,28 @@ async function assertCheckAdmin(): Promise<string | null> {
   return null;
 }
 
+/**
+ * …and the wider gate for accepting a discrepancy or correcting a misread:
+ * **an admin or the Payment Approver** — the owner's *"add an option for
+ * admin/payment approver to approve or edit the discrepancy."*
+ *
+ * Deliberately NOT `assertCheckAdmin`, which stays admin-only. Clearing a check
+ * and moving its date were ruled admin-only when they were built, and widening
+ * that ruling is not what was asked for here. Deliberately not `canAttachCheck`
+ * either: Accounting attaches and reads checks, but signing off a disagreement
+ * about how much one is for is a decision about money.
+ */
+async function assertCheckApprover(): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (!user) return "Unauthorized";
+  const assignments = await getWorkflowRoles();
+  const actor = { admin: isAdmin(user), paymentApprover: userHasWorkflowRole(assignments, user.id, "payment_approver") };
+  if (!canApproveCheckDiscrepancy(actor)) {
+    return "Only an admin or the Payment Approver can approve or correct a check discrepancy.";
+  }
+  return null;
+}
+
 /** YYYY-MM-DD, or null. Guards against a bad value reaching the monitoring sort. */
 const isYMD = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 
@@ -2766,6 +2788,104 @@ export async function correctCheckDate(
     // to pretend the AI never said it.
     dateFix: { ymd: input.ymd, was: printedClearingYMD(d), byName: user?.name ?? "", at: new Date().toISOString() },
   }));
+}
+
+/**
+ * Correct what the read got wrong — amount, check number, clearing date, in one
+ * form. The owner's *"add an option for admin/payment approver to approve or
+ * edit the discrepancy."*
+ *
+ * Every field is optional and only a CHANGED one is written, so saving the form
+ * with two boxes untouched does not stamp two corrections nobody made. Each
+ * correction keeps what the reading had claimed, for the same reason the date's
+ * has always done: correcting a misread is not pretending the AI never said it.
+ *
+ * The date goes through the existing `dateFix` rather than a second channel —
+ * `effectiveClearingYMD`, the register's "date corrected by", and the
+ * verified-date rule all already read it, and a check with two competing
+ * corrected dates would be a worse bug than the one being fixed.
+ */
+export async function correctCheckRead(
+  purchaseRequestId: string,
+  path: string,
+  input: { amount?: number | null; checkNo?: string | null; ymd?: string | null },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckApprover();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+
+  const wantsAmount = input?.amount != null;
+  const wantsNo = typeof input?.checkNo === "string" && input.checkNo.trim() !== "";
+  const wantsDate = typeof input?.ymd === "string" && input.ymd !== "";
+  if (!wantsAmount && !wantsNo && !wantsDate) return { error: "Nothing to correct — change a figure first." };
+  if (wantsAmount && (!Number.isFinite(input.amount) || (input.amount as number) < 0)) {
+    return { error: "Give the amount the check is written for." };
+  }
+  if (wantsDate && !isYMD(input.ymd)) return { error: "Give the date printed on the check, as YYYY-MM-DD." };
+
+  const at = new Date().toISOString();
+  const byName = user?.name ?? "";
+  return updateCheckDoc(purchaseRequestId, path, (d) => {
+    const next = { ...d };
+    // Each guard is "did this actually change": re-saving the figure already on
+    // screen should leave no trace, or the register fills with corrections that
+    // corrected nothing.
+    if (wantsAmount && (input.amount as number) !== effectiveCheckAmount(d)) {
+      next.amountFix = { amount: input.amount as number, was: d.read?.amount ?? null, byName, at };
+    }
+    if (wantsNo && input.checkNo!.trim() !== effectiveCheckNo(d)) {
+      next.checkNoFix = { checkNo: input.checkNo!.trim(), was: d.read?.checkNo ?? null, byName, at };
+    }
+    if (wantsDate && input.ymd !== printedClearingYMD(d)) {
+      next.dateFix = { ymd: input.ymd as string, was: printedClearingYMD(d), byName, at };
+    }
+    return next;
+  });
+}
+
+/**
+ * Accept what disagrees, as it stands — the other half of the owner's request.
+ *
+ * It changes no figure and hides nothing. The warning stays on screen and stays
+ * legible; it simply stops being an open question and starts saying who closed
+ * it. The owner chose that over making it disappear: a disagreement about money
+ * that vanishes when somebody clicks a button is worse than one that nags.
+ *
+ * The issues being approved are recorded BY KEY, taken from the check as it
+ * stands now. A discrepancy found later — a duplicate check number recorded on
+ * another PO next week — is not covered by an approval given today for something
+ * else, and will show amber beside this one. See `CheckIssueApproval`.
+ */
+export async function approveCheckDiscrepancy(
+  purchaseRequestId: string,
+  path: string,
+  input?: { note?: string },
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckApprover();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  const note = (input?.note ?? "").trim();
+  return updateCheckDoc(purchaseRequestId, path, (d) => {
+    const keys = (d.read?.issues ?? []).map((i) => i.key);
+    // Nothing disagrees, so there is nothing to approve. Returning the doc
+    // unchanged is deliberate: stamping an approval onto a clean check would
+    // later read as "somebody had to sign for this one".
+    if (!keys.length) return d;
+    return {
+      ...d,
+      issueApproval: { keys, byName: user?.name ?? "", at: new Date().toISOString(), ...(note ? { note } : {}) },
+    };
+  });
+}
+
+/** Withdraw an approval given in error — the discrepancy goes back to amber. */
+export async function unapproveCheckDiscrepancy(
+  purchaseRequestId: string,
+  path: string,
+): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckApprover();
+  if (denied) return { error: denied };
+  return updateCheckDoc(purchaseRequestId, path, ({ issueApproval: _drop, ...rest }) => rest);
 }
 
 /**
