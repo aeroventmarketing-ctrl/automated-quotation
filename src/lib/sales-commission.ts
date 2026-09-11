@@ -37,6 +37,8 @@
  * stays what it has always been — the record of what was actually PAID OUT —
  * and is joined in for that one field.
  */
+import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { config } from "@/lib/config";
 import { prisma } from "@/lib/db";
 import { payableTotal, round2, readVatExemptTotal, vatModeChargesOutputVat } from "@/lib/quote";
@@ -523,6 +525,40 @@ async function overrideRoles(): Promise<{ heads: Map<string, string>; sources: S
  * with rules 1–6 applied. Reads only.
  */
 export async function buildCommissions(opts: BuildOptions = {}): Promise<CommissionsView> {
+  // Keyed on the id, never on `opts`. `cache()` compares arguments by identity,
+  // so four callers passing four separate `{}` literals would miss the cache
+  // every time — which is precisely the case being fixed here.
+  return buildCommissionsFor(opts.salespersonId);
+}
+
+/**
+ * The same build with the per-request memo deliberately bypassed — **for server
+ * actions that write.**
+ *
+ * A server action and the re-render it triggers with `revalidatePath` are ONE
+ * request, so they share one `cache()` scope. An action that read the view,
+ * marked a commission paid, and then re-rendered `/commissions` would be handed
+ * its own pre-write answer, and the row would still say unpaid until the person
+ * refreshed by hand — the button would look broken.
+ *
+ * So the write paths never populate the memo. The render that follows them finds
+ * it empty and reads fresh, which is exactly today's behaviour; only the render
+ * path, where nothing has changed mid-request, gets the saving.
+ */
+export async function buildCommissionsFresh(opts: BuildOptions = {}): Promise<CommissionsView> {
+  return buildCommissionsUncached(opts.salespersonId);
+}
+
+/**
+ * The build itself, memoised for the length of one request by the wrapper above.
+ *
+ * One render of My Dashboard reached this four times — the approvals feed, the
+ * payout tile, the finance-monitor cards and the page itself — and each call read
+ * every quotation in the database, `classification` and all. Four identical
+ * whole-table scans to draw one page, measured in the Postgres log.
+ */
+async function buildCommissionsUncached(salespersonId?: string): Promise<CommissionsView> {
+  const opts: BuildOptions = { salespersonId };
   const { heads, sources } = await overrideRoles();
   // Narrowing the query to one rep is what keeps a salesperson from ever having
   // another's deals in their response. It CANNOT be done for a Sales Head: their
@@ -534,7 +570,16 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     prisma.quotation.findMany({
       // Rule 1 needs the salesperson's WHOLE month, so this can be narrowed to
       // one salesperson but never to one order.
-      where: scopeToRep ? { preparedById: scopeToRep } : undefined,
+      //
+      // The `sale.po` clause is a NECESSARY CONDITION for the `isSaleConfirmed`
+      // gate in the loop below, not a second opinion on it: that gate returns
+      // false immediately unless the sale carries a PO, so a row without one can
+      // never reach `deals`. Asking Postgres for it cannot drop a commission
+      // anyone has earned — and the real gate still runs on everything returned.
+      where: {
+        classification: { path: ["sale", "po"], not: Prisma.DbNull },
+        ...(scopeToRep ? { preparedById: scopeToRep } : {}),
+      },
       select: {
         id: true,
         quoteNumber: true,
@@ -700,6 +745,8 @@ export async function buildCommissions(opts: BuildOptions = {}): Promise<Commiss
     currency,
   };
 }
+
+const buildCommissionsFor = cache(buildCommissionsUncached);
 
 /** Every deal across the view, flattened — for totals and lookups. */
 export const allDeals = (view: CommissionsView): CommissionDeal[] => view.months.flatMap((m) => m.deals);

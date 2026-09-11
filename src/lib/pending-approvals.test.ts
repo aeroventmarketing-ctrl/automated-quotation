@@ -9,13 +9,24 @@ import { isSaleConfirmed, saleFromClassification } from "./sale";
  *
  * That filter is only safe while **a confirmed sale always carries a PO**. If
  * `isSaleConfirmed` ever stops requiring one, the filter would start silently
- * dropping orders from the alarm — an approver would simply never be told, and
- * nothing would look broken.
+ * dropping orders — an approver would simply never be told, and nothing would
+ * look broken.
  *
  * So this pins the invariant rather than the query: change `isSaleConfirmed` to
  * accept a sale with no PO and this test fails, right next to the reason why.
+ *
+ * **Seven queries now stand on this one invariant.** They are the blast radius
+ * of a change to `isSaleConfirmed`, and none of them would fail loudly:
+ *
+ *  - `lib/pending-approvals.ts`   — the approver alarm
+ *  - `lib/my-dashboard.ts`        — My Dashboard's half of the same alarm
+ *  - `lib/finance-monitor.ts`     — receivables / unreconciled / vouchers
+ *  - `lib/receivables.ts`         — the outstanding-balance figure
+ *  - `app/(app)/management/page`  — the Management Dashboard's twin
+ *  - `lib/sales-commission.ts`    — who is owed commission
+ *  - `lib/production-status.ts`   — what is still on the shop floor
  */
-describe("the alarm's SQL pre-filter is safe", () => {
+describe("the SQL pre-filter shared by the confirmed-order queries is safe", () => {
   const po = { path: "sales/po.pdf", name: "po.pdf", uploadedAt: "", uploadedByName: "A" };
 
   /** Every shape a sale can take, PO-bearing or not. */

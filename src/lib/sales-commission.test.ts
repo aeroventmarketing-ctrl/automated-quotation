@@ -572,3 +572,36 @@ describe("a commission is payable only once its release day arrives", () => {
     expect(m.nextPayoutYMD).toBe("2026-10-15");
   });
 });
+
+/**
+ * `buildCommissions` is memoised per request, and a server action shares its
+ * request with the re-render `revalidatePath` triggers. So an action that read
+ * the view, wrote, and then let the page re-render would hand that page its own
+ * pre-write answer: the row would still say "unpaid" until someone refreshed by
+ * hand, and the button would look broken.
+ *
+ * The rule that prevents it — **write paths call `buildCommissionsFresh`** — is
+ * invisible at the call site and would come back the first time someone adds a
+ * commission action by copying an existing one. Nothing else would fail: not the
+ * compiler, not a unit test, not the build. Only the screen, occasionally.
+ *
+ * So it is asserted against the source itself.
+ */
+describe("no server action uses the memoised build", () => {
+  const SERVER_ACTION_FILES = [
+    "src/app/(app)/commissions/actions.ts",
+    "src/app/(app)/orders/actions.ts",
+  ];
+
+  for (const rel of SERVER_ACTION_FILES) {
+    it(`${rel} calls buildCommissionsFresh, never buildCommissions`, async () => {
+      const { readFile } = await import("node:fs/promises");
+      const src = await readFile(rel, "utf8");
+      expect(src, `${rel} is not a server-action module any more`).toContain('"use server"');
+      // `buildCommissions(` / `buildCommissions({` but NOT `buildCommissionsFresh(`.
+      const memoised = src.match(/\bbuildCommissions\s*\(/g) ?? [];
+      expect(memoised, `${rel} must use buildCommissionsFresh in a write path`).toEqual([]);
+      expect(src).toMatch(/\bbuildCommissionsFresh\s*\(/);
+    });
+  }
+});
