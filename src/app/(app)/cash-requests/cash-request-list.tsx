@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
-import { cashBucket, type CashBucket, type CashRequestStatus } from "@/lib/cash-request";
+import { cashBucket, isCompletedCashRequest, type CashBucket, type CashRequestStatus } from "@/lib/cash-request";
 import { Input } from "@/components/ui/input";
 import { advanceCashRequest, cancelCashRequest, rejectCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
@@ -21,7 +21,11 @@ const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFrac
 // (CASH_RELEASED onward) the request leaves Approved and lands here.
 // `cashBucket` and `CashBucket` come from lib/cash-request, where the cancel and
 // reject rules are phrased in terms of these very tabs.
-type CashTab = CashBucket | "all";
+//
+// "completed" is NOT a tab: a settled voucher leaves the tabs for the collapsed
+// section at the foot of the page, exactly as a finished requisition and a
+// completed department PO already do on their own pages.
+type CashTab = Exclude<CashBucket, "completed"> | "all";
 const CASH_TABS: { key: CashTab; label: string }[] = [
   { key: "pending", label: "Pending" },
   { key: "approved", label: "Approved" },
@@ -243,13 +247,30 @@ export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[];
     return () => window.clearTimeout(t);
   }, [highlightId]);
 
-  const counts: Record<CashTab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
-  for (const r of rows) counts[cashBucket(r.status)]++;
-  counts.all = rows.length;
+  // Settled vouchers are counted and listed on their own, below — so the tab
+  // counts and "All" describe what is still in play, and a finished voucher does
+  // not pad the Budgeted number for ever.
+  const completedRows = rows.filter((r) => isCompletedCashRequest(r.status));
+  const liveRows = rows.filter((r) => !isCompletedCashRequest(r.status));
 
-  const shown = rows
+  // Open it if the deep-linked request is a completed one, so a notification
+  // never lands on a row hidden inside a collapsed box.
+  const [completedOpen, setCompletedOpen] = useState(
+    () => !!highlightId && rows.some((r) => r.id === highlightId && isCompletedCashRequest(r.status)),
+  );
+
+  const counts: Record<CashTab, number> = { pending: 0, approved: 0, budgeted: 0, rejected: 0, cancelled: 0, all: 0 };
+  for (const r of liveRows) {
+    const b = cashBucket(r.status);
+    if (b !== "completed") counts[b]++;
+  }
+  counts.all = liveRows.length;
+
+  const shown = liveRows
     .filter((r) => tab === "all" || cashBucket(r.status) === tab)
     .filter((r) => textMatch(rowText(r), query));
+  /** The completed section obeys the same search box as the tabs above it. */
+  const completedShown = completedRows.filter((r) => textMatch(rowText(r), query));
 
   return (
     <div className="space-y-3">
@@ -287,6 +308,36 @@ export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[];
         </p>
       ) : (
         shown.map((r) => <CashRow key={r.id} r={r} highlight={highlight === r.id} />)
+      )}
+
+      {/* Completed cash vouchers — settled, nothing left to do, kept viewable and
+          printable in a collapsed section below the tabs. The owner's *"settled
+          Cash Voucher should have a completed Cash Voucher Table same as
+          Purchasing Tab Completed Department POs"*.
+
+          TEAL. Its two twins are INDIGO on Purchasing ("Completed department
+          POs") and GREEN on Requisitions ("Completed requisitions"). Collapsed,
+          all three are a single bar of near-identical text with a near-identical
+          count, on pages that look alike — the colour is what tells you at a
+          glance which box, and which page, you are on. Keep all three different
+          if any is ever restyled. */}
+      {completedRows.length > 0 && (
+        <details
+          className="mt-4 rounded-lg border border-teal-300 bg-teal-50 dark:border-teal-900 dark:bg-teal-950/40"
+          open={completedOpen}
+          onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}
+        >
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-teal-800 dark:text-teal-200">
+            Completed cash vouchers ({completedRows.length})
+          </summary>
+          <div className="space-y-3 border-t border-teal-300 bg-card p-4 dark:border-teal-900">
+            {completedShown.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">No completed vouchers match your search.</p>
+            ) : (
+              completedShown.map((r) => <CashRow key={r.id} r={r} highlight={highlight === r.id} />)
+            )}
+          </div>
+        </details>
       )}
     </div>
   );

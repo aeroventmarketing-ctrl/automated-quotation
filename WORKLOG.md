@@ -1,3 +1,45 @@
+## 2026-09-11 · Settled cash vouchers get their own completed table
+
+The owner: *"Settled Cash Voucher should have a completed Cash Voucher Table same as Purchasing Tab Completed
+Department POs."*
+
+Two pages already do exactly this — Purchasing collapses finished department POs, Requisitions collapses
+finished requisitions — and both say the same thing in their comments: a completed row **leaves the tabs
+entirely** for the box at the foot. Cash Requests now does the third.
+
+### SETTLED becomes its own bucket
+
+Rather than filter settled rows out at the point of render, `cashBucket("SETTLED")` now returns `"completed"`.
+That keeps one answer to "where does this row live", and it makes the tabs honest: **Budgeted is now exactly
+what is still in flight** — `CASH_RELEASED · DISBURSED · RECEIVED · LIQUIDATED` — rather than a number that grows
+for ever as vouchers finish.
+
+It also tidies yesterday's loose end. The cancel and reject rules are phrased in tabs, and SETTLED sat in
+Budgeted while being the one Budgeted status neither rule allowed. Now the Payment Approver's cancel window IS
+the Budgeted tab, exactly, and a test asserts that equality rather than repeating the list.
+
+### Teal, and deliberately so
+
+The box is **teal**. Its two twins are indigo on Purchasing and green on Requisitions, and the existing comment
+explains why they differ: collapsed, all three are a single bar of near-identical text with a near-identical
+count, on pages that look alike — the colour is what tells you which box, and which page, you are on. That is
+now a rule of three, noted in all of them.
+
+It obeys the same search box as the tabs above it, and opens itself when a notification deep-links to a settled
+voucher — otherwise the link would land on a row hidden inside a collapsed box.
+
+### On the running app
+
+| | |
+| --- | --- |
+| tab counts | `Pending 0 · Approved 1 · Budgeted 1 · Rejected 0 · Cancelled 0 · All 2` — the settled one has left |
+| the box | **COMPLETED CASH VOUCHERS (1)**, collapsed by default |
+| settled voucher in the Budgeted list | no |
+| settled voucher inside the box | yes, with its Settled badge and Print voucher |
+
+Every other harness probe is identical to the run before this change.
+
+Nine tests now cover the buckets and the two permission grids. 514 pass; lint and build clean. No migration.
 ## 2026-09-11 · Cancelling a cash request in the Approved tab, and rejecting one in Budgeted
 
 The owner, two instructions:
