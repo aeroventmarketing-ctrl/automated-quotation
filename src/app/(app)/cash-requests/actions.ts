@@ -12,6 +12,8 @@ import {
   isLiquidated,
   canLiquidateAt,
   isCashCancellable,
+  canCancelCashRequest,
+  canRejectCashRequest,
   CASH_CATEGORIES,
   CASH_MAIN_ORDER,
   cashMainIndex,
@@ -202,16 +204,75 @@ export async function advanceCashRequest(id: string, stepKey: string, note?: str
 }
 
 /** Cancel a cash request (requestor before the voucher, or an admin any time up to settlement). */
+/** Who is asking, as the rules in `lib/cash-request` want it. */
+async function cashActorFor(userId: string, requestedById: string) {
+  const user = await getCurrentUser();
+  const assignments = await getWorkflowRoles();
+  return {
+    admin: !!user && isAdmin(user),
+    accounting: userHasWorkflowRole(assignments, userId, "accounting"),
+    paymentApprover: userHasWorkflowRole(assignments, userId, "payment_approver"),
+    requestor: requestedById === userId,
+  };
+}
+
 export async function cancelCashRequest(id: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  const admin = isAdmin(user);
   const pr = await loadOr404(id);
-  if (!isCashCancellable(pr.status as CashRequestStatus)) throw new Error("This cash request can no longer be cancelled.");
-  if (!(admin || (pr.requestedById === user.id && (pr.status === "PENDING_APPROVAL" || pr.status === "SUBMITTED")))) {
-    throw new Error("Only the requestor (before the voucher is prepared) or an admin can cancel this.");
+  const status = pr.status as CashRequestStatus;
+  if (!isCashCancellable(status)) throw new Error("This cash request can no longer be cancelled.");
+  // The same rule the button is drawn from — Accounting in the Approved tab and
+  // the Payment Approver in Budgeted, on top of the admin and the requestor.
+  const actor = await cashActorFor(user.id, pr.requestedById);
+  if (!canCancelCashRequest(status, actor)) {
+    throw new Error("You can't cancel this cash request at its current stage.");
   }
   await prisma.cashRequest.update({ where: { id }, data: { status: "CANCELLED" } });
+  await logActivity(user, {
+    action: "cash.cancel", category: "cash",
+    summary: `Cancelled cash request ${pr.number} — ${pr.purpose}`,
+    entity: "cashRequest", entityId: id, href: "/cash-requests",
+  });
+  revalidatePath("/cash-requests");
+}
+
+/**
+ * Reject a cash request whose cash has already been released — *"In cash
+ * requests Budgeted Tab, add an option to cancel and reject for admin/payment
+ * approver role."*
+ *
+ * Separate from the `reject` chain step at VOUCHER_READY, which is the ordinary
+ * "no, don't pay this". By the Budgeted tab the voucher was approved and the
+ * money left, so this is an unwinding rather than a decision — which is why the
+ * reason is REQUIRED rather than optional. A reversal with no stated cause is
+ * the one thing an auditor cannot work with.
+ */
+export async function rejectCashRequest(id: string, reason: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const pr = await loadOr404(id);
+  const status = pr.status as CashRequestStatus;
+  const actor = await cashActorFor(user.id, pr.requestedById);
+  if (!canRejectCashRequest(status, actor)) {
+    throw new Error("Only an admin or the Payment Approver can reject a released cash request.");
+  }
+  const why = (reason ?? "").trim();
+  if (!why) throw new Error("Say why it is being rejected — it goes on the record.");
+  await prisma.cashRequest.update({
+    where: { id },
+    data: {
+      status: "REJECTED",
+      // Appended, never overwritten: whatever the request already said about
+      // itself is part of the story of why it was pulled back.
+      note: [pr.note, `Rejected after release by ${user.name ?? "—"}: ${why}`].filter(Boolean).join("\n"),
+    },
+  });
+  await logActivity(user, {
+    action: "cash.reject_released", category: "cash",
+    summary: `Rejected released cash request ${pr.number} — ${why}`,
+    entity: "cashRequest", entityId: id, href: "/cash-requests",
+  });
   revalidatePath("/cash-requests");
 }
 

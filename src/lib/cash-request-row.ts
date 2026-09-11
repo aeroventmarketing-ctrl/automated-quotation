@@ -13,7 +13,8 @@ import {
   isLiquidated,
   liquidationVariance,
   canLiquidateAt,
-  isCashCancellable,
+  canCancelCashRequest,
+  canRejectCashRequest,
   priorCashStatuses,
   type CashRequestStatus,
   type CashActor,
@@ -80,6 +81,11 @@ export interface CashRequestRow {
   actions: CashActionOpt[];
   isRequestor: boolean;
   canCancel: boolean;
+  /**
+   * …and may REJECT it after the cash is out — admin / Payment Approver, in the
+   * Budgeted tab only. A reason is required; see `rejectCashRequest`.
+   */
+  canReject: boolean;
   liquidation: CashLiquidationView;
   canRecordLiquidation: boolean;
   canSettleLiquidation: boolean;
@@ -221,6 +227,13 @@ export function buildCashRequestRow(
     accountingLabel: actorLabel("accounting"),
   };
 
+  const actor = {
+    admin: ctx.admin,
+    accounting: ctx.hasRole("accounting"),
+    paymentApprover: ctx.hasRole("payment_approver"),
+    requestor: isRequestor,
+  };
+
   return {
     id: pr.id,
     number: pr.number,
@@ -236,7 +249,10 @@ export function buildCashRequestRow(
     trail: buildTrail(pr),
     actions,
     isRequestor,
-    canCancel: (ctx.admin || (isRequestor && (status === "PENDING_APPROVAL" || status === "SUBMITTED"))) && isCashCancellable(status),
+    // The rules live in `lib/cash-request` beside the tab definition they are
+    // phrased in terms of — see `canCancelCashRequest` / `canRejectCashRequest`.
+    canCancel: canCancelCashRequest(status, actor),
+    canReject: canRejectCashRequest(status, actor),
     admin: ctx.admin,
     liquidation,
     canRecordLiquidation: canLiquidateAt(status) && (isRequestor || ctx.admin),

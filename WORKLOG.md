@@ -1,3 +1,69 @@
+## 2026-09-11 · Cancelling a cash request in the Approved tab, and rejecting one in Budgeted
+
+The owner, two instructions:
+
+> *"In Cash Requests Approved Tab, add an option to cancel for accounting role.
+> In cash requests Budgeted Tab, add an option to cancel and reject for admin/payment approver role."*
+
+### The rules are phrased in tabs, so they are written in tabs
+
+`cashBucket` moved out of the list component and into `lib/cash-request`, beside the two new rules. The owner's
+instructions name the tabs; a rule that disagrees with the tab it names is a rule in the wrong place, and two
+definitions of "Approved" would eventually drift apart.
+
+| | Pending | **Approved** | **Budgeted** |
+| --- | --- | --- | --- |
+| admin | cancel | cancel | cancel · **reject** |
+| the requestor | cancel | cancel (SUBMITTED only) | — |
+| **Accounting** | — | **cancel** | — |
+| **Payment Approver** | — | — | **cancel · reject** |
+
+**Reject is not the existing chain step.** `reject` already sits at VOUCHER_READY and is the ordinary *"no,
+don't pay this"*. The new one is the exception that comes after: the voucher was approved, the cash left the
+drawer, and somebody with standing has to unwind it. That is why its reason is **required** rather than optional
+— a reversal with no stated cause is the one thing an auditor cannot work with — and why it is appended to the
+request's note rather than replacing it.
+
+**Both stop at SETTLED.** `isCashCancellable` already excluded it and that exclusion is kept: a settled request
+has been liquidated and reconciled, so withdrawing it would unpick a closed set of books rather than call off a
+payment. Worth flagging, because SETTLED rows do sit in the Budgeted tab — if the owner wants them reversible
+too, that is a different and larger decision, and the admin rollback already reopens one.
+
+### Two false alarms, both mine, both from the measurement
+
+This is the part worth keeping.
+
+**The harness probe reported every cell false — against working code.** The cash-requests list is
+client-rendered, so the buttons never reach the HTML a scraper sees. It now reads the server's own answer out of
+the RSC payload, which needed two fixes of its own: the payload carries each request TWICE (the raw database row
+first, which has no permissions on it), and it is escaped, sometimes twice. An unbounded search also answers with
+the FOLLOWING request's flag, so it is bounded at the next `"number":`.
+
+**Then the browser check reported the Payment Approver could cancel a SETTLED request.** It could not. The test
+sliced a fixed 900 characters after the request number, and the admin's card carries extra controls that pad it
+past the next card while Rey Gil's does not — so for him alone the window reached the following row's buttons.
+Bounded at the next request, it agrees with the rule.
+
+Twice in one change the measurement was wrong and the code was right. Both would have been "obvious" bugs to go
+and fix.
+
+### On the running app
+
+Driven in a real browser, per role and per tab:
+
+| | Approved · Cancel | Budgeted · Cancel | Budgeted · Reject | Settled |
+| --- | --- | --- | --- | --- |
+| **Admin Ana** | ✓ | ✓ | ✓ | — |
+| **Rey Gil** (Payment Approver) | — | ✓ | ✓ | — |
+| **Michelle Cotura** (Accounting) | ✓ | — | — | — |
+| Allan Ramos (Purchaser) | cannot see the rows | | | |
+
+The harness grid now agrees with the browser cell for cell, and every other probe is identical to the run before
+this change. The table had **no cash-request fixtures at all** until now, so every one of these permissions was
+untestable here.
+
+Seven new tests assert the whole grid — every role against every status — plus the tab definitions themselves.
+512 pass; lint and build clean. No migration.
 ## 2026-09-11 · The Cash position fields keep the caret
 
 The owner: *"I have to type 1 character then left click alternately in Cash position editable fields."*
