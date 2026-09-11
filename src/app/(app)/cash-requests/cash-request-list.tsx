@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
-import type { CashRequestStatus } from "@/lib/cash-request";
+import { cashBucket, type CashBucket, type CashRequestStatus } from "@/lib/cash-request";
 import { Input } from "@/components/ui/input";
-import { advanceCashRequest, cancelCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
+import { advanceCashRequest, cancelCashRequest, rejectCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
 import { AdminCashOverride } from "./admin-cash-override";
 
@@ -19,7 +19,8 @@ const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFrac
 // Cash-request tabs, mirroring the Purchasing workspace. "Budgeted" is the
 // committed-spend bucket: once "Approve voucher & release cash" is pressed
 // (CASH_RELEASED onward) the request leaves Approved and lands here.
-type CashBucket = "pending" | "approved" | "budgeted" | "rejected" | "cancelled";
+// `cashBucket` and `CashBucket` come from lib/cash-request, where the cancel and
+// reject rules are phrased in terms of these very tabs.
 type CashTab = CashBucket | "all";
 const CASH_TABS: { key: CashTab; label: string }[] = [
   { key: "pending", label: "Pending" },
@@ -39,23 +40,6 @@ function textMatch(haystack: string, query: string): boolean {
   if (h.includes(q.toLowerCase())) return true;
   const cq = q.toLowerCase().replace(/[^a-z0-9]/g, "");
   return cq.length > 0 && h.replace(/[^a-z0-9]/g, "").includes(cq);
-}
-
-function cashBucket(status: CashRequestStatus): CashBucket {
-  switch (status) {
-    case "PENDING_APPROVAL":
-      return "pending";
-    case "SUBMITTED":
-    case "VOUCHER_READY":
-      return "approved";
-    case "REJECTED":
-      return "rejected";
-    case "CANCELLED":
-      return "cancelled";
-    default:
-      // CASH_RELEASED, DISBURSED, RECEIVED, LIQUIDATED, SETTLED
-      return "budgeted";
-  }
 }
 
 /** One cash request: header, breakdown, chain actions, trail and liquidation. */
@@ -79,6 +63,22 @@ function CashRow({ r, highlight = false }: { r: CashRequestRow; highlight?: bool
     if (!window.confirm("Cancel this cash request?")) return;
     setBusy("cancel"); setErr(null);
     try { await cancelCashRequest(r.id); router.refresh(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
+    finally { setBusy(null); }
+  }
+
+  /**
+   * Reject a request whose cash is already out. The reason is required, not
+   * optional as it is on the VOUCHER_READY rejection: by this point the money
+   * has left, and a reversal nobody explained is the one thing an auditor
+   * cannot work with.
+   */
+  async function reject() {
+    const why = window.prompt("The cash for this request has already been released. Why is it being rejected? (required)", "");
+    if (why === null) return;
+    if (!why.trim()) { setErr("Say why it is being rejected — it goes on the record."); return; }
+    setBusy("reject"); setErr(null);
+    try { await rejectCashRequest(r.id, why); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }
     finally { setBusy(null); }
   }
@@ -179,8 +179,15 @@ function CashRow({ r, highlight = false }: { r: CashRequestRow; highlight?: bool
 
       <div className="mt-2 flex items-center gap-3">
         {r.canCancel && (
-          <button type="button" onClick={cancel} disabled={busy === "cancel"} className="text-xs text-muted-foreground hover:text-destructive">
+          <button type="button" onClick={cancel} disabled={busy != null} className="text-xs text-muted-foreground hover:text-destructive">
             {busy === "cancel" ? "Cancelling…" : "Cancel request"}
+          </button>
+        )}
+        {/* Only in the Budgeted tab, and only for the two who answer for released
+            cash — see `canRejectCashRequest`. */}
+        {r.canReject && (
+          <button type="button" onClick={reject} disabled={busy != null} className="text-xs text-muted-foreground hover:text-destructive">
+            {busy === "reject" ? "Rejecting…" : "Reject request"}
           </button>
         )}
         {err && <span className="text-xs text-destructive">{err}</span>}

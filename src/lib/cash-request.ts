@@ -240,6 +240,84 @@ export function canLiquidateAt(status: CashRequestStatus): boolean {
   return status === "RECEIVED" || status === "LIQUIDATED";
 }
 
+/**
+ * Which tab of the Cash Requests workspace a request sits in.
+ *
+ * Defined HERE, beside the rules below, and imported by the list — because the
+ * owner's instructions are phrased as tabs (*"in Cash Requests Approved Tab…"*,
+ * *"In cash requests Budgeted Tab…"*) and a rule that disagrees with the tab it
+ * names is a rule in the wrong place. One definition, so they cannot drift.
+ */
+export type CashBucket = "pending" | "approved" | "budgeted" | "rejected" | "cancelled";
+
+export function cashBucket(status: CashRequestStatus): CashBucket {
+  switch (status) {
+    case "PENDING_APPROVAL":
+      return "pending";
+    case "SUBMITTED":
+    case "VOUCHER_READY":
+      return "approved";
+    case "REJECTED":
+      return "rejected";
+    case "CANCELLED":
+      return "cancelled";
+    default:
+      // CASH_RELEASED, DISBURSED, RECEIVED, LIQUIDATED, SETTLED — the cash is out.
+      return "budgeted";
+  }
+}
+
+/** Who is asking. `requestor` is the person who raised this particular request. */
+export interface CashRequestActor {
+  admin?: boolean;
+  accounting?: boolean;
+  paymentApprover?: boolean;
+  requestor?: boolean;
+}
+
+/**
+ * Who may CANCEL a cash request.
+ *
+ * | | where |
+ * | --- | --- |
+ * | admin | anywhere still cancellable |
+ * | the requestor | before the voucher exists — PENDING_APPROVAL, SUBMITTED |
+ * | **Accounting** | the **Approved** tab — *"add an option to cancel for accounting role"* |
+ * | **Payment Approver** | the **Budgeted** tab — the cash is out and they signed for it |
+ *
+ * Everything still runs through `isCashCancellable`, which stops at SETTLED: a
+ * settled request has been liquidated and reconciled, and withdrawing it would
+ * unpick a closed set of books rather than call off a payment. Reopening one is
+ * what the admin rollback is for.
+ */
+export function canCancelCashRequest(status: CashRequestStatus, actor: CashRequestActor): boolean {
+  if (!isCashCancellable(status)) return false;
+  if (actor.admin) return true;
+  if (actor.requestor && (status === "PENDING_APPROVAL" || status === "SUBMITTED")) return true;
+  const bucket = cashBucket(status);
+  if (actor.accounting && bucket === "approved") return true;
+  if (actor.paymentApprover && bucket === "budgeted") return true;
+  return false;
+}
+
+/**
+ * Who may REJECT a cash request **after the cash has gone out** — *"In cash
+ * requests Budgeted Tab, add an option to cancel and reject for admin/payment
+ * approver role."*
+ *
+ * Deliberately separate from the `reject` CHAIN STEP, which already exists at
+ * VOUCHER_READY and is the ordinary "no, don't pay this". This one is the
+ * exception: the voucher was approved, the cash was released, and somebody with
+ * standing has to unwind it. It carries a reason for that reason.
+ *
+ * Same stop at SETTLED as cancelling, and for the same reason.
+ */
+export function canRejectCashRequest(status: CashRequestStatus, actor: CashRequestActor): boolean {
+  if (!isCashCancellable(status)) return false; // SETTLED / already closed
+  if (cashBucket(status) !== "budgeted") return false;
+  return !!actor.admin || !!actor.paymentApprover;
+}
+
 /** A cash request can be cancelled up to (but not after) it's settled/received. */
 export function isCashCancellable(status: CashRequestStatus): boolean {
   return status !== "SETTLED" && status !== "CANCELLED" && status !== "REJECTED";

@@ -52,6 +52,34 @@ const CAST = [
  * What to look for in the rendered HTML. Each probe is a thing a person can see
  * or press — deliberately UI-level, because the grid already covers the rules.
  */
+/**
+ * Is `flag` true on the payload object for the cash request numbered `number`?
+ *
+ * Two traps, both of which produced a confident wrong answer before being fixed:
+ *
+ *  1. The payload carries each request TWICE — the raw database row, then the
+ *     built view. Only the second has permissions on it, so the first matching
+ *     occurrence is skipped rather than believed.
+ *  2. It is escaped, sometimes twice, inside a JS string. Flatten before looking.
+ *
+ * Bounded at the next `"number":` so a search can never answer with the
+ * FOLLOWING request's permission.
+ */
+function rowFlag(html, number, flag) {
+  let h = html;
+  for (let i = 0; i < 3; i++) h = h.replace(/\\/g, "");
+  let from = 0;
+  for (;;) {
+    const at = h.indexOf(number, from);
+    if (at < 0) return false;
+    const rest = h.slice(at);
+    const end = rest.indexOf('"number":', 1);
+    const scope = end > 0 ? rest.slice(0, end) : rest;
+    if (scope.includes(`"${flag}":`)) return scope.includes(`"${flag}":true`);
+    from = at + 1;
+  }
+}
+
 const PROBES = [
   { path: "/inventory", label: "inv", checks: {
     open: (t) => !t.includes("don't have access to inventory"),
@@ -128,6 +156,35 @@ const PROBES = [
     // is the permission question. The BUTTONS are checked in a real browser.
     warned: (h) => h.includes("Nothing tallies"),
     mayApprove: (h) => /"note\\*"?:\\*"HARNESS-CHK-TALLY[\s\S]{0,4000}?canApproveCheckIssue\\*":\\*"?true/.test(h),
+  } },
+  /**
+   * Cancelling and rejecting a cash request — *"in Cash Requests Approved Tab,
+   * add an option to cancel for accounting role. In cash requests Budgeted Tab,
+   * add an option to cancel and reject for admin/payment approver role."*
+   *
+   * The page renders every tab's rows into the HTML and hides the inactive ones
+   * with CSS, so all three fixtures are visible to a scraper at once — which is
+   * why each cell is anchored to its own request rather than asking "is there a
+   * Cancel button anywhere".
+   */
+  { path: "/cash-requests", label: "cashcancel", checks: {
+    open: (t) => !t.includes("don't have access"),
+  }, raw: {
+    // Read off the RSC payload, NOT the rendered text: this list is
+    // client-rendered, so the buttons never reach the HTML a scraper sees and
+    // probing their labels printed a column of falses against working code.
+    // `buildCashRequestRow` runs on the SERVER, so its answers are in the
+    // payload — which is the permission question. The BUTTONS are checked in a
+    // real browser.
+    //
+    // Bounded at the next `"number"`, because the payload carries each request
+    // TWICE (the raw database row, then the built view) and an unbounded search
+    // reads the following request's answer as this one's.
+    apprCancel: (h) => rowFlag(h, "HARNESS-CV-APPROVED", "canCancel"),
+    budgCancel: (h) => rowFlag(h, "HARNESS-CV-BUDGETED", "canCancel"),
+    budgReject: (h) => rowFlag(h, "HARNESS-CV-BUDGETED", "canReject"),
+    // A settled request is closed to everyone — the one cell that must stay false.
+    settledOpen: (h) => rowFlag(h, "HARNESS-CV-SETTLED", "canCancel") || rowFlag(h, "HARNESS-CV-SETTLED", "canReject"),
   } },
   /**
    * The AI read allowance — *"3 tries in every row or every attachment.
@@ -436,6 +493,33 @@ async function seed() {
     approverByName: "Rey Gil", approverAt: new Date(Date.now() - 1800e3),
     appliedAt: new Date(Date.now() - 1800e3),
   } });
+  // --- Cash requests: one per tab the owner named ----------------------------
+  //
+  // *"In Cash Requests Approved Tab, add an option to cancel for accounting
+  // role. In cash requests Budgeted Tab, add an option to cancel and reject for
+  // admin/payment approver role."*
+  //
+  // Both tabs are needed side by side: "no Cancel button" reads the same whether
+  // the rule is wrong or the tab is empty, and until now this table had no
+  // fixtures at all — so every cash-request permission was untestable here.
+  await p.cashRequest.deleteMany({ where: { number: { startsWith: "HARNESS-CV" } } });
+  for (const [number, status, purpose] of [
+    // Approved tab — the owner's own screenshot, a voucher awaiting the approver.
+    ["HARNESS-CV-APPROVED", "VOUCHER_READY", "HARNESS SALARY ADJUSTMENT (APPROVED TAB)"],
+    // Budgeted tab — the cash has been released and is out of the drawer.
+    ["HARNESS-CV-BUDGETED", "CASH_RELEASED", "HARNESS SALARY ADJUSTMENT (BUDGETED TAB)"],
+    // …and one that is finished. Cancel and reject both stop here, so a fixture
+    // is the only way to see that they do.
+    ["HARNESS-CV-SETTLED", "SETTLED", "HARNESS SALARY ADJUSTMENT (SETTLED)"],
+  ]) {
+    await p.cashRequest.create({ data: {
+      number, status, purpose, category: "expense", dept: "office", amount: "695.00",
+      requestedById: ids["harness-acct@test"], requestedByName: "Michelle Cotura",
+      voucherByName: "Michelle Cotura", voucherAt: new Date(),
+      ...(status === "VOUCHER_READY" ? {} : { releasedByName: "Rey Gil", releasedAt: new Date() }),
+    } });
+  }
+
   // --- Checks: a supplier who gives us terms, and two POs to them ------------
   //
   // One LIVE (Budgeted) and one COMPLETED, because the whole question is which
