@@ -1,3 +1,37 @@
+## 2026-09-11 · The Cash position fields keep the caret
+
+The owner: *"I have to type 1 character then left click alternately in Cash position editable fields."*
+
+One line caused it. `Field` — the label-plus-input row for Cash in Bank, Cash on Hand and Expected Collections —
+was **declared inside `CashPositionPanel`**, so every render produced a brand-new function and therefore a
+brand-new component *type*. React compares types by identity: a new type is not an update, it is an unmount and
+a remount. Typing a character sets state, state re-renders, the input is destroyed and rebuilt, and the caret
+goes with it. Hence one character per click.
+
+Nothing about the markup was wrong, which is exactly why it reads as a mystery rather than a bug. `Field` and
+`Row` now live at module scope, where they cannot be redefined.
+
+### Proved by putting it back
+
+Same page, same data, typing with no click between characters:
+
+| | what landed | caret held |
+| --- | --- | --- |
+| **before** | *nothing* — all three fields | no |
+| **after** | `833945.42` · `1250.75` · `99000` | yes |
+
+### …and the class is now a build failure
+
+A defect invisible to typecheck, lint, tests and the build deserves better than being fixed once.
+`react/no-unstable-nested-components` is on as an **error**, and it immediately found two more — `SortTh` and
+`Stat` in the check register. Neither takes typing, so neither was reported, but both were being thrown away and
+rebuilt on every render, and `SortTh` wraps a button whose focus a keyboard user would lose on every sort. Both
+hoisted; the register still sorts, still flips on a second click, still keeps the caret in its search box.
+
+A scan for the same shape across every `.tsx` found nothing else: the three other hits were a dynamically
+imported `ExcelJS` and a `Stat` whose nearest `<Input>` was thirty lines away and outside it.
+
+505 tests pass; lint and build clean. No migration.
 ## 2026-09-11 · The article decides the supplier; the remark is ignored
 
 The owner, after I reported I could not reproduce it: *"in requisitions, the system should read the details of

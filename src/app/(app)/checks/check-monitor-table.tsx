@@ -46,6 +46,50 @@ function whenText(row: CheckWatchRow): string {
 }
 
 /**
+ * A column header you can sort by. The arrow shows only on the ACTIVE column —
+ * an arrow on every header is an arrow nobody reads.
+ *
+ * Module scope, like `Stat` below: defined inside the component these were a new
+ * type on every render, so React threw the header away and rebuilt it each time.
+ * Harmless-looking here, and the identical mistake cost the Cash position panel
+ * its caret on every keystroke. `react/no-unstable-nested-components` now fails
+ * the build on it.
+ */
+function SortTh({ k, children, right, sort, onSort }: {
+  k: CheckSortKey; children: React.ReactNode; right?: boolean;
+  sort: { key: CheckSortKey; dir: SortDir }; onSort: (k: CheckSortKey) => void;
+}) {
+  const active = sort.key === k;
+  return (
+    <th className={`px-2 py-2 font-medium ${right ? "text-right" : ""}`}>
+      {/* Deliberately NOT a flex row: a flex arrow will not wrap with the
+          words beside it, so on a two-line header in a narrow column it
+          escaped into the next one. Inline, it follows the last word. */}
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        title={`Sort by ${String(children)}`}
+        className={`text-left hover:text-foreground ${active ? "font-semibold text-foreground" : ""} ${right ? "text-right" : ""}`}
+      >
+        {children}
+        {active && (sort.dir === "asc"
+          ? <ArrowUp className="ml-0.5 inline h-3 w-3 align-[-1px]" />
+          : <ArrowDown className="ml-0.5 inline h-3 w-3 align-[-1px]" />)}
+      </button>
+    </th>
+  );
+}
+
+function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  return (
+    <div className={`rounded-md border px-3 py-2 ${tone ?? "bg-muted/30"}`}>
+      <div className="text-[11px] uppercase tracking-wide opacity-70">{label}</div>
+      <div className="text-lg font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+/**
  * The monitoring table, in two tabs — the owner's rule: *"Move the cleared check
  * to a separate tab once check is cleared."*
  *
@@ -133,39 +177,6 @@ export function CheckMonitor({
       setBusy(null);
     }
   }
-
-  /**
-   * A column header you can sort by. The arrow shows only on the ACTIVE column —
-   * an arrow on every header is an arrow nobody reads.
-   */
-  const SortTh = ({ k, children, right }: { k: CheckSortKey; children: React.ReactNode; right?: boolean }) => {
-    const active = sort.key === k;
-    return (
-      <th className={`px-2 py-2 font-medium ${right ? "text-right" : ""}`}>
-        {/* Deliberately NOT a flex row: a flex arrow will not wrap with the
-            words beside it, so on a two-line header in a narrow column it
-            escaped into the next one. Inline, it follows the last word. */}
-        <button
-          type="button"
-          onClick={() => toggleSort(k)}
-          title={`Sort by ${String(children)}`}
-          className={`text-left hover:text-foreground ${active ? "font-semibold text-foreground" : ""} ${right ? "text-right" : ""}`}
-        >
-          {children}
-          {active && (sort.dir === "asc"
-            ? <ArrowUp className="ml-0.5 inline h-3 w-3 align-[-1px]" />
-            : <ArrowDown className="ml-0.5 inline h-3 w-3 align-[-1px]" />)}
-        </button>
-      </th>
-    );
-  };
-
-  const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
-    <div className={`rounded-md border px-3 py-2 ${tone ?? "bg-muted/30"}`}>
-      <div className="text-[11px] uppercase tracking-wide opacity-70">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
-    </div>
-  );
 
   return (
     <div className="space-y-3">
@@ -305,14 +316,14 @@ export function CheckMonitor({
                 {/* The owner's own register columns, in their order and their
                     wording: Date · Company · Purchase Order Number · Check No. ·
                     Amount · Date Paid/Cleared · Form of Payment · Status · Remarks. */}
-                <SortTh k="poDate">Date</SortTh>
-                <SortTh k="company">Company</SortTh>
-                <SortTh k="poNumber">Purchase Order Number</SortTh>
-                <SortTh k="checkNo">Check No.</SortTh>
-                <SortTh k="amount" right>Amount</SortTh>
-                <SortTh k="clearing">Date Paid/Cleared</SortTh>
-                <SortTh k="form">Form of Payment</SortTh>
-                <SortTh k="status">Status</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="poDate">Date</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="company">Company</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="poNumber">Purchase Order Number</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="checkNo">Check No.</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="amount" right>Amount</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="clearing">Date Paid/Cleared</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="form">Form of Payment</SortTh>
+                <SortTh sort={sort} onSort={toggleSort} k="status">Status</SortTh>
                 {/* Remarks is free text with no order worth having. */}
                 <th className="px-2 py-2 font-medium">Remarks</th>
                 {admin && <th className="px-2 py-2 text-right font-medium">Actions</th>}
