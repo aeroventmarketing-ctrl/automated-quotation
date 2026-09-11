@@ -248,7 +248,7 @@ export function canLiquidateAt(status: CashRequestStatus): boolean {
  * *"In cash requests Budgeted Tab…"*) and a rule that disagrees with the tab it
  * names is a rule in the wrong place. One definition, so they cannot drift.
  */
-export type CashBucket = "pending" | "approved" | "budgeted" | "rejected" | "cancelled";
+export type CashBucket = "pending" | "approved" | "budgeted" | "rejected" | "cancelled" | "completed";
 
 export function cashBucket(status: CashRequestStatus): CashBucket {
   switch (status) {
@@ -261,10 +261,23 @@ export function cashBucket(status: CashRequestStatus): CashBucket {
       return "rejected";
     case "CANCELLED":
       return "cancelled";
+    case "SETTLED":
+      // Finished: liquidated and settled, nothing left to do. It leaves the tabs
+      // entirely for the collapsed "Completed cash vouchers" section — the owner's
+      // *"settled Cash Voucher should have a completed Cash Voucher Table same as
+      // Purchasing Tab Completed Department POs"*, and the same shape the
+      // Requisitions and Purchasing pages already use for a finished row.
+      return "completed";
     default:
-      // CASH_RELEASED, DISBURSED, RECEIVED, LIQUIDATED, SETTLED — the cash is out.
+      // CASH_RELEASED, DISBURSED, RECEIVED, LIQUIDATED — the cash is out and the
+      // request is still in flight.
       return "budgeted";
   }
+}
+
+/** A finished voucher: out of the tabs, into the collapsed section at the foot. */
+export function isCompletedCashRequest(status: CashRequestStatus): boolean {
+  return cashBucket(status) === "completed";
 }
 
 /** Who is asking. `requestor` is the person who raised this particular request. */

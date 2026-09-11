@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  cashBucket, canCancelCashRequest, canRejectCashRequest, isCashCancellable,
+  cashBucket, isCompletedCashRequest, canCancelCashRequest, canRejectCashRequest, isCashCancellable,
   CASH_MAIN_ORDER, type CashRequestStatus, type CashRequestActor,
 } from "./cash-request";
 
@@ -32,10 +32,22 @@ const WHO: Record<string, CashRequestActor> = {
 const inTab = (tab: string) => ALL.filter((s) => cashBucket(s) === tab);
 
 describe("the tabs are the ones on screen", () => {
-  it("Approved is the two before the cash moves; Budgeted is everything after", () => {
+  it("Approved is the two before the cash moves; Budgeted is what is still in flight", () => {
     expect(inTab("approved")).toEqual(["SUBMITTED", "VOUCHER_READY"]);
-    expect(inTab("budgeted")).toEqual(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED", "SETTLED"]);
+    expect(inTab("budgeted")).toEqual(["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED"]);
     expect(inTab("pending")).toEqual(["PENDING_APPROVAL"]);
+  });
+
+  it("a settled voucher is COMPLETED and leaves the tabs", () => {
+    // *"Settled Cash Voucher should have a completed Cash Voucher Table same as
+    // Purchasing Tab Completed Department POs."* It is not a Budgeted row any
+    // more, so it stops padding that count for ever.
+    expect(cashBucket("SETTLED")).toBe("completed");
+    expect(isCompletedCashRequest("SETTLED")).toBe(true);
+    expect(inTab("budgeted")).not.toContain("SETTLED");
+    for (const s of ALL.filter((x) => x !== "SETTLED")) {
+      expect(isCompletedCashRequest(s), s).toBe(false);
+    }
   });
 });
 
@@ -55,12 +67,16 @@ describe("who may cancel a cash request", () => {
       admin: ["PENDING_APPROVAL", "SUBMITTED", "VOUCHER_READY", "CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED"],
       // NEW — the Approved tab, exactly.
       accounting: ["SUBMITTED", "VOUCHER_READY"],
-      // NEW — the Budgeted tab, less SETTLED (see below).
+      // NEW — the Budgeted tab, which is exactly these four.
       approver: ["CASH_RELEASED", "DISBURSED", "RECEIVED", "LIQUIDATED"],
       // Unchanged: before the voucher exists.
       requestor: ["PENDING_APPROVAL", "SUBMITTED"],
       nobody: [],
     });
+  });
+
+  it("the Payment Approver's window is the Budgeted tab exactly", () => {
+    expect(ALL.filter((s) => canCancelCashRequest(s, WHO.approver))).toEqual(inTab("budgeted"));
   });
 
   it("Accounting's window is the Approved tab and nothing else", () => {
