@@ -50,6 +50,13 @@ function remarksFor(r: CheckWatchRow): string {
   if (r.remarks) notes.push(r.remarks);
   if (r.originalYMD) notes.push(`moved from ${r.originalYMD}${r.moves > 1 ? ` · ${r.moves} times` : ""}`);
   if (r.dateFixedBy) notes.push(`date corrected by ${r.dateFixedBy}`);
+  if (r.amountFixedBy) notes.push(`amount corrected by ${r.amountFixedBy}`);
+  if (r.checkNoFixedBy) notes.push(`check no. corrected by ${r.checkNoFixedBy}`);
+  // A discrepancy and its answer travel together onto the paper. A printed
+  // register that showed neither would let a reader take a figure on trust that
+  // somebody had to sign for.
+  if (r.issuesApprovedBy) notes.push(`discrepancy approved by ${r.issuesApprovedBy}`);
+  if (r.openIssues > 0 && !r.issuesApprovedBy) notes.push(`${r.openIssues} unresolved discrepanc${r.openIssues === 1 ? "y" : "ies"}`);
   if (r.clearingYMD && !r.dateVerified) notes.push("clearing date unconfirmed");
   if (r.state === "cleared" && r.clearedByName) notes.push(`cleared by ${r.clearedByName}`);
   return notes.join(" · ");

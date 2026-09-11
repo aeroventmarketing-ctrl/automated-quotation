@@ -7,7 +7,8 @@ import {
   checkIssues, checkNumbers, sameCompany, amountMatchesWords, normalizeCheckNo, formatCheckNo, CHECK_NO_DIGITS,
   clearingFromDateBoxes, checkAmountAgreed, checkReadableAt, checkRemovableAt, isClearingYMD,
   hasUnlimitedCheckReads, checkReadsUsed, checkReadsLeft, canReadCheckAgain, nextCheckReadCount,
-  canDownloadCheckRegister,
+  canDownloadCheckRegister, canApproveCheckDiscrepancy, effectiveCheckAmount, effectiveCheckNo,
+  issueApproved, openCheckIssues,
   type CheckDoc,
   type CheckRead,
 } from "./voucher-check";
@@ -76,6 +77,99 @@ describe("who may attach a check photo", () => {
   for (const [who, opts, expected] of CAN) {
     it(who, () => expect(canAttachCheck(opts)).toBe(expected));
   }
+});
+
+describe("who may approve or correct a check discrepancy", () => {
+  // *"add an option for admin/payment approver to approve or edit the
+  // discrepancy."* The whole grid, so the Accounting cell is asserted rather
+  // than merely absent — they attach and read checks, and this is narrower.
+  const CAN: Array<[string, Parameters<typeof canApproveCheckDiscrepancy>[0], boolean]> = [
+    ["Admin", { admin: true }, true],
+    ["Payment Approver", { paymentApprover: true }, true],
+    ["Accounting", { accounting: true }, false],
+    ["an admin who is also Accounting", { admin: true, accounting: true }, true],
+    ["nobody in particular", {}, false],
+    ["no actor at all", undefined, false],
+  ];
+  for (const [who, actor, expected] of CAN) {
+    it(who, () => expect(canApproveCheckDiscrepancy(actor)).toBe(expected));
+  }
+
+  it("is narrower than attaching a check", () => {
+    // Accounting may attach and read a check, and may not sign off a
+    // disagreement about how much it is for. If these two ever agree again, one
+    // of them was widened by accident.
+    expect(canAttachCheck({ admin: false, workflowRoles: ["accounting"] })).toBe(true);
+    expect(canApproveCheckDiscrepancy({ accounting: true })).toBe(false);
+  });
+});
+
+describe("a corrected figure beats the reading", () => {
+  const base: CheckDoc = { path: "p", name: "c.jpg", uploadedAt: "", uploadedByName: "A" };
+  const read = { checkNo: "0000486692", amount: 14814.07 } as CheckRead;
+
+  it("falls back to the read when nothing was corrected", () => {
+    const d = { ...base, read };
+    expect(effectiveCheckAmount(d)).toBe(14814.07);
+    expect(effectiveCheckNo(d)).toBe("0000486692");
+  });
+
+  it("uses the correction once one is made", () => {
+    const d: CheckDoc = {
+      ...base, read,
+      amountFix: { amount: 14866.07, was: 14814.07, byName: "Rey Gil", at: "" },
+      checkNoFix: { checkNo: "0000486693", was: "0000486692", byName: "Rey Gil", at: "" },
+    };
+    expect(effectiveCheckAmount(d)).toBe(14866.07);
+    expect(effectiveCheckNo(d)).toBe("0000486693");
+  });
+
+  it("is null on a check nobody has read or corrected", () => {
+    expect(effectiveCheckAmount(base)).toBeNull();
+    expect(effectiveCheckNo(base)).toBeNull();
+  });
+
+  it("keeps a corrected number findable by BOTH numbers", () => {
+    // Somebody who fixed a misread number searches for what they typed; somebody
+    // reading a message sent yesterday searches for the misread one.
+    const d: CheckDoc = { ...base, read, checkNoFix: { checkNo: "486693", was: "0000486692", byName: "R", at: "" } };
+    const nums = checkNumbers([d]);
+    expect(nums).toContain("486693");
+    expect(nums).toContain("0000486692");
+    expect(nums).toContain("0000486693"); // canonical form of the correction
+  });
+});
+
+describe("approving a discrepancy covers only what was approved", () => {
+  const base: CheckDoc = { path: "p", name: "c.jpg", uploadedAt: "", uploadedByName: "A" };
+  const withIssues = (keys: string[], approved?: string[]): CheckDoc => ({
+    ...base,
+    read: { issues: keys.map((k) => ({ key: k, message: k })) } as CheckRead,
+    ...(approved ? { issueApproval: { keys: approved, byName: "Rey Gil", at: "2026-09-11T00:00:00Z" } } : {}),
+  });
+
+  it("nothing is approved before anyone approves", () => {
+    const d = withIssues(["amount", "words"]);
+    expect(issueApproved(d, "amount")).toBe(false);
+    expect(openCheckIssues(d).map((i) => i.key)).toEqual(["amount", "words"]);
+  });
+
+  it("an approved issue stops being open, and keeps its message", () => {
+    const d = withIssues(["amount", "words"], ["amount", "words"]);
+    expect(openCheckIssues(d)).toEqual([]);
+    // The words are still there — the owner's ruling was that it BECOMES
+    // "approved by X", not that it disappears.
+    expect(d.read!.issues).toHaveLength(2);
+  });
+
+  it("an issue found AFTER the approval is not covered by it", () => {
+    // The whole reason the approval stores keys: signing off "nothing tallies"
+    // must not wave through a duplicate check number discovered next week.
+    const d = withIssues(["amount", "duplicate"], ["amount"]);
+    expect(issueApproved(d, "amount")).toBe(true);
+    expect(issueApproved(d, "duplicate")).toBe(false);
+    expect(openCheckIssues(d).map((i) => i.key)).toEqual(["duplicate"]);
+  });
 });
 
 describe("who may download the check register", () => {

@@ -1,3 +1,73 @@
+## 2026-09-11 · A check discrepancy can be answered, not just reported
+
+The owner, on a check whose three figures all disagreed: *"add an option for admin/payment approver to approve
+or edit the discrepancy."*
+
+Until now the warning was a dead end. It said what disagreed — peso box ₱14,886.07, words ₱14,814.07, PO net
+₱14,866.07 — offered **Re-read**, and if the photo read the same way twice there was nothing else to do. The
+check sat flagged for ever, and the register went on quoting a figure somebody knew was wrong.
+
+Two answers, both for an admin or the Payment Approver.
+
+### Approve — it stops being a question, and says who answered
+
+The owner's ruling on what approval should look like was explicit: the warning **becomes** *"approved by X"*,
+everywhere — not that it disappears. So the words stay, the triangle turns into a tick, and the line reads:
+
+> ✓ Nothing tallies: the peso box reads ₱14,886.07, the words read ₱14,814.07, and this PO's net is ₱14,866.07.
+> **Approved by Admin Ana on Sep 11, 2026**
+
+A disagreement about money that vanishes when somebody clicks a button is worse than one that nags. It shows the
+same way on Check Monitoring, and on the downloaded register.
+
+**An approval records WHICH issues it covered.** That is the part worth insisting on: signing off *"nothing
+tallies"* today must not silently wave through a duplicate check number recorded on another PO next week. The
+new issue shows amber beside the approved one. `CheckIssueApproval.keys` is what makes that work, and
+`unapproveCheckDiscrepancy` withdraws one given in error.
+
+### Edit — the three figures a read produces, in one form
+
+Amount, check number and clearing date together, pre-filled with what the check currently says, because most
+corrections change one of the three and retyping the other two is how a good figure gets broken. Only a CHANGED
+field is written, so saving an untouched form stamps nothing.
+
+Each correction keeps what the reading claimed (`was ₱14,814.07`), for the same reason the date's has always
+done: correcting a misread is not pretending the AI never said it. `effectiveCheckAmount` / `effectiveCheckNo`
+join `effectiveClearingYMD` as the single place anything quotes a check from — and a corrected check number
+stays findable by **both** numbers, since somebody will search for what a message said yesterday.
+
+The date goes through the existing `dateFix` rather than a second channel. Two competing corrected dates would
+be a worse bug than the one being fixed. Check Monitoring's own **Fix date** control is untouched — it writes
+the same field, and removing a working control the owner uses daily was not part of the ask.
+
+### The bug that only the screen could show
+
+With everything passing, the card still printed **₱14,814.07** under a register that already said ₱14,866.07 —
+one check, two figures, the exact failure the accessors exist to prevent. The summary line was still reading
+`read.amount` directly. Tests did not catch it and could not have: they assert the accessors, and this was a
+caller that never used them.
+
+### On the running app
+
+| | sees warning | sees who approved | Approve | Edit figures |
+| --- | --- | --- | --- | --- |
+| **Admin Ana** | ✓ | ✓ | ✓ | ✓ |
+| **Rey Gil** (Payment Approver) | ✓ | ✓ | ✓ | ✓ |
+| **Michelle Cotura** (Accounting) | ✓ | ✓ | — | — |
+| Allan Ramos (Purchaser) | ✓ | ✓ | — | — |
+
+Accounting keeps the whole story and gets no buttons: they attach and read checks, but signing off a
+disagreement about how much one is for is a decision about money.
+
+Driven in a real browser end to end — approve, then correct ₱14,814.07 → ₱14,866.07 — and Check Monitoring
+followed: corrected amount, *corrected by Admin Ana*, *discrepancy approved by Admin Ana*.
+
+The harness probe reads the server's own answer out of the RSC payload rather than hunting for button labels.
+This row lives behind the client-rendered **Budgeted** tab, so the buttons never reach the HTML a scraper sees —
+probing their text would have printed a column of falses that look like a permission bug and are not, which is
+the same trap that tab already sets elsewhere in the file.
+
+14 new tests, 500 pass. No migration — it all lives in the check's existing JSON.
 ## 2026-09-10 · The approver alarm slows down while you are not looking
 
 The owner: *"Slowdown 30s to 2 mins."*

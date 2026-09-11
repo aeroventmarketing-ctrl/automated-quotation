@@ -18,7 +18,7 @@
  *    the Cleared tab on its due date — it waits to be told.
  */
 import type { CheckDoc } from "@/lib/voucher-check";
-import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD } from "@/lib/voucher-check";
+import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD, effectiveCheckAmount, effectiveCheckNo, openCheckIssues } from "@/lib/voucher-check";
 
 /**
  * How far ahead a check reads as *Clearing soon* on screen.
@@ -149,6 +149,22 @@ export interface CheckWatchRow {
   originalYMD: string | null;
   /** Who corrected a misread date, if anyone did. */
   dateFixedBy: string | null;
+  /** Who corrected a misread amount, if anyone did. */
+  amountFixedBy: string | null;
+  /** Who corrected a misread check number, if anyone did. */
+  checkNoFixedBy: string | null;
+  /**
+   * How many of this check's issues are still unanswered.
+   *
+   * Zero on a check that never had any, and zero on one whose every issue an
+   * admin or the Payment Approver has accepted — the two are the same thing to a
+   * register asking "does this still need someone".
+   */
+  openIssues: number;
+  /** Who accepted the discrepancies, if anyone has. */
+  issuesApprovedBy: string | null;
+  /** …and when, so the register can say it in the Remarks column. */
+  issuesApprovedAt: string | null;
   /** How many times the date has been moved. */
   moves: number;
   /** Why it was last moved (typically insufficient funds). */
@@ -221,6 +237,10 @@ export function buildCheckWatch(
           poDate, poNumber: po.poNumber, supplier: po.supplierCompany, orderId: pr.quotationId,
           checkNo: null, amount: po.net, clearingYMD: null, originalYMD: null,
           dateFixedBy: null,
+          // Nothing has been read on a PO awaiting its photo, so there is nothing
+          // to have corrected and nothing to disagree about.
+          amountFixedBy: null, checkNoFixedBy: null,
+          openIssues: 0, issuesApprovedBy: null, issuesApprovedAt: null,
           moves: 0, lastMoveReason: null, daysLeft: null,
           // No check, so no date to doubt.
           dateVerified: true,
@@ -251,8 +271,16 @@ export function buildCheckWatch(
         poNumber: po?.poNumber ?? "—",
         supplier: po?.supplierCompany ?? "",
         orderId: pr.quotationId,
-        checkNo: doc.read?.checkNo ?? null,
-        amount: doc.read?.amount ?? null,
+        // A person's correction beats the reading, here as on the PO card — the
+        // register and the card must never quote different figures for one check.
+        checkNo: effectiveCheckNo(doc),
+        amount: effectiveCheckAmount(doc),
+        amountFixedBy: doc.amountFix?.byName || null,
+        checkNoFixedBy: doc.checkNoFix?.byName || null,
+        // What still disagrees and nobody has accepted, and who accepted the rest.
+        openIssues: openCheckIssues(doc).length,
+        issuesApprovedBy: doc.issueApproval?.byName || null,
+        issuesApprovedAt: doc.issueApproval?.at || null,
         clearingYMD: due,
         originalYMD: original && original !== due ? original : null,
         dateFixedBy: doc.dateFix?.byName || null,

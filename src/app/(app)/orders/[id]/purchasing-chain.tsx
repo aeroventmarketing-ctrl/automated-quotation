@@ -73,6 +73,8 @@ interface PRRow {
   canReadCheck?: boolean;
   /** …and their reads don't count against the per-photo AI allowance. */
   unlimitedCheckReads?: boolean;
+  /** …and they may accept a discrepancy, or correct a misread figure. */
+  canApproveCheckIssue?: boolean;
   canRemoveCheck?: boolean;
   purchaseDueAt?: string | null;
   canSetPurchaseDue?: boolean;
@@ -616,6 +618,9 @@ export function PurchasingChain({
                       canRead={!readOnly && !!r.canReadCheck}
                       canRemove={!readOnly && !!r.canRemoveCheck}
                       unlimitedReads={!!r.unlimitedCheckReads}
+                      // Not `!readOnly`: this card is read-only for most viewers,
+                      // and a discrepancy still needs the two who may answer it.
+                      canApproveIssue={!!r.canApproveCheckIssue}
                       canView={showSupplier}
                       netAmount={r.po ? poTotals(r.po).net : undefined}
                     />

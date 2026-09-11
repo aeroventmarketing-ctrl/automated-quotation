@@ -16,7 +16,7 @@ import {
   type ReturnStage,
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy, type CheckDoc } from "@/lib/voucher-check";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -191,6 +191,17 @@ export interface PurchaseChainRow {
    * owner's *"Admin/payment approved still allowed unlimited number of tries."*
    */
   unlimitedCheckReads: boolean;
+  /**
+   * …and may ACCEPT what the read disagreed about, or correct a misread figure —
+   * the owner's *"add an option for admin/payment approver to approve or edit the
+   * discrepancy."*
+   *
+   * Not tied to the attach window the way the three flags around it are: a
+   * discrepancy on a COMPLETED PO is exactly the kind that still needs answering,
+   * and a check whose figures nobody may correct once the PO closes is how two
+   * TKL checks ended up stranded unreadable.
+   */
+  canApproveCheckIssue: boolean;
   /** …and may DELETE the photo. Admin-wide, like reading — see `checkRemovableAt`. */
   canRemoveCheck: boolean;
   /** The due date of purchase (YYYY-MM-DD), if one has been set. */
@@ -459,6 +470,7 @@ export function buildPurchaseChainRow(
     canAttachCheck: (ctx.canAttachCheck ?? false) && checkAttachableAt(status, { isDept, poApproved }, checkActor),
     canReadCheck: (ctx.canAttachCheck ?? false) && checkReadableAt(status, { isDept, poApproved }, checkActor),
     unlimitedCheckReads: hasUnlimitedCheckReads(checkActor),
+    canApproveCheckIssue: canApproveCheckDiscrepancy(checkActor),
     canRemoveCheck: (ctx.canAttachCheck ?? false) && checkRemovableAt(status, { isDept, poApproved }, checkActor),
     purchaseDueAt: pr.purchaseDueAt ? pr.purchaseDueAt.toISOString().slice(0, 10) : null,
     canSetPurchaseDue: canSetPurchaseDue({ admin: ctx.admin, purchaser: ctx.canAct("purchaser"), paymentApprover: ctx.paymentApprover }),

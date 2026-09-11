@@ -2,17 +2,18 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, AlertTriangle, ScanLine, CheckCircle2 } from "lucide-react";
+import { Banknote, AlertTriangle, ScanLine, CheckCircle2, Pencil } from "lucide-react";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatDate } from "@/lib/utils";
 import {
   checkAmountAgreed, checkMissing, formatCheckNo, printedClearingYMD, checkReadsLeft,
+  effectiveCheckAmount, effectiveCheckNo, issueApproved,
   type CheckDoc,
 } from "@/lib/voucher-check";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import type { PRStatus } from "@/lib/purchasing";
-import { attachVoucherCheck, removeVoucherCheck } from "../orders/actions";
+import { attachVoucherCheck, removeVoucherCheck, correctCheckRead, approveCheckDiscrepancy, unapproveCheckDiscrepancy } from "../orders/actions";
 
 const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -45,6 +46,7 @@ export function VoucherCheckControl({
   canRead,
   canRemove,
   unlimitedReads = false,
+  canApproveIssue = false,
   canView,
   netAmount,
 }: {
@@ -77,6 +79,15 @@ export function VoucherCheckControl({
    * to be told before the button disappears on them.
    */
   unlimitedReads?: boolean;
+  /**
+   * The viewer may ACCEPT what the read disagreed about, or correct a misread
+   * figure — an admin or the Payment Approver.
+   *
+   * Deliberately not gated on `canAttach`: a discrepancy on a completed PO is
+   * exactly the kind still worth answering, and a check nobody may correct once
+   * the PO closes is a wrong figure on the record for good.
+   */
+  canApproveIssue?: boolean;
   /** The viewer may see the supplier + PO document at all. */
   canView: boolean;
   /**
@@ -91,6 +102,9 @@ export function VoucherCheckControl({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  /** Which check's correction form is open, and what is typed in it. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const [form, setForm] = useState<{ amount: string; checkNo: string; ymd: string }>({ amount: "", checkNo: "", ymd: "" });
 
   const mayRead = canRead ?? canAttach;
   const mayRemove = canRemove ?? canAttach;
@@ -146,6 +160,74 @@ export function VoucherCheckControl({
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not read the check.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Open the correction form pre-filled with what the check currently says. */
+  function openEdit(d: CheckDoc) {
+    setEditing(d.path);
+    setErr(null);
+    setNote(null);
+    // Pre-filled, not blank: most corrections change ONE of the three, and
+    // retyping the two that were right is how a good figure gets broken.
+    setForm({
+      amount: effectiveCheckAmount(d) != null ? String(effectiveCheckAmount(d)) : "",
+      checkNo: effectiveCheckNo(d) ?? "",
+      ymd: printedClearingYMD(d) ?? "",
+    });
+  }
+
+  async function saveEdit(path: string) {
+    setBusy(`fix:${path}`);
+    setErr(null);
+    setNote(null);
+    try {
+      const amount = form.amount.trim() === "" ? null : Number(form.amount.replace(/,/g, ""));
+      if (amount !== null && !Number.isFinite(amount)) { setErr("The amount isn't a number."); return; }
+      const res = await correctCheckRead(prId, path, {
+        amount,
+        checkNo: form.checkNo.trim() || null,
+        ymd: form.ymd || null,
+      });
+      if (res.error) { setErr(res.error); return; }
+      setEditing(null);
+      setNote("Check corrected.");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not save the correction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function approve(path: string) {
+    setBusy(`ok:${path}`);
+    setErr(null);
+    setNote(null);
+    try {
+      const res = await approveCheckDiscrepancy(prId, path);
+      if (res.error) { setErr(res.error); return; }
+      setNote("Discrepancy approved.");
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not approve it.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function unapprove(path: string) {
+    setBusy(`ok:${path}`);
+    setErr(null);
+    setNote(null);
+    try {
+      const res = await unapproveCheckDiscrepancy(prId, path);
+      if (res.error) { setErr(res.error); return; }
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not withdraw the approval.");
     } finally {
       setBusy(null);
     }
@@ -216,12 +298,19 @@ export function VoucherCheckControl({
         // *"3 tries in every row or every attachment"* — this photo's, not the
         // PO's. Null for the two who have no limit.
         const left = checkReadsLeft(d, { unlimited: unlimitedReads });
+        // A person's correction beats the reading, here exactly as it does in
+        // the register. Quoting `read.amount` straight left this card printing
+        // ₱14,814.07 under a register that had already been corrected to
+        // ₱14,866.07 — one check, two figures, which is the whole failure these
+        // accessors exist to prevent.
+        const shownAmount = effectiveCheckAmount(d);
+        const shownNo = effectiveCheckNo(d);
         return (
           <span key={d.path} className="inline-flex flex-col items-start gap-0.5 text-xs">
             <span className="inline-flex flex-wrap items-center gap-2">
-              {r?.checkNo ? (
+              {shownNo ? (
                 <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-foreground" title="Check number — searchable in the box above">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Check No. {formatCheckNo(r.checkNo)}
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Check No. {formatCheckNo(shownNo)}
                 </span>
               ) : (
                 <span className="text-muted-foreground">Check number not read</span>
@@ -260,20 +349,139 @@ export function VoucherCheckControl({
                 </span>
               )}
             </span>
-            {r && (r.amount != null || clears || r.payee) && (
+            {r && (shownAmount != null || clears || r.payee) && (
               <span className="text-muted-foreground">
                 {r.payee ? `${r.payee} · ` : ""}
-                {r.amount != null ? `₱${peso(r.amount)}` : ""}
+                {shownAmount != null ? `₱${peso(shownAmount)}` : ""}
                 {clears ? ` · clears ${formatDate(clears)}` : ""}
                 {d.dateFix ? " (date corrected)" : ""}
               </span>
             )}
-            {/* What the read disagreed with the PO about. Reported, never enforced. */}
-            {(r?.issues ?? []).map((i) => (
-              <span key={i.key} className="inline-flex items-start gap-1 text-amber-700">
-                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" /> {i.message}
+            {/* What the read disagreed with the PO about. Reported, never enforced.
+                An approved one keeps its words and loses its alarm: the owner's
+                ruling was that it *becomes* "approved by X", not that it goes. */}
+            {(r?.issues ?? []).map((i) => {
+              const ok = issueApproved(d, i.key);
+              return (
+                <span key={i.key} className={`inline-flex items-start gap-1 ${ok ? "text-emerald-700" : "text-amber-700"}`}>
+                  {ok
+                    ? <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" />
+                    : <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />}
+                  <span>
+                    {i.message}
+                    {ok && d.issueApproval && (
+                      <span className="font-medium">
+                        {" "}Approved by {d.issueApproval.byName || "—"}
+                        {d.issueApproval.at ? ` on ${formatDate(d.issueApproval.at.slice(0, 10))}` : ""}
+                        {d.issueApproval.note ? ` — ${d.issueApproval.note}` : ""}
+                      </span>
+                    )}
+                  </span>
+                </span>
+              );
+            })}
+
+            {/* Accept it, or correct what the read got wrong. Admin / Payment
+                Approver only, and only where there is something to answer. */}
+            {canApproveIssue && (r?.issues?.length || d.amountFix || d.checkNoFix) && (
+              <span className="inline-flex flex-wrap items-center gap-2">
+                {r?.issues?.length ? (
+                  d.issueApproval ? (
+                    <button
+                      type="button"
+                      disabled={busy != null}
+                      onClick={() => unapprove(d.path)}
+                      className="text-muted-foreground underline-offset-2 hover:text-amber-700 hover:underline disabled:opacity-50"
+                      title="Withdraw the approval — the discrepancy goes back to needing an answer."
+                    >
+                      Withdraw approval
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy != null}
+                      onClick={() => approve(d.path)}
+                      className="inline-flex items-center gap-1 rounded-md border border-emerald-600/40 px-2 py-0.5 font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                      title="Accept this discrepancy as it stands. The warning stays visible and records who accepted it."
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {busy === `ok:${d.path}` ? "Approving…" : "Approve discrepancy"}
+                    </button>
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  disabled={busy != null}
+                  onClick={() => (editing === d.path ? setEditing(null) : openEdit(d))}
+                  className="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 font-medium hover:bg-accent disabled:opacity-50"
+                  title="Correct what the AI read wrongly — the amount, the check number or the date."
+                >
+                  <Pencil className="h-3.5 w-3.5" /> {editing === d.path ? "Cancel" : "Edit figures"}
+                </button>
               </span>
-            ))}
+            )}
+
+            {/* The correction form. One row for the three figures a read
+                produces, so a photo misread in two places is one save, not two
+                trips through two different screens. */}
+            {canApproveIssue && editing === d.path && (
+              <span className="inline-flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 p-2">
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Amount</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.amount}
+                    onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+                    className="h-7 w-28 rounded-md border bg-background px-2 text-xs tabular-nums"
+                    aria-label="Check amount"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Check No.</span>
+                  <input
+                    type="text"
+                    value={form.checkNo}
+                    onChange={(e) => setForm((f) => ({ ...f, checkNo: e.target.value }))}
+                    className="h-7 w-32 rounded-md border bg-background px-2 text-xs tabular-nums"
+                    aria-label="Check number"
+                  />
+                </label>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Clears</span>
+                  <input
+                    type="date"
+                    value={form.ymd}
+                    onChange={(e) => setForm((f) => ({ ...f, ymd: e.target.value }))}
+                    className="h-7 w-36 rounded-md border bg-background px-2 text-xs"
+                    aria-label="Clearing date"
+                  />
+                </label>
+                <button
+                  type="button"
+                  disabled={busy != null}
+                  onClick={() => saveEdit(d.path)}
+                  className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {busy === `fix:${d.path}` ? "Saving…" : "Save"}
+                </button>
+                {/* Says what a correction means here, because it is not what
+                    "Move date" means — see `correctCheckDate`. */}
+                <span className="w-full text-[11px] text-muted-foreground">
+                  Corrects what the AI read wrongly. Nothing is rescheduled — to move a clearing date because
+                  the check cannot be funded, use Check Monitoring.
+                </span>
+              </span>
+            )}
+
+            {/* A corrected figure, named. Not amber: it is settled. */}
+            {(d.amountFix || d.checkNoFix) && (
+              <span className="text-muted-foreground">
+                {d.amountFix ? `Amount corrected by ${d.amountFix.byName}${d.amountFix.was != null ? ` · was ₱${peso(d.amountFix.was)}` : ""}` : ""}
+                {d.amountFix && d.checkNoFix ? " · " : ""}
+                {d.checkNoFix ? `Check no. corrected by ${d.checkNoFix.byName}${d.checkNoFix.was ? ` · was ${formatCheckNo(d.checkNoFix.was)}` : ""}` : ""}
+              </span>
+            )}
             {/* …and, when the three figures agree, said out loud. Silence used to
                 mean both "they tally" and "nobody looked". */}
             {/* Why the last read failed. Kept on the check itself, so it is still

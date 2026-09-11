@@ -368,7 +368,18 @@ export function CheckMonitor({
                         <span className="italic text-muted-foreground">none yet</span>
                       )}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">{r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}</td>
+                    <td className="px-2 py-2 text-right tabular-nums">
+                      {r.amount != null ? formatCurrency(r.amount, "PHP") : "—"}
+                      {/* Same rule as a corrected date: not amber, because a
+                          corrected figure is a settled one — but named, so the
+                          register never passes a person's reading off as the
+                          machine's. */}
+                      {r.amountFixedBy && (
+                        <div className="mt-0.5 text-xs font-normal text-muted-foreground" title="The AI read this amount wrongly; it was corrected against the photo.">
+                          corrected by {r.amountFixedBy}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-2 py-2">
                       <div className="font-medium tabular-nums">{r.clearingYMD ? formatDate(r.clearingYMD) : "—"}</div>
                       {/* How far off it is, which is the whole point of watching it. */}
@@ -409,6 +420,24 @@ export function CheckMonitor({
                       </span>
                       {r.state === "cleared" && r.clearedByName && (
                         <div className="mt-0.5 text-xs text-muted-foreground">by {r.clearedByName}</div>
+                      )}
+                      {/* A discrepancy somebody signed for. The owner's ruling
+                          was that it reads as approved "everywhere", not just on
+                          the PO card — so the register says it too, rather than
+                          leaving this check looking untouched beside one nobody
+                          has looked at. */}
+                      {r.issuesApprovedBy && (
+                        <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-emerald-700" title="What the read disagreed about was accepted as it stands.">
+                          <CheckCircle2 className="h-3 w-3 shrink-0" />
+                          discrepancy approved by {r.issuesApprovedBy}
+                        </div>
+                      )}
+                      {/* …and one nobody has answered yet. */}
+                      {r.openIssues > 0 && !r.issuesApprovedBy && (
+                        <div className="mt-0.5 inline-flex items-center gap-1 text-xs text-amber-700" title="Open the PO to see what disagrees, then correct it or approve it.">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          {r.openIssues} unresolved
+                        </div>
                       )}
                     </td>
                     <td className="px-2 py-2 text-xs text-muted-foreground">{r.remarks ?? ""}</td>
