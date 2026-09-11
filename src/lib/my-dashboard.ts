@@ -31,7 +31,7 @@ import { isClientRestricted, CLIENT_HIDDEN } from "@/lib/client-visibility";
 import { mbProgress, isMbFiled } from "@/lib/delivery-multibatch";
 import { STOCK_ACTION_LABEL, nextStockActionSlot } from "@/lib/stock-action";
 import { listActivityForActor, type ActivityView } from "@/lib/activity-log";
-import { buildCommissions, allDeals, isPayable } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday } from "@/lib/sales-commission";
 import { commissionAccess } from "@/lib/commission-access";
 import { getSalesPersonnelIds } from "@/lib/sales-personnel";
 
@@ -595,7 +595,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       // only a task once its month cleared ₱1M and the client has fully paid.
       // Reading unpaid `Commission` rows instead put deals here that nobody could
       // pay yet — the row exists from the moment the order closes.
-      for (const c of allDeals(await buildCommissions()).filter(isPayable).slice(0, 100)) {
+      for (const c of allDeals(await buildCommissions()).filter((d) => isPayable(d, commissionToday())).slice(0, 100)) {
         tasks.push({
           key: `comm:${c.kind}:${c.refId}:${c.payeeKind}`, area: "commission", areaLabel: AREA_LABEL.commission,
           title: `Commission · ${c.refLabel}${c.payeeKind === "override" ? " (override)" : ""}`, action: "Mark commission paid",
@@ -752,7 +752,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   let commissions: CommissionSummary | null = null;
   if (seesCommissions) {
     try {
-      const payable = allDeals(await buildCommissions(seesAllCommissions ? {} : { salespersonId: user.id })).filter(isPayable);
+      const payable = allDeals(await buildCommissions(seesAllCommissions ? {} : { salespersonId: user.id })).filter((d) => isPayable(d, commissionToday()));
       commissions = {
         unpaid: round2(payable.reduce((a, d) => a + d.amount, 0)),
         count: payable.length,

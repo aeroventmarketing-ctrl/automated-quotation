@@ -9,7 +9,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { payableTotal, round2 } from "@/lib/quote";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
-import { buildCommissions, allDeals, isPayable, type CommissionDeal } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday, type CommissionDeal } from "@/lib/sales-commission";
 import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
@@ -146,7 +146,7 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
 
   // Payable = the month cleared ₱1M, the client has fully paid, and no payout has
   // been recorded (matches the Commissions page and the Management tile exactly).
-  const payableCommissions = commissions.filter(isPayable);
+  const payableCommissions = commissions.filter((d) => isPayable(d, commissionToday()));
   const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + c.amount, 0));
 
   // Printed cash vouchers (after go-live) and whether they tally with their POs.

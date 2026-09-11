@@ -317,8 +317,41 @@ export interface CommissionsView {
   currency: string;
 }
 
-/** A deal that has cleared every rule and is waiting for the money to go out. */
-export const isPayable = (d: CommissionDeal): boolean => d.approved && !d.paid;
+/** Today in Manila (YYYY-MM-DD). AeroVent runs on fixed UTC+8, no DST. */
+export function commissionToday(): string {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * A deal that has cleared every rule **and whose release day has arrived**.
+ *
+ * The owner: *"August sales commission should be released on September,
+ * September sales should be released on October."*
+ *
+ * That is rule 4, and `releaseDateFor` has always computed it correctly — a
+ * September sale floors to 15 October. What this function did was ignore it:
+ * `approved && !paid` put every unpaid commission into "Ready for payout" the
+ * moment it was earned, so on 11 September Desiree's voucher totalled August's
+ * commissions AND September's, and the page said *"from Sep 15"* over a list
+ * containing rows it had itself dated *"Release Oct 15"*.
+ *
+ * `todayYMD` is REQUIRED rather than defaulted. A default would let a caller
+ * forget to pass it and go on paying early with nothing to notice — the exact
+ * failure being fixed. Both are Manila days, and YYYY-MM-DD compares as text.
+ */
+export const isPayable = (d: CommissionDeal, todayYMD: string): boolean =>
+  d.approved && !d.paid && !!d.payoutYMD && d.payoutYMD <= todayYMD;
+
+/**
+ * Earned and unpaid, but not yet due — what *will* be released, later.
+ *
+ * Kept apart from `isPayable` so a screen can show both without implying the
+ * second is spendable now. Together the two partition every approved, unpaid
+ * deal.
+ */
+export const isPending = (d: CommissionDeal, todayYMD: string): boolean =>
+  d.approved && !d.paid && (!d.payoutYMD || d.payoutYMD > todayYMD);
 
 /**
  * A commission row's stable identity: the sale AND who is being paid on it, since
@@ -382,7 +415,11 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
     g.earned = round2(g.deals.reduce((a, d) => a + d.amount, 0));
     g.paid = round2(g.deals.filter((d) => d.paid).reduce((a, d) => a + d.amount, 0));
     g.unpaid = round2(g.earned - g.paid);
-    const due = g.deals.filter(isPayable).map((d) => d.payoutYMD!).sort();
+    // Approved and unpaid, WITHOUT the release-date gate — deliberately not
+    // `isPayable`. This field answers "when is the next release", so a month
+    // whose money is not due until 15 October must still report that date; gating
+    // it on today would blank the field exactly when it has something to say.
+    const due = g.deals.filter((d) => d.approved && !d.paid).map((d) => d.payoutYMD!).filter(Boolean).sort();
     g.nextPayoutYMD = due[0] ?? null;
   }
 
