@@ -8,6 +8,7 @@ import {
   fullyPaidOn,
   groupByPersonMonth,
   isPayable,
+  isPending,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
   OVERRIDE_RATE_PCT,
@@ -290,7 +291,7 @@ describe("rule 1 — the ₱1,000,000 month, and rule 5's automatic approval", (
     const months = groupByPersonMonth([deal({ gross: 1_200_000, net: 1_000_000, paid: true, paidByName: "Acctg" })]);
     const d = months[0].deals[0];
     expect(d.approved).toBe(true);
-    expect(isPayable(d)).toBe(false);
+    expect(isPayable(d, "2026-12-31")).toBe(false);
     expect(months[0].earned).toBe(15_000);
     expect(months[0].paid).toBe(15_000);
     expect(months[0].unpaid).toBe(0);
@@ -499,5 +500,75 @@ describe("the override allow-list — whose sales the Sales Head earns on", () =
       .find((m) => m.salespersonId === "head" && m.kind === "override")!;
     expect(head.deals.some((d) => d.sourceSalespersonName === "JayR")).toBe(false);
     expect(head.deals).toHaveLength(3);
+  });
+});
+
+/**
+ * Rule 4's timing, which the payout list used to ignore.
+ *
+ * The owner, looking at a voucher for ₱9,586.15 on 11 September: *"Desiree Enigo
+ * 9586.15 Cash Voucher commission is August+September commission. August sales
+ * commission should be released on September, September sales should be released
+ * on October."*
+ *
+ * `releaseDateFor` always computed that correctly — the bug was that `isPayable`
+ * asked only "approved and unpaid", so a commission joined the payout the moment
+ * it was earned, months before its release day.
+ */
+describe("a commission is payable only once its release day arrives", () => {
+  const august = groupByPersonMonth([deal({ gross: 1_200_000, fullyPaidYMD: "2026-08-20" })])[0].deals[0];
+  const september = groupByPersonMonth([
+    deal({ refId: "s1", salesMonth: "2026-09", recognisedYMD: "2026-09-01", gross: 1_200_000, fullyPaidYMD: "2026-09-01" }),
+  ])[0].deals[0];
+
+  it("dates them the way the owner describes", () => {
+    expect(august.payoutYMD).toBe("2026-09-15");   // August sales → September
+    expect(september.payoutYMD).toBe("2026-10-15"); // September sales → October
+  });
+
+  it("on 11 September, only August is ready — the reported bug", () => {
+    const today = "2026-09-11";
+    expect(isPayable(august, today)).toBe(false); // not until the 15th
+    expect(isPayable(september, today)).toBe(false);
+    expect(isPending(august, today)).toBe(true);
+    expect(isPending(september, today)).toBe(true);
+  });
+
+  it("on 15 September, August is ready and September is NOT", () => {
+    const today = "2026-09-15";
+    expect(isPayable(august, today)).toBe(true);
+    expect(isPayable(september, today)).toBe(false);
+    // …which is the whole point: one voucher, August's money only.
+    expect(isPending(september, today)).toBe(true);
+  });
+
+  it("on 15 October, September joins it", () => {
+    const today = "2026-10-15";
+    expect(isPayable(august, today)).toBe(true);
+    expect(isPayable(september, today)).toBe(true);
+  });
+
+  it("payable and pending partition every approved, unpaid deal", () => {
+    for (const today of ["2026-08-31", "2026-09-11", "2026-09-15", "2026-10-15", "2027-01-01"]) {
+      for (const d of [august, september]) {
+        expect(isPayable(d, today) || isPending(d, today), `${d.salesMonth} @ ${today}`).toBe(true);
+        expect(isPayable(d, today) && isPending(d, today)).toBe(false);
+      }
+    }
+  });
+
+  it("a paid deal is neither, whatever the date", () => {
+    const done = groupByPersonMonth([deal({ gross: 1_200_000, paid: true, paidByName: "Acctg" })])[0].deals[0];
+    expect(isPayable(done, "2027-01-01")).toBe(false);
+    expect(isPending(done, "2027-01-01")).toBe(false);
+  });
+
+  it("nextPayoutYMD still reports a release that has not arrived", () => {
+    // Deliberately NOT gated on today — the field answers "when is the next
+    // release", so blanking it before the date would be backwards.
+    const m = groupByPersonMonth([
+      deal({ refId: "s2", salesMonth: "2026-09", recognisedYMD: "2026-09-01", gross: 1_200_000, fullyPaidYMD: "2026-09-01" }),
+    ])[0];
+    expect(m.nextPayoutYMD).toBe("2026-10-15");
   });
 });

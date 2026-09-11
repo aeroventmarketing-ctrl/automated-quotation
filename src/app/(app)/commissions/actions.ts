@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { buildCommissions, allDeals, isPayable, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -118,7 +118,8 @@ export async function payDealCommission(
  */
 export async function payAllForSalesperson(salespersonId: string): Promise<{ paid: number; total: number; error?: string }> {
   const user = await assertAccounting();
-  const due = allDeals(await buildCommissions({ salespersonId })).filter(isPayable);
+  const today = commissionToday();
+  const due = allDeals(await buildCommissions({ salespersonId })).filter((d) => isPayable(d, today));
   if (due.length === 0) return { paid: 0, total: 0, error: "Nothing is awaiting payout for this salesperson." };
 
   const now = new Date();

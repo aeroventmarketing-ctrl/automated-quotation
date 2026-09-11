@@ -1,3 +1,53 @@
+## 2026-09-11 · A commission is payable only once its release day arrives
+
+The owner, on a ₱9,586.15 voucher offered on 11 September: *"Desiree Enigo 9586.15 Cash Voucher commission is
+August+September commission. August sales commission should be released on September, September sales should be
+released on October. Check all sales and rectify."*
+
+### The rule was already right; the payout list ignored it
+
+`releaseDateFor` has always computed rule 4 correctly — a deal's own next 15th/30th, floored at the 15th of the
+month after its sales month. An August sale releases 15 September; a September sale releases 15 October. The
+page even printed those dates, row by row.
+
+What it did not do was **use** them:
+
+```ts
+export const isPayable = (d) => d.approved && !d.paid;
+```
+
+Approved and unpaid, and nothing about today. So a commission joined *Ready for payout* the instant it was
+earned, months before it was due, and one voucher swept up August and September together — under a heading that
+said *"from Sep 15"*, over rows the same page had dated *"Release Oct 15"*.
+
+`isPayable(d, todayYMD)` now adds the one missing clause. **`todayYMD` is required, not defaulted**: a default
+would let a caller forget and go on paying early with nothing to notice, which is precisely the failure being
+fixed. The compiler found all eight call sites.
+
+### Two things deliberately NOT date-gated
+
+- **`nextPayoutYMD`** answers *"when is the next release"*, so it still reports a date that has not arrived.
+  Gating it would blank the field exactly when it has something to say.
+- **`earned` / `unpaid`** are unchanged. The money is earned; it is the *release* that waits.
+
+### The money had to stay visible
+
+Enforcing the date alone would have made ₱84,471.41 vanish from the page with no explanation, which is its own
+kind of wrong. A **Pending release** tile now carries it, with the date it unlocks — and `isPending` is written
+as the exact complement of `isPayable`, with a test asserting the two partition every approved, unpaid deal.
+
+### Proved by reverting it, on the harness's own data
+
+| | Payable now | Pending release |
+| --- | --- | --- |
+| **before** | **₱84,471.41** · 9 approved, unpaid | *(no such tile)* |
+| **after** | **₱0.00** · 0 released on or before today | **₱84,471.41** · 9 earned · next 2026-09-15 |
+
+Today is 11 September, and the next release is the 15th — so *"payable now"* is correctly nothing at all. Four
+days from now August's share moves across on its own.
+
+Seven new tests walk the owner's scenario by date: on 11 Sep neither is ready; on 15 Sep August is ready and
+September is **not**; on 15 Oct September joins it. 521 pass; lint and build clean. No migration.
 ## 2026-09-11 · Settled cash vouchers get their own completed table
 
 The owner: *"Settled Cash Voucher should have a completed Cash Voucher Table same as Purchasing Tab Completed

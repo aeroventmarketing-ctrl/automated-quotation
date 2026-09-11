@@ -10,7 +10,7 @@ import { commissionAccess } from "@/lib/commission-access";
 import { getSignatureMap } from "@/lib/signature";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { round2 } from "@/lib/quote";
-import { buildCommissions, allDeals, isPayable, dealKey, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday, dealKey, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
 import { getCommissionVoucherNo, recordPrintedCommissionVoucher } from "@/lib/commission-voucher";
 import { PrintButton } from "../../purchasing/voucher/print-button";
 
@@ -57,7 +57,7 @@ export default async function CommissionVoucherPage({
   // both their own 1.5% and any Sales Head override they are owed.
   const view = await buildCommissions({ salespersonId: salesperson }).catch(() => null);
   if (!view) notFound();
-  const due = allDeals(view).filter(isPayable);
+  const due = allDeals(view).filter((d) => isPayable(d, commissionToday()));
   if (due.length === 0) notFound();
 
   const paidTo = due[0].salespersonName;

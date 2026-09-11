@@ -13,6 +13,8 @@ import {
   buildCommissions,
   allDeals,
   isPayable,
+  isPending,
+  commissionToday,
   dealKey,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
@@ -80,7 +82,14 @@ export default async function CommissionsPage() {
   const months = view?.months ?? [];
   const currency = view?.currency ?? "PHP";
   const deals = view ? allDeals(view) : [];
-  const payableNow = deals.filter(isPayable);
+  // Rule 4: a commission is only ready once its release day has arrived —
+  // August's sales on 15 September, September's on 15 October. `pendingRelease`
+  // is what is earned and waiting for that day.
+  const todayYMD = commissionToday();
+  const payableNow = deals.filter((d) => isPayable(d, todayYMD));
+  const pendingRelease = deals.filter((d) => isPending(d, todayYMD));
+  const pendingReleaseTotal = pendingRelease.reduce((a, d) => a + d.amount, 0);
+  const nextRelease = pendingRelease.map((d) => d.payoutYMD).filter((x): x is string => !!x).sort()[0] ?? null;
   const awaitingPayment = deals.filter((d) => !d.fullyPaid);
   const belowQuota = months.filter((m) => !m.qualifies);
 
@@ -107,7 +116,15 @@ export default async function CommissionsPage() {
     .sort((a, b) => b.total - a.total);
 
   const tiles = [
-    { label: "Payable now", value: formatCurrency(round2(payableNow.reduce((a, d) => a + d.amount, 0)), currency), caption: `${payableNow.length} approved, unpaid` },
+    { label: "Payable now", value: formatCurrency(round2(payableNow.reduce((a, d) => a + d.amount, 0)), currency), caption: `${payableNow.length} released on or before today` },
+    // Earned, and not due yet. Without this tile the money simply vanished from
+    // "Payable now" the moment rule 4's date was enforced, and a salesperson
+    // would have had no way to see that it is still theirs.
+    {
+      label: "Pending release",
+      value: formatCurrency(round2(pendingReleaseTotal), currency),
+      caption: nextRelease ? `${pendingRelease.length} earned · next ${nextRelease}` : `${pendingRelease.length} earned`,
+    },
     { label: "Paid out", value: formatCurrency(view?.totals.paid ?? 0, currency), caption: `${deals.filter((d) => d.paid).length} released` },
     { label: "Awaiting full payment", value: String(awaitingPayment.length), caption: "client still owing" },
     { label: "Months below quota", value: String(belowQuota.length), caption: `under ${formatCurrency(MONTHLY_QUOTA_GROSS, currency)}` },

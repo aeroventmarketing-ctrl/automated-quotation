@@ -15,7 +15,7 @@ import { coerceCheckDocs } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled } from "@/lib/purchase-reconcile";
 import { saleFromClassification, isSaleConfirmed, collectedTotal } from "@/lib/sale";
-import { buildCommissions, allDeals, isPayable, type CommissionDeal } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday, type CommissionDeal } from "@/lib/sales-commission";
 import { readOrderWorkflow, stageIndex, ORDER_STAGES, PRODUCTION_DEPTS, requisitionDeptLabel, type OrderStage } from "@/lib/order-workflow";
 import { getCurrentUser, canApprove, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -418,7 +418,7 @@ export default async function ManagementPage() {
   // Commissions come from the same engine as the Commissions page the tile links
   // to, so the two can never disagree: a deal is payable only once its month
   // cleared ₱1M, the client has fully paid, and no payout has been recorded.
-  const payableCommissions = commissions.filter(isPayable);
+  const payableCommissions = commissions.filter((d) => isPayable(d, commissionToday()));
   const unpaidCommission = round2(payableCommissions.reduce((a, c) => a + c.amount, 0));
   const nextCommissionPayout = payableCommissions.map((c) => c.payoutYMD).filter((d): d is string => !!d).sort()[0] ?? null;
 
