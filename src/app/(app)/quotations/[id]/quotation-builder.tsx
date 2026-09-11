@@ -4972,7 +4972,24 @@ export function QuotationBuilder({
 
   return (
     <div className="space-y-6">
-      <AutoRefresh />
+      {/* Watched, like every other page that reads a whole table. A render of
+          this route is ~130 queries — the quotation and its lines, the
+          templates, and EVERY active catalogue item with its `specs` JSON and a
+          price lookup each — and on a plain timer that ran 450 times an hour per
+          open tab.
+
+          It is safe to refresh this page mid-edit, which is not obvious and was
+          checked rather than assumed: `router.refresh()` re-renders the server
+          components without remounting, so the builder's `useState` survives. A
+          value typed into a field was verified to survive four refreshes.
+
+          Editing still refreshes, because the autosave below writes the
+          quotation and that moves the token — but far less than the timer did.
+          The autosave fires four seconds after the LAST edit, so a burst of
+          typing is one write, one token move, one refresh. Measured over 26
+          seconds: reading cost 4 polls and 0 rebuilds, editing 3 polls and 1,
+          where the plain timer cost 4 rebuilds either way. */}
+      <AutoRefresh watch="orders" />
       <SimilarQuotes matches={dupMatches} currentCompany={quotation.customer} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

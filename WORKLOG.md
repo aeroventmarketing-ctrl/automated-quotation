@@ -1,3 +1,55 @@
+## 2026-09-11 · The quotation builder asks before it fetches
+
+The last page in the app still refreshing on a plain timer. I had set it aside as needing its own
+look, because it is an editing surface rather than a list — and the look turned up two things worth
+recording.
+
+### What a builder render actually costs
+
+**133 queries.** The quotation and its lines, the templates, and **every active catalogue item**
+with its `specs` JSON and a price lookup each. On the bare 8-second default that ran 450 times an
+hour per open tab — and the harness has an empty `CatalogueItem` table, so production pays more
+than 133.
+
+### The comment that said this page must not be refreshed
+
+The autosave carries a deliberate `{ revalidate: false }` and explains itself:
+
+> *Auto-save skips revalidation so the route the user is editing isn't refreshed mid-edit (which
+> would re-run mount effects and reset fields like the header units).*
+
+Someone hit a real bug there. But the page also carried a bare `<AutoRefresh />` refreshing that
+same route every eight seconds regardless — so either the protection was incomplete and editors
+were silently losing fields, or the hazard does not apply to this path.
+
+**It does not, and that was checked rather than argued.** `router.refresh()` re-renders server
+components without remounting, so the builder's `useState` — including the lazily-initialised
+`units` the comment names — is untouched. A value typed into a field was verified in a browser to
+survive four consecutive refreshes. No live bug; the `revalidate: false` remains correct for the
+action path, which is a different thing.
+
+### The measurement corrected the reasoning
+
+I expected `watch` to save nothing while someone types, on the grounds that the autosave writes the
+quotation and moves the token. That is wrong, and the browser said so:
+
+| 26 seconds of… | change polls | page rebuilds |
+| --- | --- | --- |
+| **reading** | 4 | **0** |
+| **editing** | 3 | **1** |
+| *(plain timer, either case)* | — | *4* |
+
+The autosave fires four seconds after the **last** edit, so a burst of typing is one write, one
+token move, one refresh — not one per tick. The comment in the code was rewritten to say what was
+measured rather than what I predicted.
+
+The edit survived the refresh in this run too.
+
+It watches the existing `orders` scope rather than a new one: the builder is built from templates,
+catalogue and settings that only an admin changes, plus the one table that actually moves under it.
+
+523 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · The order page asks before it fetches, and stops pulling supplier prices it never shows
 
 The two frozen-file items from the round-four survey, done with the owner's approval for these
