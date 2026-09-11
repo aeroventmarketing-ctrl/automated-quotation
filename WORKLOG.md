@@ -1,3 +1,109 @@
+## 2026-09-11 · The article decides the supplier; the remark is ignored
+
+The owner, after I reported I could not reproduce it: *"in requisitions, the system should read the details of
+Articles/Description only, remarks should not be included. If the details are articles/description+remarks,
+supplier do not show. If articles/description only then the supplier shows."*
+
+They were right and my previous fuzzing was too gentle. **The remark only breaks the match when the catalogue
+holds a near-identical sibling and the remark happens to name it** — which a real parts list does constantly and
+my test catalogue did not:
+
+> `INDUCTION MOTOR 2 HP, 1PH, 4 POLE (replace the 1 HP unit)`
+
+matched the **1 HP** product. The matcher's cross-model guard asks that every code in the product's name appear
+in the line; "1" and "hp" both did — put there by the remark. Wrong product, therefore wrong supplier, or none
+at all when the sibling's supplier differs. Yesterday's 296 combinations all passed because every remark I
+invented was *about* the item rather than about another one.
+
+### The rule, implemented as stated
+
+`matchKey` now reads the **article**, not the whole line:
+
+1. **An exact name, tried on every candidate** — a product genuinely called "MOTOR (3-PHASE)" keeps its own row.
+   Peeling must never beat a real name.
+2. **Fuzzy on the article alone**, remark removed. The owner's rule, and the answer nearly always.
+3. **Fuzzy on the whole line**, last — only reachable when the article matched nothing, so it can still rescue
+   odd historic data without ever overruling step 2.
+
+It reuses `itemNameCandidates`, the peeling written for the SKU bug (#506) — the same defect, one lookup further
+on. One definition of "the item without its remark" rather than two that can drift.
+
+### …and the purchasing page stops asking a different question
+
+`suppliersForItem` there ran its own exact-then-substring lookup — a **different algorithm** from the `matchKey`
+the PO form uses, so a line could be offered a supplier in one place and not the other. It now calls the same
+function. One answer to "who carries this line".
+
+### Proved by reverting it
+
+Not asserted — measured, on the same page with the same data, with the 1 HP deliberately given a supplier that
+is NOT in the registry so a wrong match is visible rather than silent:
+
+| | product matched | supplier box |
+| --- | --- | --- |
+| **before** | 1 HP — wrong | nothing offered, nothing filled |
+| **after** | 2 HP — right | *Showing 1 supplier* · **HARNESS STEEL CORP** prefilled |
+
+Giving the two motors the SAME supplier — the obvious fixture — would have passed either way and proved
+nothing. That is worth remembering: a fixture where the bug is invisible is not a test.
+
+Five new cases pin the rule, including the sibling clash and the bracketed product name that must not be peeled.
+505 tests pass; lint and build clean. No migration.
+## 2026-09-11 · The PO form says WHY it has no supplier to suggest
+
+The owner: *"error in requisitions when requestor put a label in remarks, supplier cannot be detected in
+purchasing."*
+
+### I could not reproduce the remark breaking it
+
+It looked like a re-run of the SKU bug (#506), where a remark glued onto the item name broke a lookup keyed on
+that name. It is not, and the evidence is worth keeping so nobody spends the afternoon on it again:
+
+- **On the running app**, two department requisitions for the same catalogued product — one with the remark
+  *"(for the front office)"*, one without — behave **identically**: both narrow the list to one supplier and
+  auto-fill it.
+- **Both lookups were fuzzed** against 8 product names × ~20 remark shapes (numbers, sizes, dates, model codes
+  that belong to a *different* product, `N/A`, `x2`): **296 combinations, zero wrong matches.** `matchKey`
+  tokenises and guards on model codes, so trailing text in parentheses simply adds tokens it ignores.
+
+### What was actually wrong: two silent states that look the same
+
+Building the fixture is what found it. The supplier box comes up empty for two unrelated reasons, fixed in two
+different places, and the form told you apart from neither:
+
+| | what you saw | what was wrong |
+| --- | --- | --- |
+| No supplier saved on the product | the full list, **and no message at all** | nobody has said who sells it |
+| Saved supplier not in the registry | *"Showing 0 suppliers that carry these products"* | the company was never registered |
+
+The second is the sharper failure. My own first fixture hit it — I pointed a product at `GOLDEN PACIFIC INC`
+while the registry only held `HARNESS STEEL CORP`, and the screen said *"Showing 0 suppliers"*, which is a
+description of the symptom and not one word about the cause. I read it as the reported bug for a while. Anyone
+would.
+
+Both now say what to do, and the second **names the company** — the one fact that turns "detection is broken"
+into "add GOLDEN PACIFIC INC to the supplier list":
+
+> GOLDEN PACIFIC INC carries these products but isn't in the supplier list — add it under Admin › Suppliers, or
+> type a company here.
+
+> No supplier is saved for these items yet, so every supplier is listed. Set one on the Products page and it
+> will be suggested here next time.
+
+Nothing is role-gated: every role that reaches the PO form sees the same explanation, which is the owner's
+*"reflect the rectification available to all roles using the requisitions and purchasing."*
+
+### The harness could not have caught any of this
+
+Its products carried **no suppliers at all**, so supplier detection was untestable — "0 suppliers" there meant
+"the fixture is empty", and a real regression would have looked exactly the same. The seed now gives every
+catalogued product a registered supplier, plus four requisitions covering the whole matrix: plain, with a
+remark, uncatalogued, and saved-but-unregistered.
+
+500 tests pass; lint and build clean. No migration.
+
+**Still open:** if a specific item and remark really does fail, the exact text of both would settle it in
+minutes — none of the shapes tried here does.
 ## 2026-09-11 · A check discrepancy can be answered, not just reported
 
 The owner, on a check whose three figures all disagreed: *"add an option for admin/payment approver to approve

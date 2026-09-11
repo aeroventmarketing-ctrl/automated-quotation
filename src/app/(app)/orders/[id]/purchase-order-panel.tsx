@@ -12,7 +12,7 @@ import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/p
 type EditLine = POLine & { priceReason?: string };
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, suppliersForDescription, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -102,6 +102,27 @@ export function PurchaseOrderPanel({
   const carrierSet = carriersForLines(lines, catalogSuppliers);
   const filtered = carrierSet.size > 0;
   const eligible = filtered ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
+  /**
+   * Why the list has nothing to suggest — *"supplier cannot be detected in
+   * purchasing."*
+   *
+   * The box can come up empty for two unrelated reasons that looked identical on
+   * screen, and are fixed in two different places:
+   *
+   *  1. **No supplier is saved against the product** — the catalogue knows the
+   *     item but nobody has said who sells it. The filter then does not narrow at
+   *     all and said NOTHING, so the purchaser saw an unfiltered list with no
+   *     hint that a lookup had even been attempted.
+   *  2. **The saved supplier is not in the supplier list** — the product names a
+   *     company that was never registered, so the intersection is empty and the
+   *     old line read "Showing 0 suppliers that carry these products", which says
+   *     what happened and not one word about what to do.
+   *
+   * Naming the company in case 2 is the point: it is the one fact that turns
+   * "detection is broken" into "add GOLDEN PACIFIC INC to the supplier list".
+   */
+  const namedLines = lines.some((l) => l.description.trim());
+  const carrierNames = [...new Set(lines.flatMap((l) => suppliersForDescription(l.description, catalogSuppliers)))];
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
@@ -267,9 +288,26 @@ export function PurchaseOrderPanel({
               </ul>
             )}
           </div>
-          {filtered && (
+          {filtered && eligible.length > 0 && (
             <p className="text-[11px] text-muted-foreground">
               Showing {eligible.length} supplier{eligible.length === 1 ? "" : "s"} that carry these products. Type to use another.
+            </p>
+          )}
+          {/* The product names a supplier nobody has registered. Say which. */}
+          {filtered && eligible.length === 0 && (
+            <p className="text-[11px] text-amber-700">
+              {carrierNames.length === 1
+                ? `${carrierNames[0]} carries these products but isn't in the supplier list — add it under Admin › Suppliers, or type a company here.`
+                : `The suppliers saved for these products (${carrierNames.join(", ")}) aren't in the supplier list — add one under Admin › Suppliers, or type a company here.`}
+            </p>
+          )}
+          {/* Nobody is saved against the product at all. This used to say
+              nothing, and an unfiltered list is indistinguishable from a lookup
+              that never ran. */}
+          {!filtered && namedLines && (
+            <p className="text-[11px] text-muted-foreground">
+              No supplier is saved for these items yet, so every supplier is listed. Set one on the Products page
+              and it will be suggested here next time.
             </p>
           )}
         </div>
