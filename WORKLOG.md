@@ -1,3 +1,78 @@
+## 2026-09-12 · The storefront asks the inventory for four rows, not a thousand
+
+Asked whether to trade stock freshness for a page cache, the answer turned out to be **neither** —
+and checking the two facts that decide it changed my own advice twice.
+
+### The freshness objection was weaker than I said
+
+`placeOrder` prices the cart and creates a `StoreOrder`. It never reserves or decrements stock —
+"Order reserved" on the confirmation page is copy, not a `StockReservation`. So the badge is
+**advisory already**: two shoppers can order the last unit seconds apart today, with a perfectly
+live badge. Caching would change the size of that window, not introduce the failure.
+
+### And `revalidate` was not the big lever I called it
+
+ISR caches per PATH. A crawler walking fifty distinct product pages once gets fifty misses whatever
+the interval; it only helps repeat views of the same URL. Against the broad crawl `sitemap.ts`
+invites, it buys much less than I implied.
+
+### The middle path I offered was aimed at the smaller half
+
+From the owner's own `pg_stat_statements`, `listStockItemsWithAvailability` ran 140,315 times for
+143,733,693 rows — **~1,024 rows per call** — and the listed catalogue is a few dozen items. So the
+inventory read dominates a store page view, and "cache the catalogue, keep stock live" would have
+left the expensive half untouched.
+
+### What was actually wrong
+
+`stockForCatalogueMany` read **every active stock row**, then `matchRows` picked out the few
+belonging to listed products in JavaScript. But that match is `canon(sku) === canon(modelCode)`,
+falling back to `canon(name)` — **equality on a canonical form**, which Postgres can do.
+
+The read is now narrowed to the rows that can match, canonicalised identically in SQL (lowercase
+FIRST, then strip everything outside `[a-z0-9]`). The JS matcher still runs, still decides, and its
+preference for a code match over a name match is untouched. Nothing is cached and nothing goes
+stale.
+
+### The invariant, and why it is worth a test
+
+The narrowed set must be a **superset** of everything `matchRows` could have chosen. A row that
+would have matched but is not fetched makes the product look *untracked* — and untracked is
+deliberately treated as **sellable**. The failure mode is a sold-out item offered for sale, with
+nothing thrown and nothing logged.
+
+So `stockMatchKeys` is exported and asserted: every row `matchRows` accepts has a canonical sku or
+name among the keys; blank codes contribute no key (an empty `sku` column must not match every
+product without a model code); keys are deduplicated; and the code-over-name preference is pinned so
+the narrowing cannot be blamed later for behaviour that predates it.
+
+### Measured on a deliberately awkward fixture
+
+Eight active stock rows against 24 listed products, matching only after canonicalisation — a
+space-separated sku (`SKU STORE 1`), a slash-separated one (`sku/store/2`) at **zero** quantity, a
+name-only match, the same code in two locations, and one unrelated row:
+
+| | rows the SQL fetched | `/store` stock rows per request | availability shown |
+| --- | --- | --- | --- |
+| before | all 8 active | **11.2** | In · Out · In · In |
+| after | **the 4 that can match** | **4.0** | **identical** |
+
+`store-fan-2` reading *Out of stock* is the discriminating case: it only matches through
+`sku/store/2`, so the canonical comparison is doing real work. `store-fan-1` matches two locations
+and still sums to 10, because the predicate fetches both.
+
+### Two measurements thrown away first
+
+The stock fixture was wiped by the harness reseed, so the first run compared nothing — every product
+read "In stock" because all of them were untracked. And scraping the rendered page for an
+availability figure returned `available: null` from the *related products* list rather than the
+product itself. Neither was reported; the fixture was re-seeded after boot and the figures above
+come from `pg_stat_statements` and the page's own Availability field.
+
+`force-dynamic` is deliberately still untouched.
+
+545 tests pass; lint and build clean. No migration.
+
 ## 2026-09-12 · The storefront stops reading the whole catalogue four times to draw one page
 
 The two store fixes that needed no decision. The third — swapping `force-dynamic` for a short
