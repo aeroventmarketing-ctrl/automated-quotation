@@ -364,6 +364,32 @@ export const dealKey = (d: Pick<CommissionDeal, "kind" | "refId" | "payeeKind">)
   `${d.kind}-${d.refId}-${d.payeeKind}`;
 
 /**
+ * Which commissions a cash voucher covers: everything currently payable,
+ * narrowed by the tick boxes if any were ticked.
+ *
+ * **This can only ever REMOVE.** `keys` arrives from a browser, so it is treated
+ * as a filter over what the server has already computed as payable — never as a
+ * list of lines. A key naming a commission that is unapproved, already paid, not
+ * yet released, or owed to somebody else matches nothing, and no key can carry
+ * an amount. Selecting nothing means the whole payable set, which is what the
+ * voucher did before tick boxes existed.
+ *
+ * The guarantee is worth stating as code because the alternative — reading the
+ * keys and building lines from them — is the obvious implementation, and it
+ * would let anyone who can edit a URL pay themselves an arbitrary sum.
+ */
+export function voucherDeals(payable: CommissionDeal[], keys?: string | null): CommissionDeal[] {
+  const wanted = new Set(
+    (keys ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean),
+  );
+  if (wanted.size === 0) return payable;
+  return payable.filter((d) => wanted.has(dealKey(d)));
+}
+
+/**
  * Group the deals salesperson × month and apply the rules: rule 1 to the group,
  * rules 3–6 to each deal inside it. Mutates the deals it is given (they are
  * built for this) and returns the months, newest first.

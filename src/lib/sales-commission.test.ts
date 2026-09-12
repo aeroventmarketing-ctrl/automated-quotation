@@ -9,6 +9,7 @@ import {
   groupByPersonMonth,
   isPayable,
   isPending,
+  voucherDeals,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
   OVERRIDE_RATE_PCT,
@@ -604,4 +605,73 @@ describe("no server action uses the memoised build", () => {
       expect(src).toMatch(/\bbuildCommissionsFresh\s*\(/);
     });
   }
+});
+
+/**
+ * The tick boxes. The owner: *"If sales personnel or sales head were able to
+ * meet the qualifications to receive commission, put a tick box in the row of
+ * mark paid so we can generate a single cash voucher. For sales head put a check
+ * box in sales override to generate a single voucher either sales head meet the
+ * qualifications or not."*
+ *
+ * The ticks reach the voucher as a list of KEYS in a URL, which makes this the
+ * one place a browser gets a say in what the company pays out. So the contract
+ * asserted here is narrow and absolute: **a key can only remove a commission,
+ * never add, price, or release one.** The obvious implementation — build the
+ * voucher's lines from the keys — would let anyone who can edit a URL pay
+ * themselves an arbitrary sum, and it would pass a happy-path test.
+ */
+describe("a ticked voucher selection can only narrow", () => {
+  const payable = [
+    deal({ refId: "q1", approved: true, amount: 100 }),
+    deal({ refId: "q2", approved: true, amount: 200 }),
+    deal({ refId: "q3", approved: true, amount: 300 }),
+  ];
+  const keyOf = (refId: string) => `order-${refId}-base`;
+
+  it("no selection means the whole payable set — what the voucher did before ticks existed", () => {
+    expect(voucherDeals(payable, undefined)).toEqual(payable);
+    expect(voucherDeals(payable, null)).toEqual(payable);
+    expect(voucherDeals(payable, "")).toEqual(payable);
+    expect(voucherDeals(payable, "  ,  ,")).toEqual(payable);
+  });
+
+  it("a subset is exactly that subset", () => {
+    const got = voucherDeals(payable, [keyOf("q1"), keyOf("q3")].join(","));
+    expect(got.map((d) => d.refId)).toEqual(["q1", "q3"]);
+    expect(got.reduce((a, d) => a + d.amount, 0)).toBe(400);
+  });
+
+  it("a key for something not payable adds nothing", () => {
+    // Unapproved, already paid, not yet released, someone else's — none of them
+    // are in `payable`, so none of their keys can match. The filter is over what
+    // the server computed, never over what the URL asked for.
+    const got = voucherDeals(payable, [keyOf("q1"), "order-NOT-A-DEAL-base", "order-q9-override"].join(","));
+    expect(got.map((d) => d.refId)).toEqual(["q1"]);
+  });
+
+  it("a selection of only unknown keys is empty, so the voucher refuses to render", () => {
+    expect(voucherDeals(payable, "order-ghost-base")).toEqual([]);
+  });
+
+  it("keys cannot carry an amount — the deal's own figure is used", () => {
+    // Whatever a URL says, the peso value comes from the recomputed deal.
+    const got = voucherDeals(payable, `${keyOf("q2")}`);
+    expect(got).toHaveLength(1);
+    expect(got[0].amount).toBe(200);
+  });
+
+  it("an override row is selectable on the same terms as any other", () => {
+    // *"either sales head meet the qualifications or not"* — an override exists
+    // because someone ELSE's month cleared the quota, so nothing about the head's
+    // own target was ever in this path.
+    const withOverride = [...payable, deal({ refId: "q4", payeeKind: "override", approved: true, amount: 50 })];
+    const got = voucherDeals(withOverride, "order-q4-override");
+    expect(got.map((d) => d.payeeKind)).toEqual(["override"]);
+  });
+
+  it("duplicated and whitespaced keys select each deal once", () => {
+    const got = voucherDeals(payable, ` ${keyOf("q1")} , ${keyOf("q1")},${keyOf("q2")} `);
+    expect(got.map((d) => d.refId)).toEqual(["q1", "q2"]);
+  });
 });

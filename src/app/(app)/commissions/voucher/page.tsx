@@ -10,7 +10,7 @@ import { commissionAccess } from "@/lib/commission-access";
 import { getSignatureMap } from "@/lib/signature";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { round2 } from "@/lib/quote";
-import { buildCommissions, allDeals, isPayable, commissionToday, dealKey, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPayable, commissionToday, dealKey, voucherDeals, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
 import { getCommissionVoucherNo, recordPrintedCommissionVoucher } from "@/lib/commission-voucher";
 import { PrintButton } from "../../purchasing/voucher/print-button";
 
@@ -35,9 +35,9 @@ const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2
 export default async function CommissionVoucherPage({
   searchParams,
 }: {
-  searchParams: Promise<{ salesperson?: string; print?: string }>;
+  searchParams: Promise<{ salesperson?: string; print?: string; keys?: string }>;
 }) {
-  const { salesperson, print } = await searchParams;
+  const { salesperson, print, keys } = await searchParams;
 
   const user = await getCurrentUser();
   if (!user) notFound();
@@ -57,7 +57,11 @@ export default async function CommissionVoucherPage({
   // both their own 1.5% and any Sales Head override they are owed.
   const view = await buildCommissions({ salespersonId: salesperson }).catch(() => null);
   if (!view) notFound();
-  const due = allDeals(view).filter((d) => isPayable(d, commissionToday()));
+  const payable = allDeals(view).filter((d) => isPayable(d, commissionToday()));
+
+  // A ticked subset, when the Commissions page sent one. `voucherDeals` can only
+  // ever narrow what this page already recomputed as payable — see its contract.
+  const due = voucherDeals(payable, keys);
   if (due.length === 0) notFound();
 
   const paidTo = due[0].salespersonName;

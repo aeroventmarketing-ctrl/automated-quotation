@@ -1,3 +1,66 @@
+## 2026-09-12 · Tick the commissions that go on one cash voucher
+
+The owner: *"If sales personnel or sales head were able to meet the qualifications to receive
+commission, put a tick box in the row of mark paid so we can generate a single cash voucher. For
+sales head put a check box in sales override to generate a single voucher either sales head meet
+the qualifications or not."*
+
+The voucher was already one-per-salesperson, but all-or-nothing: it totalled **everything** that
+person was owed. A tick box in the row makes the set a choice.
+
+### The whole risk is in one line
+
+Ticks reach the voucher as keys in a URL, which makes this the only place a browser gets a say in
+what the company pays out. The obvious implementation — build the voucher's lines from the keys —
+would let anyone who can edit a URL pay themselves any sum, and it would pass a happy-path test.
+
+So `voucherDeals(payable, keys)` is a **filter over what the server already computed**, never a
+list of lines:
+
+```ts
+if (wanted.size === 0) return payable;          // no ticks = everything, as before
+return payable.filter((d) => wanted.has(dealKey(d)));
+```
+
+A key naming a commission that is unapproved, already paid, not yet released, or owed to someone
+else matches nothing, and no key can carry an amount. Seven tests pin it, including that appending
+a bogus key changes neither the lines nor the total. Six of the seven fail against a mutant that
+ignores the selection.
+
+**Verified in a browser too**: appending `,order-GHOST-base` to a real voucher URL left it at one
+line and ₱26,785.71, unchanged.
+
+### The override needed no special case, and that IS the answer
+
+An override row exists because somebody **else's** month cleared ₱1,000,000, so it never depended on
+the Sales Head's own target. Ticking one therefore works "either sales head meet the qualifications
+or not" because nothing in that path ever asked.
+
+Proved rather than asserted. The harness had no Sales Head at all, so the fixture was built: Elena
+Cruz as `sales_head` with **no sales of her own** — she qualifies for nothing — and the two real
+salespeople as `override_source`. Her 10 override rows ticked, produced **one** voucher of
+**₱11,846.44** with ten `override on …` lines.
+
+### What the owner will see today, and why it is not a bug
+
+`SALES_START_YMD` is 2026-08-01, so the earliest release rule 4 permits is **15 September**. On 12
+September nothing in the company is payable yet, and the harness agrees: **9 tick boxes, 0 enabled,
+9 disabled**, each with the date it opens —
+
+> *Releases Oct 15, 2026 — not on a voucher until then*
+
+A row with no box at all would be indistinguishable from a broken feature on the very card the
+owner screenshotted, which is why the disabled state exists and says when it opens.
+
+### An inconsistency this surfaced
+
+**"Mark paid" is still offered on all 9 of those rows.** It gates on `approved`; the tick box gates
+on *released*. #517 date-gated `isPayable` but left the button alone, so the same cell now offers
+"not until 15 Oct" beside "pay it now". The tick box follows the voucher, which is the conservative
+half — but the two should agree, and which way is the owner's call, not mine.
+
+530 tests pass; lint and build clean. No migration.
+
 ## 2026-09-11 · The quotation builder asks before it fetches
 
 The last page in the app still refreshing on a plain timer. I had set it aside as needing its own
