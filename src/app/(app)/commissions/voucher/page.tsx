@@ -10,7 +10,7 @@ import { commissionAccess } from "@/lib/commission-access";
 import { getSignatureMap } from "@/lib/signature";
 import { pesoAmountInWords } from "@/lib/amount-words";
 import { round2 } from "@/lib/quote";
-import { buildCommissions, allDeals, isPayable, commissionToday, dealKey, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
+import { buildCommissions, allDeals, isPending, isVoucherable, commissionToday, dealKey, voucherDeals, COMMISSION_RATE_PCT, OVERRIDE_RATE_PCT } from "@/lib/sales-commission";
 import { getCommissionVoucherNo, recordPrintedCommissionVoucher } from "@/lib/commission-voucher";
 import { PrintButton } from "../../purchasing/voucher/print-button";
 
@@ -35,9 +35,9 @@ const peso = (n: number) => n.toLocaleString("en-PH", { minimumFractionDigits: 2
 export default async function CommissionVoucherPage({
   searchParams,
 }: {
-  searchParams: Promise<{ salesperson?: string; print?: string }>;
+  searchParams: Promise<{ salesperson?: string; print?: string; keys?: string }>;
 }) {
-  const { salesperson, print } = await searchParams;
+  const { salesperson, print, keys } = await searchParams;
 
   const user = await getCurrentUser();
   if (!user) notFound();
@@ -57,8 +57,29 @@ export default async function CommissionVoucherPage({
   // both their own 1.5% and any Sales Head override they are owed.
   const view = await buildCommissions({ salespersonId: salesperson }).catch(() => null);
   if (!view) notFound();
-  const due = allDeals(view).filter((d) => isPayable(d, commissionToday()));
+  /**
+   * The universe a voucher can draw on: **approved and unpaid**, whether or not
+   * the release day has arrived.
+   *
+   * The owner chose to open the tick boxes on approval rather than on release,
+   * so a voucher may be PREPARED ahead of the money being due. That is a
+   * document, not a payment — "Mark paid" is the payment, and it still waits
+   * (`canMarkPaid`, five days before release).
+   *
+   * Callers say which subset they want. The Commissions page sends the keys it
+   * ticked; the "Ready for payout" panel sends the keys of what is actually
+   * released, so it keeps meaning exactly what it shows. A URL with no keys at
+   * all falls back to this whole set.
+   */
+  const voucherable = allDeals(view).filter(isVoucherable);
+
+  // `voucherDeals` can only ever NARROW this — see its contract.
+  const due = voucherDeals(voucherable, keys);
   if (due.length === 0) notFound();
+
+  // Money that is on this voucher but not yet released, so the sheet cannot be
+  // mistaken for a settlement of what is due today.
+  const notYetDue = due.filter((d) => isPending(d, commissionToday()));
 
   const paidTo = due[0].salespersonName;
   const total = round2(due.reduce((s, d) => s + d.amount, 0));
@@ -143,6 +164,16 @@ export default async function CommissionVoucherPage({
 
         <h1 className="mt-2 text-center text-2xl font-extrabold tracking-wide underline underline-offset-4">CASH VOUCHER</h1>
         <p className="text-center text-[11px] uppercase tracking-[0.3em] text-neutral-500">Sales commission</p>
+        {/* A voucher may now be prepared before the money is due, so the sheet
+            says so on its face. Whoever signs it should not have to cross-check
+            thirteen release dates to notice. */}
+        {notYetDue.length > 0 && (
+          <p className="mt-1 text-center text-[11px] font-semibold text-amber-700">
+            Prepared in advance — {notYetDue.length} of {due.length} commission{due.length === 1 ? "" : "s"} on this
+            voucher {notYetDue.length === 1 ? "is" : "are"} not released until{" "}
+            {formatDate(notYetDue.map((d) => d.payoutYMD).filter((x): x is string => !!x).sort()[0] ?? null)}
+          </p>
+        )}
 
         <div className="mt-1 text-right text-sm">
           No.&nbsp;

@@ -18,6 +18,15 @@ export interface PayoutRow {
   nextReleaseYMD: string | null;
   /** Voucher number already printed for exactly this set, if any. */
   voucherNo: string | null;
+  /**
+   * The deal keys this row covers.
+   *
+   * Sent to the voucher explicitly because the voucher's universe is now every
+   * APPROVED commission, not only the released ones — a link with no keys would
+   * quietly total money this panel does not show. The panel says "ready for
+   * payout", so it asks for exactly what it counted.
+   */
+  keys: string[];
 }
 
 /**
@@ -73,7 +82,11 @@ export function PayoutPanel({ rows, canManage, currency }: { rows: PayoutRow[]; 
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold tabular-nums">{formatCurrency(r.total, currency)}</span>
               <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                <Link href={`/commissions/voucher?salesperson=${r.salespersonId}`} target="_blank" rel="noopener noreferrer">
+                <Link
+                  href={`/commissions/voucher?salesperson=${encodeURIComponent(r.salespersonId)}&keys=${encodeURIComponent(r.keys.join(","))}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Cash voucher
                 </Link>
               </Button>

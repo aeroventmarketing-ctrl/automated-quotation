@@ -14,6 +14,9 @@ import {
   allDeals,
   isPayable,
   isPending,
+  isVoucherable,
+  canMarkPaid,
+  markPaidOpensYMD,
   commissionToday,
   dealKey,
   MONTHLY_QUOTA_GROSS,
@@ -24,6 +27,7 @@ import {
   type CommissionDeal,
 } from "@/lib/sales-commission";
 import { MarkPaid } from "./mark-paid";
+import { VoucherSelection, DealTick, CardTick, type SelectableDeal } from "./voucher-selection";
 import { PayoutPanel, type PayoutRow } from "./payout-panel";
 import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
 
@@ -97,14 +101,45 @@ export default async function CommissionsPage() {
   // the payable rows are rolled up per person here — across every month and both
   // rates. A voucher number appears once one has been printed for exactly this
   // set of commissions.
+  /**
+   * What a tick box may select: **approved and unpaid**, released or not.
+   *
+   * The owner, choosing between the two: *"Ticks open as soon as a commission is
+   * approved — proceed with this."* So a voucher can be prepared ahead of the
+   * money being due; the payment itself still waits (`canMarkPaid`).
+   *
+   * Only the KEY and the amount travel to the browser, and the amount is for the
+   * running total on screen: the voucher page recomputes every peso server-side
+   * and treats the keys it receives as a filter, never as a list of lines.
+   *
+   * Override rows are in here on the same terms as anyone's. That is what makes
+   * the Sales Head's voucher work "either sales head meet the qualifications or
+   * not" — an override exists because somebody ELSE's month cleared ₱1,000,000,
+   * so it never depended on the head's own target in the first place.
+   */
+  const selectableDeals: SelectableDeal[] = deals.filter(isVoucherable).map((d) => ({
+    key: dealKey(d),
+    salespersonId: d.salespersonId,
+    salespersonName: d.salespersonName,
+    amount: d.amount,
+    payeeKind: d.payeeKind,
+    /** Ticked money that is not due yet, so the bar can say so. */
+    dueYMD: d.payoutYMD ?? null,
+  }));
+
   const voucherByDeal = await getCommissionVoucherNoByDeal().catch(() => new Map<string, string>());
-  const payoutRows: PayoutRow[] = [...payableNow
+  // Built from `canMarkPaid`, not `isPayable`: this panel's button IS a payment,
+  // so it lists exactly what the five-day window allows paying — the same set,
+  // and the same rule, as the button in each row.
+  const payoutRows: PayoutRow[] = [...deals.filter((d) => canMarkPaid(d, todayYMD))
     .reduce((m, d) => {
       const r = m.get(d.salespersonId) ?? {
         salespersonId: d.salespersonId, salespersonName: d.salespersonName,
         count: 0, total: 0, nextReleaseYMD: null as string | null, voucherNo: null as string | null,
+        keys: [] as string[],
       };
       r.count += 1;
+      r.keys.push(dealKey(d));
       r.total = round2(r.total + d.amount);
       if (d.payoutYMD && (!r.nextReleaseYMD || d.payoutYMD < r.nextReleaseYMD)) r.nextReleaseYMD = d.payoutYMD;
       // Only show a number when the printed voucher covers this row — a voucher
@@ -199,11 +234,19 @@ export default async function CommissionsPage() {
               No confirmed sales since {formatDate(SALES_START_YMD)}. A deal appears here in the month its PO (terms) or down payment (everyone else) landed.
             </CardContent></Card>
           ) : (
-            <div className="space-y-4">
-              {months.map((m) => (
-                <MonthCard key={`${m.salespersonId}-${m.salesMonth}-${m.kind}`} month={m} currency={currency} canManage={canManage} />
-              ))}
-            </div>
+            <VoucherSelection deals={selectableDeals} currency={currency} todayYMD={todayYMD}>
+              <div className="space-y-4">
+                {months.map((m) => (
+                  <MonthCard
+                    key={`${m.salespersonId}-${m.salesMonth}-${m.kind}`}
+                    month={m}
+                    currency={currency}
+                    canManage={canManage}
+                    todayYMD={todayYMD}
+                  />
+                ))}
+              </div>
+            </VoucherSelection>
           )}
         </>
       )}
@@ -211,8 +254,19 @@ export default async function CommissionsPage() {
   );
 }
 
-function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; currency: string; canManage: boolean }) {
+function MonthCard({
+  month: m,
+  currency,
+  canManage,
+  todayYMD,
+}: {
+  month: CommissionMonth;
+  currency: string;
+  canManage: boolean;
+  todayYMD: string;
+}) {
   const isOverride = m.kind === "override";
+  const cardKeys = m.deals.filter(isVoucherable).map(dealKey);
   return (
     <Card className={isOverride ? "border-violet-600/30" : m.qualifies ? "border-emerald-600/30" : ""}>
       <CardHeader className="flex-row flex-wrap items-baseline justify-between gap-2 space-y-0 pb-3">
@@ -255,7 +309,14 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                 <TableHead className="text-right">Commission base</TableHead>
                 <TableHead className="text-right">{isOverride ? `${OVERRIDE_RATE_PCT}%` : `${COMMISSION_RATE_PCT}%`}</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage && <TableHead className="text-right">Action</TableHead>}
+                {canManage && (
+                  <TableHead className="text-right">
+                    <span className="inline-flex items-center gap-2">
+                      {cardKeys.length > 0 && <CardTick dealKeys={cardKeys} />}
+                      Action
+                    </span>
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -288,7 +349,25 @@ function MonthCard({ month: m, currency, canManage }: { month: CommissionMonth; 
                   <TableCell><DealStatus deal={d} qualifies={m.qualifies} currency={currency} /></TableCell>
                   {canManage && (
                     <TableCell className="text-right">
-                      {d.approved ? <MarkPaid kind={d.kind} refId={d.refId} payeeKind={d.payeeKind} paid={d.paid} /> : null}
+                      {/* The tick box sits in the row beside "Mark paid" — one
+                          decision (this commission goes on a voucher) next to
+                          the other (the money has changed hands).
+
+                          They open at different times ON PURPOSE, which is the
+                          owner's answer to the two of them disagreeing: the tick
+                          opens on approval so a voucher can be prepared ahead,
+                          and "Mark paid" opens five days before the release day
+                          because that is when the cheque is actually cut. */}
+                      <span className="inline-flex items-center justify-end gap-2">
+                        <DealTick dealKey={dealKey(d)} />
+                        {canMarkPaid(d, todayYMD) ? (
+                          <MarkPaid kind={d.kind} refId={d.refId} payeeKind={d.payeeKind} paid={d.paid} />
+                        ) : d.approved && !d.paid ? (
+                          <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                            Pay from {formatDate(markPaidOpensYMD(d.payoutYMD))}
+                          </span>
+                        ) : null}
+                      </span>
                     </TableCell>
                   )}
                 </TableRow>

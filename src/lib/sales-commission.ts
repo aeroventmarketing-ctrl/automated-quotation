@@ -355,6 +355,61 @@ export const isPayable = (d: CommissionDeal, todayYMD: string): boolean =>
 export const isPending = (d: CommissionDeal, todayYMD: string): boolean =>
   d.approved && !d.paid && (!d.payoutYMD || d.payoutYMD > todayYMD);
 
+/** Shift a Manila YYYY-MM-DD by whole days. Pure; month and year roll over. */
+export function shiftYMD(ymd: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return ymd;
+  const t = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) + days * 86_400_000;
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * How far ahead of its release day a commission may be **recorded as paid**.
+ *
+ * The owner, asked whether "Mark paid" should wait for the release date like the
+ * voucher does: *"Enable Mark Paid at least 5 days before the release date."*
+ * Accounting needs a working window to cut and sign the cheque — payment lands
+ * on the day, it does not begin on it — but five days is a window, not the open
+ * season that let August and September be paid together in #517.
+ */
+export const MARK_PAID_LEAD_DAYS = 5;
+
+/** The first Manila day "Mark paid" opens for this deal, or null if it has no release date. */
+export const markPaidOpensYMD = (payoutYMD: string | null): string | null =>
+  payoutYMD ? shiftYMD(payoutYMD, -MARK_PAID_LEAD_DAYS) : null;
+
+/**
+ * May this commission be recorded as paid today?
+ *
+ * Deliberately WIDER than `isPayable` (which is the release day itself) and
+ * NARROWER than `isVoucherable` (which is the moment it is earned). The three
+ * are the owner's three separate moments: prepare the voucher when it is
+ * approved, hand over the money in the five days around its release, and count
+ * it as released on the day.
+ */
+export const canMarkPaid = (d: CommissionDeal, todayYMD: string): boolean => {
+  if (!d.approved || d.paid) return false;
+  const opens = markPaidOpensYMD(d.payoutYMD);
+  return !opens || todayYMD >= opens;
+};
+
+/**
+ * May this commission go on a cash voucher?
+ *
+ * The owner, choosing between tying the tick boxes to the release date and
+ * opening them on approval: *"Ticks open as soon as a commission is approved —
+ * proceed with this."* So a voucher can be **prepared** for money that is not
+ * due yet, which is a document, not a payment; `canMarkPaid` is what governs the
+ * payment, and it still waits.
+ *
+ * This is the voucher's whole universe, so widening it here widens what a ticked
+ * selection can reach — which is the point. Without it the ticks would offer
+ * rows the voucher then silently dropped, and a tick that does nothing is worse
+ * than a tick that is not there.
+ */
+export const isVoucherable = (d: CommissionDeal): boolean => d.approved && !d.paid;
+
 /**
  * A commission row's stable identity: the sale AND who is being paid on it, since
  * one order can owe both the rep (base) and the Sales Head (override). Used as the
@@ -362,6 +417,32 @@ export const isPending = (d: CommissionDeal, todayYMD: string): boolean =>
  */
 export const dealKey = (d: Pick<CommissionDeal, "kind" | "refId" | "payeeKind">): string =>
   `${d.kind}-${d.refId}-${d.payeeKind}`;
+
+/**
+ * Which commissions a cash voucher covers: everything currently payable,
+ * narrowed by the tick boxes if any were ticked.
+ *
+ * **This can only ever REMOVE.** `keys` arrives from a browser, so it is treated
+ * as a filter over what the server has already computed as payable — never as a
+ * list of lines. A key naming a commission that is unapproved, already paid, not
+ * yet released, or owed to somebody else matches nothing, and no key can carry
+ * an amount. Selecting nothing means the whole payable set, which is what the
+ * voucher did before tick boxes existed.
+ *
+ * The guarantee is worth stating as code because the alternative — reading the
+ * keys and building lines from them — is the obvious implementation, and it
+ * would let anyone who can edit a URL pay themselves an arbitrary sum.
+ */
+export function voucherDeals(payable: CommissionDeal[], keys?: string | null): CommissionDeal[] {
+  const wanted = new Set(
+    (keys ?? "")
+      .split(",")
+      .map((k) => k.trim())
+      .filter(Boolean),
+  );
+  if (wanted.size === 0) return payable;
+  return payable.filter((d) => wanted.has(dealKey(d)));
+}
 
 /**
  * Group the deals salesperson × month and apply the rules: rule 1 to the group,
