@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { buildCommissionsFresh, allDeals, isPayable, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
+import { buildCommissionsFresh, allDeals, canMarkPaid, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -63,6 +63,15 @@ export async function payDealCommission(
   if (paid && !deal.approved) {
     throw new Error("This commission isn't approved yet — the month must clear ₱1,000,000 and the client must have fully paid.");
   }
+  // The five-day window, enforced HERE and not only on the button. The button is
+  // a hint; this is the rule. Without it, rule 4 would hold only for as long as
+  // nobody thought to call the action directly.
+  if (paid && !canMarkPaid(deal, commissionToday())) {
+    const opens = markPaidOpensYMD(deal.payoutYMD);
+    throw new Error(
+      `This commission releases on ${deal.payoutYMD} — it can be paid from ${opens}, ${MARK_PAID_LEAD_DAYS} days before.`,
+    );
+  }
 
   // One sale can owe two people, so the payout row is keyed by (sale, payee):
   // "base" is the rep's 1.5%, "override" the Sales Head's 0.25% on the same sale.
@@ -115,11 +124,16 @@ export async function payDealCommission(
  *
  * The set is recomputed here, so it is whatever the person is owed at the moment
  * of settlement — never a stale list posted from the browser.
+ *
+ * Gated by `canMarkPaid`, the same five-day window as the single-row button.
+ * Bulk and single are the same decision made at different scales; if they
+ * disagreed, which one Accounting happened to click would change what rule
+ * applied.
  */
 export async function payAllForSalesperson(salespersonId: string): Promise<{ paid: number; total: number; error?: string }> {
   const user = await assertAccounting();
   const today = commissionToday();
-  const due = allDeals(await buildCommissionsFresh({ salespersonId })).filter((d) => isPayable(d, today));
+  const due = allDeals(await buildCommissionsFresh({ salespersonId })).filter((d) => canMarkPaid(d, today));
   if (due.length === 0) return { paid: 0, total: 0, error: "Nothing is awaiting payout for this salesperson." };
 
   const now = new Date();

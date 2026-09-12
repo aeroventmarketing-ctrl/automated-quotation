@@ -10,6 +10,11 @@ import {
   isPayable,
   isPending,
   voucherDeals,
+  isVoucherable,
+  canMarkPaid,
+  markPaidOpensYMD,
+  shiftYMD,
+  MARK_PAID_LEAD_DAYS,
   MONTHLY_QUOTA_GROSS,
   COMMISSION_RATE_PCT,
   OVERRIDE_RATE_PCT,
@@ -673,5 +678,72 @@ describe("a ticked voucher selection can only narrow", () => {
   it("duplicated and whitespaced keys select each deal once", () => {
     const got = voucherDeals(payable, ` ${keyOf("q1")} , ${keyOf("q1")},${keyOf("q2")} `);
     expect(got.map((d) => d.refId)).toEqual(["q1", "q2"]);
+  });
+});
+
+/**
+ * The owner's two answers when the tick box and "Mark paid" were found to
+ * disagree in the same cell:
+ *
+ *  - *"Enable Mark Paid at least 5 days before the release date."*
+ *  - *"Ticks open as soon as a commission is approved — proceed with this."*
+ *
+ * So there are now THREE moments, deliberately, and the tests keep them apart:
+ * prepare the voucher when it is approved, hand over the money in the five days
+ * before release, and count it released on the day itself.
+ */
+describe("the three moments of a commission", () => {
+  const d = (over: Partial<CommissionDeal> = {}) => deal({ approved: true, payoutYMD: "2026-10-15", ...over });
+
+  it("shiftYMD rolls across months and years", () => {
+    expect(shiftYMD("2026-10-15", -5)).toBe("2026-10-10");
+    expect(shiftYMD("2026-10-03", -5)).toBe("2026-09-28");
+    expect(shiftYMD("2026-01-02", -5)).toBe("2025-12-28");
+    expect(shiftYMD("2026-03-01", -1)).toBe("2026-02-28"); // 2026 is not a leap year
+  });
+
+  it("Mark paid opens exactly five days before the release date", () => {
+    expect(MARK_PAID_LEAD_DAYS).toBe(5);
+    expect(markPaidOpensYMD("2026-10-15")).toBe("2026-10-10");
+    const x = d();
+    expect(canMarkPaid(x, "2026-10-09")).toBe(false); // six days out
+    expect(canMarkPaid(x, "2026-10-10")).toBe(true);  // the day it opens
+    expect(canMarkPaid(x, "2026-10-15")).toBe(true);  // release day
+    expect(canMarkPaid(x, "2026-11-01")).toBe(true);  // late, still payable
+  });
+
+  it("a tick opens on approval, months before the money is due", () => {
+    const x = d();
+    // 12 September: not payable, not markable — but voucherable.
+    expect(isPayable(x, "2026-09-12")).toBe(false);
+    expect(canMarkPaid(x, "2026-09-12")).toBe(false);
+    expect(isVoucherable(x)).toBe(true);
+  });
+
+  it("the three widen in order: payable ⊂ markable ⊂ voucherable", () => {
+    const x = d();
+    for (const today of ["2026-09-12", "2026-10-10", "2026-10-15", "2026-11-20"]) {
+      if (isPayable(x, today)) expect(canMarkPaid(x, today), today).toBe(true);
+      if (canMarkPaid(x, today)) expect(isVoucherable(x), today).toBe(true);
+    }
+  });
+
+  it("none of them survives payment or a failed month", () => {
+    const paid = d({ paid: true });
+    const unapproved = d({ approved: false });
+    for (const x of [paid, unapproved]) {
+      expect(isPayable(x, "2026-11-01")).toBe(false);
+      expect(canMarkPaid(x, "2026-11-01")).toBe(false);
+      expect(isVoucherable(x)).toBe(false);
+    }
+  });
+
+  it("a deal with no release date at all can be paid — it is not held hostage to a null", () => {
+    // `payoutYMD` is null only when the release cannot be computed. Blocking on
+    // that would strand the money with no date to wait for.
+    const noDate = d({ payoutYMD: null });
+    expect(markPaidOpensYMD(null)).toBeNull();
+    expect(canMarkPaid(noDate, "2026-09-12")).toBe(true);
+    expect(isPayable(noDate, "2026-09-12")).toBe(false); // still not "released"
   });
 });

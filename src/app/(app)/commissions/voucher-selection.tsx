@@ -38,6 +38,8 @@ export interface SelectableDeal {
   salespersonName: string;
   amount: number;
   payeeKind: "base" | "override";
+  /** Release day, or null. Money ticked before this date is prepared, not due. */
+  dueYMD: string | null;
 }
 
 interface SelectionCtx {
@@ -53,31 +55,15 @@ const Ctx = createContext<SelectionCtx | null>(null);
 /**
  * One tick box, in the row beside "Mark paid".
  *
- * Three states, because a row that simply has no box is indistinguishable from
- * a bug on the very card the owner is looking at: September's commissions are
- * approved but do not release until 15 October, so through most of a month the
- * enabled boxes are genuinely none. A disabled box that says when it opens is
- * the difference between "not yet" and "broken".
+ * Present whenever the commission is approved and unpaid — released or not.
+ * Preparing a voucher early is the owner's explicit choice; the wait is on
+ * "Mark paid" beside it, which opens five days before the release day.
  */
-export function DealTick({ dealKey, pendingUntil }: { dealKey: string; pendingUntil?: string | null }) {
+export function DealTick({ dealKey }: { dealKey: string }) {
   const ctx = useContext(Ctx);
   if (!ctx) return null;
   const deal = ctx.selectable.get(dealKey);
-
-  if (!deal) {
-    if (!pendingUntil) return null;
-    return (
-      <input
-        type="checkbox"
-        className="h-4 w-4 cursor-not-allowed opacity-40"
-        disabled
-        checked={false}
-        readOnly
-        aria-label={`Releases ${formatDate(pendingUntil)} — not yet payable`}
-        title={`Releases ${formatDate(pendingUntil)} — not on a voucher until then`}
-      />
-    );
-  }
+  if (!deal) return null;
 
   const on = ctx.selected.has(dealKey);
   return (
@@ -114,10 +100,13 @@ export function CardTick({ dealKeys }: { dealKeys: string[] }) {
 export function VoucherSelection({
   deals,
   currency,
+  todayYMD,
   children,
 }: {
   deals: SelectableDeal[];
   currency: string;
+  /** Manila's date, from the server — so "not due yet" agrees with the rows. */
+  todayYMD: string;
   children: React.ReactNode;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -147,19 +136,29 @@ export function VoucherSelection({
 
   // One group per salesperson — one voucher per salesperson.
   const groups = useMemo(() => {
-    const m = new Map<string, { id: string; name: string; count: number; total: number; overrides: number; keys: string[] }>();
+    const m = new Map<
+      string,
+      { id: string; name: string; count: number; total: number; overrides: number; notDue: number; firstDue: string | null; keys: string[] }
+    >();
     for (const key of selected) {
       const d = selectable.get(key);
       if (!d) continue; // a stale tick (the page refreshed and it was paid)
-      const g = m.get(d.salespersonId) ?? { id: d.salespersonId, name: d.salespersonName, count: 0, total: 0, overrides: 0, keys: [] };
+      const g = m.get(d.salespersonId) ?? {
+        id: d.salespersonId, name: d.salespersonName, count: 0, total: 0, overrides: 0, notDue: 0, firstDue: null, keys: [],
+      };
       g.count += 1;
       g.total = Math.round((g.total + d.amount) * 100) / 100;
       if (d.payeeKind === "override") g.overrides += 1;
+      // Ticked before its release day — prepared, not due.
+      if (!d.dueYMD || d.dueYMD > todayYMD) {
+        g.notDue += 1;
+        if (d.dueYMD && (!g.firstDue || d.dueYMD < g.firstDue)) g.firstDue = d.dueYMD;
+      }
       g.keys.push(key);
       m.set(d.salespersonId, g);
     }
     return [...m.values()].sort((a, b) => b.total - a.total);
-  }, [selected, selectable]);
+  }, [selected, selectable, todayYMD]);
 
   return (
     <Ctx.Provider value={ctx}>
@@ -184,6 +183,12 @@ export function VoucherSelection({
                     {g.count} commission{g.count === 1 ? "" : "s"} ticked
                     {g.overrides > 0 ? ` · ${g.overrides} override` : ""}
                   </p>
+                  {/* Preparing ahead is allowed; being unaware of it is not. */}
+                  {g.notDue > 0 && (
+                    <p className="text-[11px] font-medium text-amber-700">
+                      {g.notDue} not due yet{g.firstDue ? ` · releases from ${formatDate(g.firstDue)}` : ""}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold tabular-nums">{formatCurrency(g.total, currency)}</span>

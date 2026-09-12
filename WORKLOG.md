@@ -1,3 +1,76 @@
+## 2026-09-12 · Three moments for a commission: prepared, payable, released
+
+The tick box and "Mark paid" sat in the same cell disagreeing — the tick waited for the release
+day, the button did not. Put to the owner, both halves came back changed:
+
+> *"Enable Mark Paid at least 5 days before the release date."*
+> *"Ticks open as soon as a commission is approved — proceed with this."*
+
+Which is not one rule but **three**, deliberately kept apart:
+
+| | opens | predicate |
+| --- | --- | --- |
+| **prepare a voucher** | the moment it is approved | `isVoucherable` |
+| **hand over the money** | 5 days before release | `canMarkPaid` |
+| **counts as released** | the release day itself | `isPayable` |
+
+They nest — `isPayable ⊂ canMarkPaid ⊂ isVoucherable` — and a test asserts that ordering across four
+dates rather than trusting three separate definitions to stay consistent.
+
+### Opening the ticks meant opening the voucher, or the answer was a no-op
+
+The voucher's universe was `isPayable`. Leaving it there while the ticks opened on approval would
+have offered rows the voucher then silently dropped, and a tick that does nothing is worse than a
+tick that is not there. So the voucher now draws on every approved, unpaid commission.
+
+Two consequences, both handled rather than discovered later:
+
+- **The "Ready for payout" panel now sends its own keys.** Its link used to carry no selection and
+  mean "everything payable"; against a wider universe that would quietly have totalled money the
+  panel does not show.
+- **A voucher that contains money not yet due says so on its face** — *"Prepared in advance — 4 of 4
+  commissions on this voucher are not released until Sep 15, 2026"* — and the selection bar says it
+  before you print. Preparing ahead is allowed; being unaware of it is not.
+
+The five-day window is enforced in the **server action**, not only on the button. The button is a
+hint; without the server check, rule 4 would hold exactly as long as nobody called the action
+directly.
+
+### Measured on today's date
+
+| | before today's change | after |
+| --- | --- | --- |
+| tick boxes | 9, **all disabled** | **23, all enabled** |
+| "Mark paid" offered | 14 | 14 |
+| rows showing *"Pay from …"* | — | 5 (`Oct 10, 2026`, `Sep 25, 2026`) |
+
+Sep-15 releases are payable today because 15 − 5 = 10 September; Oct-15 releases are not, and say
+`Pay from Oct 10, 2026`. Three consecutive payments recorded three different rows, 4 → 5 → 6 → 7.
+
+### A false alarm worth recording, because it cost an hour
+
+Mid-verification, "Mark paid" appeared to stop writing: eleven paid rows before, eleven after,
+three times running, with no error on screen and a `200` from the action. It looked like a
+regression in the five-day guard.
+
+It was not, and the tell was in the data rather than the code: the written row said
+`salespersonName: "Willy Ho"` on an **override**, while the Sales Head was Elena Cruz. The override
+payout lookup carries a deliberate guard —
+
+```ts
+const mine = rec && rec.salespersonId === d.salespersonId ? rec : undefined;
+```
+
+— so a new head never inherits the previous head's "paid" marks. My own fixture had left override
+payout rows belonging to an earlier head; the guard correctly refused to credit them to Elena, and
+the rows kept showing as unpaid. Clearing the stale rows made three clicks record three payments.
+
+The attribution was settled by stashing the change and re-testing the baseline (9 → 10, working)
+rather than by reading the diff again — which is the only reason it was not reported as a bug in
+someone else's code.
+
+536 tests pass; lint and build clean. No migration.
+
 ## 2026-09-12 · Tick the commissions that go on one cash voucher
 
 The owner: *"If sales personnel or sales head were able to meet the qualifications to receive
