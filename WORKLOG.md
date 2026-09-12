@@ -1,3 +1,69 @@
+## 2026-09-12 · The storefront stops reading the whole catalogue four times to draw one page
+
+The two store fixes that needed no decision. The third — swapping `force-dynamic` for a short
+`revalidate` — is untouched: it trades stock-level freshness and wants the owner's number.
+
+### What was happening
+
+`store/layout.tsx` wraps every `/store/**` route and called `listStoreProducts()` — every listed
+catalogue item with its `storePhotos` JSON and a `priceList` join, **plus** `stockForCatalogueMany`,
+which reads the whole active `StockItem` table and a `StockReservation` groupBy. Nothing in the
+store path was memoised, so each route paid for it again: the page for its grid, `generateMetadata`
+before that, and `storeProductBySlug`'s no-explicit-slug fallback on top.
+
+It is a public, uncached (`force-dynamic`) site that `robots.ts` opens to every crawler and whose
+sitemap lists every product page. So those repeats were being paid for traffic nobody here
+generates.
+
+### Two changes
+
+**`cache()` on the three store reads** — `listStoreProducts`, `storeProductBySlug`, `getStoreTheme`.
+Per-request memoisation, no behaviour change. The write paths were checked for the read-then-write
+trap that `buildCommissionsFresh` exists for in #518: the storefront's only writer is
+`setStoreTheme`, which never reads the theme back, so there is nothing to strand.
+
+**`storeNavCategories()`** — the layout needs a label, a slug and a count. Those come from `family`
+and `storeCategory`, two plain columns. It no longer touches `priceList`, `storePhotos` or the
+inventory at all.
+
+### Measured, 10 requests per page, on a 24-product shop
+
+Rows leaving Postgres per request:
+
+| page | catalogue | prices | stock |
+| --- | --- | --- | --- |
+| `/store` | 48 → 48 | 48 → **24** | 8.1 → **3.0** |
+| `/store/c/<cat>` | 72 → **48** | 72 → **24** | 11.1 → **3.0** |
+| `/store/p/<slug>` | 50 → **49** | 50 → **25** | 18.3 → **6.0** |
+| `/store/cart` | 24 → 24 | 24 → **0** | 5.7 → **0** |
+
+The **prices** column is the clearest reading: it halves or thirds because the expensive catalogue
+read now happens **once** per request instead of two or three times.
+
+Catalogue rows look unchanged on `/store` and `/cart`, and that is the measurement being honest
+rather than flattering: the layout still reads 24 rows — but two narrow columns now instead of
+twelve wide ones and a JSON blob. **20 kB → 402 bytes**, measured on the same 24 products. On the
+cart and checkout, which have no product grid at all, the full read and the entire inventory read
+are simply gone.
+
+### An equivalence test, because the nav is now built a second way
+
+`storeNavCategories` must produce exactly what `storeCategories(await listStoreProducts())`
+produced. The grouping is extracted as a pure `navCategoriesFrom` and asserted against the original
+over the same fixture — including that a whitespace-only `storeCategory` falls back to the family
+label rather than creating a blank-slugged category, and that a trimmed override folds together
+with an untrimmed one.
+
+### A measurement thrown away
+
+The first attempt counted log lines per request and produced nonsense — `/store` appearing to get
+*worse*, and one row showing 4,761 statements. Dev-mode compilation, streamed work landing after
+the response, and two different harness boots swamped the signal. Counting `pg_stat_statements`
+rows across ten identical requests, resetting between pages, is what produced the table above; the
+first numbers were not reported.
+
+540 tests pass; lint and build clean. No migration.
+
 ## 2026-09-12 · Three moments for a commission: prepared, payable, released
 
 The tick box and "Mark paid" sat in the same cell disagreeing — the tick waited for the release
