@@ -25,6 +25,7 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
+import { COMPLETED_PAGE, wantsAllCompleted } from "@/lib/completed-page";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
@@ -33,8 +34,10 @@ const CHAIN_ROLES: WorkflowRoleKey[] = ["payment_approver", "accounting", "logis
 const variantFor = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
   s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
 
-export default async function PurchasingPage({ searchParams }: { searchParams?: Promise<{ req?: string }> }) {
-  const highlightReq = (await searchParams)?.req;
+export default async function PurchasingPage({ searchParams }: { searchParams?: Promise<{ req?: string; completed?: string }> }) {
+  const sp = await searchParams;
+  const highlightReq = sp?.req;
+  const allCompleted = wantsAllCompleted(sp, highlightReq);
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const admin = isAdmin(viewer);
   const canView = admin || (viewer != null && CHAIN_ROLES.some((r) => userHasWorkflowRole(assignments, viewer.id, r)));
@@ -104,6 +107,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   let suggestions: SupplierSuggestion[] = [];
   let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let completedDeptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
+  let completedDeptTotal = 0;
   let tableMissing = false;
 
   // Which supplier companies give us payment terms — i.e. we pay them later, by
@@ -380,9 +384,30 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     // supplier return stays active (so the replacement can be tracked/resolved),
     // while the rest move to the collapsed "Completed" section below — so a finished
     // PO stays viewable/printable instead of vanishing from the tab.
-    const completedDept = (
-      await prisma.purchaseRequest.findMany({ where: { kind: "department", status: "COMPLETED" }, orderBy: { createdAt: "desc" } })
-    ).filter((pr) => !pr.quotationId);
+    // Finished department POs are an archive — view / print / reconcile only —
+    // and this page carried every one of them ever, whole, on an eight-second
+    // timer, inside a box that is collapsed by default. So they are paged: the
+    // newest `COMPLETED_PAGE`, plus a count, plus (in full, whatever the limit)
+    // the ones that are not really finished — a completed PO still carrying an
+    // unresolved supplier return stays in the ACTIVE list below, and must never
+    // be lost to a page limit. `has any returns` is the part SQL can test; the
+    // unresolved ones are picked out of that small set here.
+    const completedWhere = { kind: "department", status: "COMPLETED" } as const;
+    const [completedPage, completedWithReturns, completedCount] = await Promise.all([
+      prisma.purchaseRequest.findMany({
+        where: completedWhere,
+        orderBy: { createdAt: "desc" },
+        ...(allCompleted ? {} : { take: COMPLETED_PAGE }),
+      }),
+      prisma.purchaseRequest.findMany({
+        where: { ...completedWhere, NOT: { returns: { equals: [] } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.purchaseRequest.count({ where: completedWhere }),
+    ]);
+    const completedDept = [
+      ...new Map([...completedWithReturns, ...completedPage].map((pr) => [pr.id, pr])).values(),
+    ].filter((pr) => !pr.quotationId);
     const hasOpenReturn = (pr: (typeof completedDept)[number]) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns));
     const deptRowCtx = (pr: { id: string; status: string; createdById: string }) => ({
       mrfNo: null,
@@ -409,6 +434,9 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     completedDeptRows = completedDept
       .filter((pr) => !hasOpenReturn(pr))
       .map((pr) => buildPurchaseChainRow(pr, deptRowCtx(pr)));
+    // Exact, not an estimate: every completed row still carrying an open return
+    // was fetched above, and those belong to the active list, not this box.
+    completedDeptTotal = completedCount - completedDept.filter(hasOpenReturn).length;
   } catch {
     tableMissing = true;
   }
@@ -479,6 +507,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               admin={admin}
               deptRows={deptRows}
               completedDeptRows={completedDeptRows}
+              completedDeptTotal={completedDeptTotal}
               replenRows={replenRows}
               replenScan={replenScan}
               highlightReq={highlightReq}

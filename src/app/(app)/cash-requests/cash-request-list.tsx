@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import type { CashRequestRow } from "@/lib/cash-request-row";
 import { cashBucket, isCompletedCashRequest, type CashBucket, type CashRequestStatus } from "@/lib/cash-request";
+import { ShowAllCompleted } from "@/components/show-all-completed";
 import { Input } from "@/components/ui/input";
 import { advanceCashRequest, cancelCashRequest, rejectCashRequest, adminEditCashRequest, adminDeleteCashRequest } from "./actions";
 import { CashLiquidationPanel } from "./cash-liquidation-panel";
@@ -232,7 +233,16 @@ function rowText(r: CashRequestRow): string {
   return [r.number, r.purpose, r.categoryLabel, r.deptLabel ?? "", r.note ?? "", ...r.lines.map((l) => l.description)].join("  ");
 }
 
-export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[]; highlightId?: string }) {
+export function CashRequestList({
+  rows,
+  highlightId,
+  /** Settled vouchers in total — the page carries only the newest page of them. */
+  completedTotal,
+}: {
+  rows: CashRequestRow[];
+  highlightId?: string;
+  completedTotal?: number;
+}) {
   // Deep-link (?id=<id> from a notification): default to the "All" tab so the
   // request is visible whatever its status, then scroll to & highlight it.
   const [tab, setTab] = useState<CashTab>(highlightId ? "all" : "pending");
@@ -251,6 +261,10 @@ export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[];
   // counts and "All" describe what is still in play, and a finished voucher does
   // not pad the Budgeted number for ever.
   const completedRows = rows.filter((r) => isCompletedCashRequest(r.status));
+  // The page carries the newest `COMPLETED_PAGE` settled vouchers; `completedTotal`
+  // is how many there are. They match on a young install, and the control below
+  // renders nothing.
+  const total = completedTotal ?? completedRows.length;
   const liveRows = rows.filter((r) => !isCompletedCashRequest(r.status));
 
   // Open it if the deep-linked request is a completed one, so a notification
@@ -328,14 +342,20 @@ export function CashRequestList({ rows, highlightId }: { rows: CashRequestRow[];
           onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}
         >
           <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-teal-800 dark:text-teal-200">
-            Completed cash vouchers ({completedRows.length})
+            Completed cash vouchers ({total > completedRows.length ? `${completedRows.length} of ${total}` : total})
           </summary>
           <div className="space-y-3 border-t border-teal-300 bg-card p-4 dark:border-teal-900">
             {completedShown.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">No completed vouchers match your search.</p>
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No completed vouchers match your search{total > completedRows.length ? " among the ones loaded" : ""}.
+              </p>
             ) : (
               completedShown.map((r) => <CashRow key={r.id} r={r} highlight={highlight === r.id} />)
             )}
+            {/* Only the newest page is loaded; the rest are one click away. The
+                search above filters what is loaded, so say so rather than let
+                "no matches" mean "not fetched yet". */}
+            <ShowAllCompleted shown={completedRows.length} total={total} />
           </div>
         </details>
       )}

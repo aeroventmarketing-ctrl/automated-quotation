@@ -18,6 +18,7 @@ import { advancePurchaseRequest, deletePurchaseRequests } from "../orders/action
 import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
+import { ShowAllCompleted } from "@/components/show-all-completed";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
 import { ReplenishmentScanBar, type ReplenScanRow } from "./replenishment-list";
 import { AdminAddDeptRequest, AdminAddReplenishment } from "./admin-pr-manage";
@@ -102,6 +103,7 @@ export function PurchasingWorkspace({
   admin = false,
   deptRows = [],
   completedDeptRows = [],
+  completedDeptTotal,
   replenRows = [],
   replenScan = [],
   showAmounts = true,
@@ -131,6 +133,8 @@ export function PurchasingWorkspace({
   deptRows?: PurchaseChainRow[];
   /** Completed standalone department POs (no open return) — the collapsed "Completed" section. */
   completedDeptRows?: PurchaseChainRow[];
+  /** How many there are in total; the page carries only the newest page of them. */
+  completedDeptTotal?: number;
   /** Replenishment (stock top-up) requests — render through the full chain, same tab filter. */
   replenRows?: PurchaseChainRow[];
   /** Replenishments ready to receive — feed the scan-to-receive quick box. */
@@ -173,6 +177,9 @@ export function PurchasingWorkspace({
   const [tab, setTab] = useState<Tab>(targetBucket && targetBucket !== "completed" ? targetBucket : "pending");
   const [highlightId, setHighlightId] = useState<string | undefined>(highlightReq);
   const [completedOpen, setCompletedOpen] = useState(targetBucket === "completed");
+  // What the page loaded vs how many exist. Equal on a young install, in which
+  // case the "Show all" control renders nothing.
+  const completedTotal = completedDeptTotal ?? completedDeptRows.length;
   const inTab = (bucket: DisplayBucket) => tab === "all" || tab === bucket;
 
   // On a deep-link, scroll the targeted card into view and pulse its highlight ring.
@@ -615,11 +622,13 @@ export function PurchasingWorkspace({
                 restyled. */}
             <details className="rounded-lg border border-indigo-300 bg-indigo-50 dark:border-indigo-900 dark:bg-indigo-950/40" open={completedOpen} onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}>
               <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-indigo-800 dark:text-indigo-200">
-                Completed department POs ({completedDeptRows.length})
+                Completed department POs ({completedTotal > completedDeptRows.length ? `${completedDeptRows.length} of ${completedTotal}` : completedTotal})
               </summary>
-              <div className="border-t border-indigo-300 bg-card p-4 dark:border-indigo-900">
+              <div className="space-y-3 border-t border-indigo-300 bg-card p-4 dark:border-indigo-900">
                 {shown.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-muted-foreground">No completed POs match your search.</p>
+                  <p className="py-4 text-center text-sm text-muted-foreground">
+                    No completed POs match your search{completedTotal > completedDeptRows.length ? " among the ones loaded" : ""}.
+                  </p>
                 ) : (
                   <PurchasingChain
                       todayYMD={todayYMD}
@@ -633,6 +642,10 @@ export function PurchasingWorkspace({
                     adminManage={admin}
                   />
                 )}
+                {/* The search box filters what the page loaded — the newest page
+                    of a finished archive. Offer the rest rather than let "no
+                    matches" stand for "not fetched yet". */}
+                <ShowAllCompleted shown={completedDeptRows.length} total={completedTotal} />
               </div>
             </details>
           </section>

@@ -9,6 +9,7 @@ import type { StockOpt } from "../orders/[id]/stock-match-panel";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
+import { ShowAllCompleted } from "@/components/show-all-completed";
 import type { ScanProduct } from "@/lib/product-scan";
 
 /** A chain row plus the extra fields the list searches and sorts on. */
@@ -71,6 +72,7 @@ function isCompletedRequisition(r: PurchaseChainRow): boolean {
  */
 export function RequisitionsList({
   rows,
+  completedTotal,
   stockItems,
   scanProducts = [],
   suppliers,
@@ -83,6 +85,8 @@ export function RequisitionsList({
   canIssueStock = false,
 }: {
   rows: RequisitionRow[];
+  /** Finished requisitions in total — the page carries only the newest page of them. */
+  completedTotal?: number;
   stockItems: StockOpt[];
   /** The product catalogue, for the item code beside a line that is not stocked. */
   scanProducts?: ScanProduct[];
@@ -107,6 +111,10 @@ export function RequisitionsList({
   // tabs — so a completed one is never counted twice, and every tab (All
   // included) means "still moving".
   const completedRows = useMemo(() => rows.filter(isCompletedRequisition), [rows]);
+  // What the page loaded vs how many there are: the box carries the newest
+  // `COMPLETED_PAGE` of them. Equal on a young install, and the "Show all"
+  // control renders nothing.
+  const completedCount = completedTotal ?? completedRows.length;
   const openRows = useMemo(() => rows.filter((r) => !isCompletedRequisition(r)), [rows]);
 
   // My Requisitions: "Approved" means Plant-Manager-approved — once the request is
@@ -252,14 +260,19 @@ export function RequisitionsList({
           onToggle={(e) => setCompletedOpen((e.target as HTMLDetailsElement).open)}
         >
           <summary className="cursor-pointer px-4 py-3 text-sm font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-            Completed requisitions ({completedRows.length})
+            Completed requisitions ({completedCount > completedRows.length ? `${completedRows.length} of ${completedCount}` : completedCount})
           </summary>
-          <div className="border-t border-emerald-300 bg-card p-4 dark:border-emerald-900">
+          <div className="space-y-3 border-t border-emerald-300 bg-card p-4 dark:border-emerald-900">
             {shownCompleted.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">No completed requisitions match your search.</p>
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No completed requisitions match your search{completedCount > completedRows.length ? " among the ones loaded" : ""}.
+              </p>
             ) : (
               <PurchasingChain requests={shownCompleted} orderId="" canManagePO={false} readOnly poRoute="purchasing" {...chainProps} />
             )}
+            {/* The search box above filters what the page loaded. Say so, and
+                offer the rest, rather than let "no matches" mean "not fetched". */}
+            <ShowAllCompleted shown={completedRows.length} total={completedCount} />
           </div>
         </details>
       )}

@@ -8,6 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
 import { PRODUCTION_DEPTS, REQUISITION_DEPTS, deptRole, requestorDeptKey, requisitionDeptLabel } from "@/lib/order-workflow";
 import { buildPurchaseChainRow } from "@/lib/purchase-chain-row";
+import { coercePurchaseReturns, hasUnresolvedReturn } from "@/lib/purchase-returns";
+import { COMPLETED_PAGE, wantsAllCompleted } from "@/lib/completed-page";
 import { getProducts } from "@/lib/product-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { getPaymentTerms } from "@/lib/payment-terms";
@@ -18,7 +20,8 @@ import { RequisitionsList } from "./requisitions-list";
 
 export const dynamic = "force-dynamic";
 
-export default async function RequisitionsPage() {
+export default async function RequisitionsPage({ searchParams }: { searchParams?: Promise<{ completed?: string }> }) {
+  const allCompleted = wantsAllCompleted(await searchParams);
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const admin = isAdmin(viewer);
   const has = (r: WorkflowRoleKey) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r);
@@ -89,6 +92,7 @@ export default async function RequisitionsPage() {
 
   // The viewer's requisitions (their departments; purchaser/admin see all active).
   let rows: (ReturnType<typeof buildPurchaseChainRow> & { createdAt: string; requestor: string })[] = [];
+  let completedTotal = 0;
   let tableMissing = false;
   try {
     // Admin/purchaser see all; dept heads see their dept; everyone else
@@ -104,10 +108,35 @@ export default async function RequisitionsPage() {
     const scope: Prisma.PurchaseRequestWhereInput = has("plant_manager")
       ? { OR: [own, { status: "PENDING_APPROVAL" }, { decidedById: viewer!.id }] }
       : own;
-    const prs = await prisma.purchaseRequest.findMany({
-      where: { kind: "department", ...(admin || purchaser ? {} : scope) },
-      orderBy: { createdAt: "desc" },
-    });
+    // Finished requisitions are an archive: they leave the tabs for the collapsed
+    // "Completed requisitions" box, and this page carried every one of them ever,
+    // whole, on an eight-second timer. So they are fetched separately and paged —
+    // the newest `COMPLETED_PAGE`, plus a count so the box can say "25 of 312".
+    //
+    // Two of the three reads are about NOT losing a row to the page limit:
+    //
+    //  - a COMPLETED requisition still carrying an unresolved supplier return is
+    //    NOT finished as far as this screen is concerned (`isCompletedRequisition`
+    //    in the list) — it stays in the tabs with its buttons live. Those are
+    //    fetched in full, by the only condition SQL can test (it HAS returns),
+    //    and the unresolved ones are unioned in below whatever the page limit.
+    //  - which also makes the box's total exact: the count of COMPLETED rows,
+    //    less the ones that are still in the tabs.
+    const base: Prisma.PurchaseRequestWhereInput = { kind: "department", ...(admin || purchaser ? {} : scope) };
+    const completedWhere: Prisma.PurchaseRequestWhereInput = { ...base, status: "COMPLETED" };
+    const [live, withReturns, completedPage, completedCount] = await Promise.all([
+      prisma.purchaseRequest.findMany({ where: { ...base, NOT: { status: "COMPLETED" } }, orderBy: { createdAt: "desc" } }),
+      prisma.purchaseRequest.findMany({ where: { ...completedWhere, NOT: { returns: { equals: [] } } }, orderBy: { createdAt: "desc" } }),
+      prisma.purchaseRequest.findMany({
+        where: completedWhere,
+        orderBy: { createdAt: "desc" },
+        ...(allCompleted ? {} : { take: COMPLETED_PAGE }),
+      }),
+      prisma.purchaseRequest.count({ where: completedWhere }),
+    ]);
+    const stillOpen = withReturns.filter((pr) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns)));
+    completedTotal = completedCount - stillOpen.length;
+    const prs = [...new Map([...live, ...stillOpen, ...completedPage].map((pr) => [pr.id, pr])).values()];
     rows = prs.map((pr) => ({
       ...buildPurchaseChainRow(pr, { mrfNo: null, canManagePO: false, namesForRole, canAct, admin }),
       createdAt: pr.createdAt.toISOString(),
@@ -135,6 +164,7 @@ export default async function RequisitionsPage() {
           <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No requisitions yet.</CardContent></Card>
         ) : (
           <RequisitionsList
+            completedTotal={completedTotal}
             rows={rows}
             stockItems={stockItems}
             scanProducts={products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }))}
