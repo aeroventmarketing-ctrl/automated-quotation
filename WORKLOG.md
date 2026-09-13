@@ -1,3 +1,62 @@
+## 2026-09-13 · Asking who you are once per request instead of four times
+
+Round five, on a clean window at last: the 11 September counters were reset, and the 12 September
+egress bar came in at **27.4 GB against 11 September's 54.9 GB — halved.** (The 44.7 GB I reported
+for 11 September was a partial day; the completed bar was 54.9.)
+
+Halved is not solved: ~28 GB/day is ~840 GB a month against 250 GB included. This is the next
+two-thirds of what remains.
+
+### The cheapest large saving in the app
+
+`getCurrentUser()` was not memoised, and it has **293 call sites**. Answering *"who is this?"* costs
+**six queries**: `supabase.auth.getUser()` has GoTrue read `sessions`, `users`, `identities`,
+`mfa_factors` and `mfa_amr_claims`, and then this reads our own `User` row. A layout, its page, its
+components and any action they trigger each asked independently.
+
+The counters agreed: **111,448 auth validations in 33 hours** — about 81,000 a day, ~7.8 GB of
+buffer traffic, to answer a question whose answer cannot change inside one request.
+
+`cache()` also went on the two whole-table reads still left after the storefront work —
+`getProducts()` (1,041 rows a call) and `listStockItemsWithAvailability()` (1,046) — which the ERP
+pages were each calling two to five times per render.
+
+### Measured per request, before and after
+
+| page | `getCurrentUser` | `Product` | `StockItem` |
+| --- | --- | --- | --- |
+| `/requisitions` | 4.0 → **1.0** | 2.6 → **1.0** | 3.6 → **1.0** |
+| `/purchasing` | 3.8 → **1.0** | 2.6 → **1.0** | 4.8 → **2.0** |
+| `/orders` | 3.8 → **1.0** | — | — |
+| `/commissions` | 4.0 → **1.0** | — | — |
+| `/my-dashboard` | 1.8 → **1.0** | — | 1.4 → **1.0** |
+
+Every page now asks once. In production each of those saved calls is **six** queries, not one — the
+harness short-circuits GoTrue for impersonation, so what it can measure is the call count, and the
+auth multiplier rides on top.
+
+On Requisitions the stock read drops 2.6 calls × 1,046 rows ≈ **2,700 rows per page view**, and the
+product read 1.6 × 1,041 ≈ **1,700**.
+
+### The capability grid, because this is the root of every permission check
+
+`getCurrentUser` is what `isAdmin`, `canApprove` and every workflow-role check are built on, so
+CLAUDE.md's rule applies: run the role harness before a PR that touches permissions. It was run on
+both sides and the grids **diff to nothing** — not one cell moved, for any of the seven roles.
+
+### The harness told me I had broken it, which is the point
+
+The boot failed with *"auth.ts has moved — update the harness patch anchor."* The harness patches
+`getCurrentUser` in its throwaway copy to impersonate by cookie, and anchors on the function's exact
+text, which `cache()` changed. It refuses to run rather than skipping the patch — the right
+choice, because a silently unapplied patch would leave every probe unauthenticated and print an
+empty capability grid as though that were the truth.
+
+The anchor now accepts **both** shapes. That is not only tidiness: stashing the change to measure a
+baseline is exactly when the harness is needed, and a single-shape anchor breaks precisely then.
+
+545 tests pass; lint and build clean. No migration.
+
 ## 2026-09-12 · The storefront asks the inventory for four rows, not a thousand
 
 Asked whether to trade stock freshness for a page cache, the answer turned out to be **neither** —

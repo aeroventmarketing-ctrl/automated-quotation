@@ -3,6 +3,7 @@
  * the Product table. Products are added only by the Purchaser or an admin on the
  * Products page (with a supplier and price) — nothing is auto-saved from forms.
  */
+import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
@@ -45,7 +46,7 @@ export async function nextProductSku(tx: Prisma.TransactionClient): Promise<stri
  * Keep this list and `ProductRow` in step: a field added to one and not the
  * other is a type error rather than a silently empty column.
  */
-export async function getProducts(): Promise<ProductRow[]> {
+export const getProducts = cache(async function getProducts(): Promise<ProductRow[]> {
   const list = await prisma.product.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
@@ -60,7 +61,7 @@ export async function getProducts(): Promise<ProductRow[]> {
     note: p.note,
     suppliers: coerceProductSuppliers(p.suppliers),
   }));
-}
+});
 
 /**
  * Just enough of a product to NAME it: the four fields an autocomplete, a
@@ -89,10 +90,10 @@ export interface ProductOption {
  * requisitions, the P&L cost resolvers, the Products page). Use this where the
  * product is only being named.
  */
-export async function getProductOptions(): Promise<ProductOption[]> {
+export const getProductOptions = cache(async function getProductOptions(): Promise<ProductOption[]> {
   return prisma.product.findMany({
     where: { active: true },
     orderBy: { name: "asc" },
     select: { id: true, sku: true, name: true, unit: true },
   });
-}
+});
