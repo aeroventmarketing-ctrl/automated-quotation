@@ -1,7 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { poMemberIds } from "@/lib/purchase-batch";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -42,6 +44,66 @@ import {
 
 const VAT_RATE = config.vatRate || 0.12;
 const PROD_DEPT_KEYS = new Set<DeptKey>(["fans", "duct", "accessories", "motor"]);
+
+/** The four fields both P&L reports read off a sold line. */
+interface SaleLine {
+  unitPrice: Prisma.Decimal;
+  qty: number;
+  specsSnapshot: Prisma.JsonValue;
+  descriptionSnapshot: string;
+}
+
+/**
+ * The `where` both reports use to find the sales they might book, and why it is
+ * safe to narrow with.
+ *
+ * Each loop's real gate is `saleRecognitionDate`, which **begins** with
+ * `isSaleConfirmed` — and that returns false unless the sale carries a PO. So a
+ * quotation whose `classification.sale.po` is absent can never produce a
+ * recognition date, and can never be booked. Asking Postgres for the same
+ * condition cannot drop a sale either report would have counted, and the real
+ * gate still runs, untouched, on everything that comes back. (A JSON-null `po`
+ * still comes back and is still rejected in the loop.)
+ *
+ * Before this, both reports read EVERY quotation ever written — drafts, rejected
+ * quotes, the lot — with the whole of `classification` and every line item, to
+ * book the handful recognised in one month.
+ */
+const CONFIRMED_SALE: Prisma.QuotationWhereInput = {
+  classification: { path: ["sale", "po"], not: Prisma.DbNull },
+};
+
+/**
+ * The sold lines of the given orders, grouped by quotation id.
+ *
+ * Fetched in a SECOND step, after the loop has decided which sales fall in the
+ * report's window, because that is where the weight is: the lines carry
+ * `specsSnapshot`, the fan/duct selection for every line, and both reports were
+ * loading them for every quotation in the database to book one month of sales.
+ * Prisma made this same query as a relation load — an `IN` list of every
+ * quotation id — so this is the same statement with a shorter list, not an extra
+ * round trip.
+ */
+async function saleLinesByQuotation(ids: string[]): Promise<Map<string, SaleLine[]>> {
+  const by = new Map<string, SaleLine[]>();
+  if (ids.length === 0) return by;
+  const rows = await prisma.quotationItem.findMany({
+    where: { quotationId: { in: ids } },
+    select: { quotationId: true, unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true },
+  });
+  for (const r of rows) {
+    const line: SaleLine = {
+      unitPrice: r.unitPrice,
+      qty: r.qty,
+      specsSnapshot: r.specsSnapshot,
+      descriptionSnapshot: r.descriptionSnapshot,
+    };
+    const bucket = by.get(r.quotationId);
+    if (bucket) bucket.push(line);
+    else by.set(r.quotationId, [line]);
+  }
+  return by;
+}
 
 /**
  * While the alerts go-live gate is on, the P&L never counts activity dated before
@@ -231,27 +293,33 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales ---------------------------------------------------------------
-  const quotations = await prisma.quotation.findMany({
-    where: cutoff ? { createdAt: cutoff } : undefined,
-    select: {
-      discountPct: true,
-      vatMode: true,
-      classification: true,
-      items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
-    },
-  });
-  for (const q of quotations) {
-    const sale = saleFromClassification(q.classification);
-    const recAt = saleRecognitionDate(sale);
-    if (!recAt) continue;
-    if (!ymdInRange(manilaYMD(recAt), lo, hi)) continue;
+  // Read in three steps, none of which changes which sales are booked (see
+  // `CONFIRMED_SALE` and `saleLinesByQuotation`): the columns, the slimmed
+  // `classification` alongside them, and then the line items of the sales that
+  // actually landed in the window.
+  const [quotations, slim] = await Promise.all([
+    prisma.quotation.findMany({
+      where: { ...CONFIRMED_SALE, ...(cutoff ? { createdAt: cutoff } : {}) },
+      select: { id: true, discountPct: true, vatMode: true },
+    }),
+    slimClassificationByOrder(),
+  ]);
+  const booked = quotations
+    .map((row) => withSlimClassification(row, slim))
+    .map((q) => ({ q, sale: saleFromClassification(q.classification) }))
+    .map((x) => ({ ...x, recAt: saleRecognitionDate(x.sale) }))
+    .filter((x) => !!x.recAt && ymdInRange(manilaYMD(x.recAt), lo, hi));
+  const linesByOrder = await saleLinesByQuotation(booked.map((x) => x.q.id));
+
+  for (const { q } of booked) {
+    const items = linesByOrder.get(q.id) ?? [];
     salesCount += 1;
     // VAT-exclusive (÷1.12) and zero-rated quotes charge the client no output VAT.
     const chargesVat = vatModeChargesOutputVat(q.vatMode);
     // Departments book the LIST price before the quote's mark-up / discount; the
     // mark-up becomes Office income and the discount an Office expense below.
     let grossSum = 0;
-    for (const it of q.items) {
+    for (const it of items) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object"
         ? it.specsSnapshot
         : {}) as Record<string, unknown>;
@@ -578,18 +646,20 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const cutoff = testModeCreatedAtFilter(await getTestMode());
 
   // --- Sales detail --------------------------------------------------------
-  const quotations = await prisma.quotation.findMany({
-    where: cutoff ? { createdAt: cutoff } : undefined,
-    select: {
-      id: true,
-      quoteNumber: true,
-      discountPct: true,
-      vatMode: true,
-      classification: true,
-      inquiry: { select: { customer: { select: { id: true, company: true } } } },
-      items: { select: { unitPrice: true, qty: true, specsSnapshot: true, descriptionSnapshot: true } },
-    },
-  });
+  // Same three-step read as the summary above, for the same reasons.
+  const [quotations, slim] = await Promise.all([
+    prisma.quotation.findMany({
+      where: { ...CONFIRMED_SALE, ...(cutoff ? { createdAt: cutoff } : {}) },
+      select: {
+        id: true,
+        quoteNumber: true,
+        discountPct: true,
+        vatMode: true,
+        inquiry: { select: { customer: { select: { id: true, company: true } } } },
+      },
+    }),
+    slimClassificationByOrder(),
+  ]);
   const outputVatByDept = zeroSplit();
   const inputVatByDept = zeroSplit();
   let markupIncome = 0;
@@ -603,17 +673,20 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   const addSupplierVat = (name: string, v: number) =>
     inputVatBySupplier.set(name, round2((inputVatBySupplier.get(name) ?? 0) + v));
   const sales: PnlSaleDetail[] = [];
-  for (const q of quotations) {
-    const sale = saleFromClassification(q.classification);
-    const recAt = saleRecognitionDate(sale);
-    if (!recAt) continue;
-    const ymd = manilaYMD(recAt);
-    if (!ymdInRange(ymd, lo, hi)) continue;
+  const bookedD = quotations
+    .map((row) => withSlimClassification(row, slim))
+    .map((q) => ({ q, sale: saleFromClassification(q.classification) }))
+    .map((x) => ({ ...x, recAt: saleRecognitionDate(x.sale) }))
+    .filter((x) => !!x.recAt && ymdInRange(manilaYMD(x.recAt), lo, hi));
+  const linesByOrder = await saleLinesByQuotation(bookedD.map((x) => x.q.id));
+
+  for (const { q, sale, recAt } of bookedD) {
+    const ymd = manilaYMD(recAt!);
     const chargesVat = vatModeChargesOutputVat(q.vatMode);
     const lines: PnlSaleLine[] = [];
     let orderOutputVat = 0;
     let grossSum = 0;
-    for (const it of q.items) {
+    for (const it of linesByOrder.get(q.id) ?? []) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
       grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
       const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode);

@@ -1,3 +1,54 @@
+## 2026-09-13 · The departmental P&L stops reading every quotation, and every line item, to book one month
+
+The eighth and last reader of the whole `classification` column — and the one I had written off as
+needing a different approach, on the grounds that its gate isn't `isSaleConfirmed`.
+
+**It is.** Both reports gate on `saleRecognitionDate`, and that function *begins* with
+`isSaleConfirmed`, returning null when it fails. The gate was one level down, not absent. So the same
+`sale.po` necessary condition the other seven use is safe here too: no PO, no recognition date,
+nothing booked.
+
+### The line items were the bigger half
+
+`classification` was the reason to look, but the P&L reads something the other seven do not: every
+line item of every quotation, with `specsSnapshot` — the full fan/duct selection per line. It was
+loading all of them, for every draft and rejected quote in the database, to book the handful of
+sales recognised inside a one-month window.
+
+So the read is now three steps: the columns; the slimmed `classification` alongside them; then the
+line items of **only the sales that actually landed in the window**. The third step is not a new
+round trip — Prisma was already issuing it as a relation load, with an `IN` list of every quotation
+id. It just has a shorter list now.
+
+### Measured on September 2026, both reports together
+
+| | before | after |
+| --- | --- | --- |
+| `QuotationItem` rows | 230 | 36 |
+| `Quotation` rows carrying `classification` | 42 × 12,711 B | 38 × 429 B |
+| on the wire (classification + lines) | ~624 kB | ~30 kB |
+
+A narrow window is the normal case — the card opens on the current month — and the narrower the
+window, the more of those 230 line-item rows were being read to be thrown away.
+
+### Verified by diffing the reports themselves, not the screen
+
+A harness-only route (never committed) calls `getDepartmentPnl` and `getPnlDetail` over
+2000-01-01 → 2099-12-31 and returns both as JSON. Captured on the same seed before and after,
+17 booked sales and 102 sale lines: **every figure identical** — department splits, output and input
+VAT, mark-up income, client discounts, the per-line COGS and department shares, the pricing audit.
+
+The only two differing bytes in 29,656 are `detail.expenses[0..1].del.id` — cuids the seed generates
+fresh on each boot, in the expenses section, which this change does not touch.
+
+### The invariant now has a name in the test suite
+
+`pending-approvals.test.ts` pinned "if it is confirmed, it carries a PO" for seven readers. The P&L
+never says `isSaleConfirmed`, so it gets its own assertion in the same file: *if the P&L can date it,
+it carries a PO*. The day `saleRecognitionDate` learns to date a sale some other way, the filter
+would start dropping revenue out of a financial report — and that is precisely the failure nothing
+else would catch.
+
 ## 2026-09-13 · The other six readers of every confirmed order stop shipping the revision history
 
 The subtraction in the entry below was applied to the approver alarm alone. The same `classification` column

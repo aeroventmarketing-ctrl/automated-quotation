@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isSaleConfirmed, saleFromClassification } from "./sale";
+import { saleRecognitionDate } from "./department-pnl";
 
 /**
  * The approver alarm polls `pendingApprovalsForUser` every 30 seconds, on every
@@ -15,7 +16,7 @@ import { isSaleConfirmed, saleFromClassification } from "./sale";
  * So this pins the invariant rather than the query: change `isSaleConfirmed` to
  * accept a sale with no PO and this test fails, right next to the reason why.
  *
- * **Seven queries now stand on this one invariant.** They are the blast radius
+ * **Eight queries now stand on this one invariant.** They are the blast radius
  * of a change to `isSaleConfirmed`, and none of them would fail loudly:
  *
  *  - `lib/pending-approvals.ts`   — the approver alarm
@@ -25,6 +26,8 @@ import { isSaleConfirmed, saleFromClassification } from "./sale";
  *  - `app/(app)/management/page`  — the Management Dashboard's twin
  *  - `lib/sales-commission.ts`    — who is owed commission
  *  - `lib/production-status.ts`   — what is still on the shop floor
+ *  - `management/pnl-actions.ts`  — the departmental P&L and its detail, which
+ *    reach the gate through `saleRecognitionDate` rather than by name
  */
 describe("the SQL pre-filter shared by the confirmed-order queries is safe", () => {
   const po = { path: "sales/po.pdf", name: "po.pdf", uploadedAt: "", uploadedByName: "A" };
@@ -59,5 +62,31 @@ describe("the SQL pre-filter shared by the confirmed-order queries is safe", () 
         expect(isSaleConfirmed(sale), `${arrangement} / ${payments.length} payments`).toBe(false);
       }
     }
+  });
+
+  /**
+   * The departmental P&L is the eighth query on this filter, and the only one
+   * that never calls `isSaleConfirmed` by name — it reaches the same gate one
+   * level down, through `saleRecognitionDate`, which begins with it and returns
+   * null when it fails. So the invariant the P&L actually stands on is this one:
+   * **no PO, no recognition date, nothing booked.**
+   *
+   * Worth pinning separately, because the day `saleRecognitionDate` learns to
+   * date a sale some other way, the filter would start dropping revenue from a
+   * financial report with nothing to show for it.
+   */
+  for (const [who, sale] of SALES) {
+    it(`${who}: if the P&L can date it, it carries a PO`, () => {
+      const parsed = saleFromClassification({ sale });
+      const dated = saleRecognitionDate({ ...parsed!, soldAt: "2026-09-01T00:00:00Z" });
+      if (dated) expect(parsed?.po).toBeTruthy();
+    });
+  }
+
+  it("a datable sale exists, so the P&L check above is not vacuous", () => {
+    const dated = SALES.filter(([, sale]) =>
+      saleRecognitionDate({ ...saleFromClassification({ sale })!, soldAt: "2026-09-01T00:00:00Z" }),
+    );
+    expect(dated.length).toBeGreaterThan(0);
   });
 });
