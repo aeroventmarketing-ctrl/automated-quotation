@@ -32,6 +32,7 @@ import { canManagePayroll, getPayrollMonth } from "./payroll-actions";
 import type { DeptSplit } from "@/lib/department-pnl";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { countsAsReceivable, receivableOf, RECEIVABLE_EPSILON } from "@/lib/receivables";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 import { FanCogsEditor } from "./fan-cogs-editor";
 import { CashVouchersCard, type CashVoucherView } from "./cash-vouchers-card";
 import { listFanCogs, type FanCogsRowView } from "./fan-cogs-actions";
@@ -134,7 +135,7 @@ export default async function ManagementPage() {
   // vouchers, purchasing, …) keys off its own activity/creation date above.
   const goLiveFloorYMD = alertGate.on ? manilaYMD(alertGate.at) : null;
 
-  const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
+  const [wonQuotes, slim, stockItems, commissions, prPending] = await Promise.all([
     // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
     // revision reopens the inquiry (status leaves WON), so a WON filter drops
     // confirmed, already-paid orders. isSaleConfirmed below is the real gate,
@@ -144,10 +145,15 @@ export default async function ManagementPage() {
     // twin of — the `where` is the necessary condition behind `isSaleConfirmed`
     // below (false unless the sale carries a PO), so it cannot drop a quotation
     // the loop would have kept, and the gate still runs on everything returned.
+    //
+    // `classification` comes from `slimClassificationByOrder` alongside this
+    // query, with the revision history this page never opens subtracted in
+    // Postgres — the same shape the approver alarm uses.
     prisma.quotation.findMany({
       where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
-      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
+      select: { id: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
+    slimClassificationByOrder(),
     // Only the five fields the low-stock filter and its rows read.
     prisma.stockItem.findMany({
       where: { active: true, ...createdFilter },
@@ -347,7 +353,8 @@ export default async function ManagementPage() {
   let materialsCount = 0; // Phase 3: orders with an open material request
   let purchasingCount = 0; // Phase 4: orders with an open purchase request
 
-  for (const q of wonQuotes) {
+  for (const row of wonQuotes) {
+    const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
     // Go-live gate on → skip orders recognised (paid / PO-dated) before launch

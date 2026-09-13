@@ -17,6 +17,7 @@ import { cashExpenseBooked } from "@/lib/cash-request";
 import { getPrintedVouchers, type PrintedVoucherLine } from "@/lib/purchase-voucher";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getAlertGoLive, alertGoLiveCreatedAtFilter } from "@/lib/alert-golive";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 
 export interface UnbalancedRow {
   orderId: string;
@@ -65,7 +66,7 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
   const createdFilter = goLiveCutoff ? { createdAt: goLiveCutoff } : {};
   const goLiveFloorYMD = alertGate.on ? manilaYMD(alertGate.at) : null;
 
-  const [wonQuotes, stockItems, commissions, prPending] = await Promise.all([
+  const [wonQuotes, slim, stockItems, commissions, prPending] = await Promise.all([
     // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
     // revision reopens the inquiry (status leaves WON), so a WON filter drops
     // confirmed, already-paid orders. isSaleConfirmed below is the real gate,
@@ -83,10 +84,16 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
     // moves. Without the filter it fetched EVERY quotation's `classification` —
     // the whole order workflow, kilobytes each — to find the couple of hundred
     // that are confirmed orders.
+    //
+    // `classification` is fetched by `slimClassificationByOrder` instead of here:
+    // same filter, minus the revision snapshots this loop never opens, and it
+    // runs alongside this query rather than after it. Memoised per request, so
+    // the four cards My Dashboard draws from these readers pay for it once.
     prisma.quotation.findMany({
       where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
-      select: { id: true, classification: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
+      select: { id: true, total: true, discountPct: true, vatMode: true, quoteNumber: true, inquiry: { select: { customer: { select: { id: true, company: true } } } } },
     }),
+    slimClassificationByOrder(),
     // Only the five fields the low-stock filter and its rows read — this was
     // taking whole StockItem rows for a list of names and quantities.
     prisma.stockItem.findMany({
@@ -108,7 +115,8 @@ export async function getFinanceMonitor(): Promise<FinanceMonitor> {
   let billed = 0;
   let collected = 0;
   const unbalanced: UnbalancedRow[] = [];
-  for (const q of wonQuotes) {
+  for (const row of wonQuotes) {
+    const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
     if (goLiveFloorYMD) {

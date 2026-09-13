@@ -17,6 +17,7 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal, type SaleRecor
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getAlertGoLive } from "@/lib/alert-golive";
 import { payableTotal, round2 } from "@/lib/quote";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 
 /** The quotation fields the receivable rule reads. */
 export interface ReceivableQuote {
@@ -76,12 +77,20 @@ export async function getReceivablesOutstanding(): Promise<number> {
   // register and by the Management Dashboard, and it was fetching every
   // quotation's `classification` — the entire order workflow — to add up a
   // couple of hundred balances.
-  const quotes = await prisma.quotation.findMany({
-    where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
-    select: { classification: true, total: true, discountPct: true, vatMode: true },
-  });
+  //
+  // `classification` itself comes from `slimClassificationByOrder` — same filter,
+  // minus the revision history nothing here opens — and is put back on the row so
+  // `receivableOf` reads it exactly as before.
+  const [quotes, slim] = await Promise.all([
+    prisma.quotation.findMany({
+      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
+      select: { id: true, total: true, discountPct: true, vatMode: true },
+    }),
+    slimClassificationByOrder(),
+  ]);
   let outstanding = 0;
-  for (const q of quotes) {
+  for (const row of quotes) {
+    const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!countsAsReceivable(sale, goLiveFloorYMD)) continue;
     const { balance } = receivableOf(q, sale!);
