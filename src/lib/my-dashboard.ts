@@ -19,6 +19,7 @@ import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notif
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { payableTotal, round2 } from "@/lib/quote";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 import { purchaseStepsFrom, effectiveStepRole, isDeptRequisition, isPoApproved, PR_STATUS_LABEL, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplete } from "@/lib/purchase-returns";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
@@ -236,24 +237,41 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     // orders it yields may change. It does not: the gate is untouched, and the
     // filter was verified against real Postgres across all eight shapes a sale
     // can take before it was used anywhere.
-    const quotes = await prisma.quotation.findMany({
-      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        quoteNumber: true,
-        classification: true,
-        createdAt: true,
-        currency: true,
-        preparedById: true,
-        total: true,
-        discountPct: true,
-        vatMode: true,
-        inquiry: { select: { customer: { select: { company: true } } } },
-        items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
-      },
-    });
-    for (const q of quotes) {
+    //
+    // `classification` is the one field NOT selected here. It comes from
+    // `slimClassificationByOrder`, which applies the same `sale.po` filter and
+    // subtracts — in Postgres — the revision snapshots, document reads and
+    // workflow resets that neither the task loop nor the Materials feed opens: 14
+    // kB an order down to 429 bytes on the fixture it was measured on. It runs
+    // alongside this query rather than after it, and is memoised for the request,
+    // so the finance cards and the commissions tile further down this same page
+    // read the column once between them.
+    //
+    // `withSlimClassification` puts it back on each row, so every line of the
+    // loop below — including `payableTotal(q)`, which reaches into it for the
+    // VAT-exempt total — reads exactly what it read before. Which orders this
+    // yields is unchanged: same filter, same untouched `isSaleConfirmed` gate.
+    const [quotes, slim] = await Promise.all([
+      prisma.quotation.findMany({
+        where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          quoteNumber: true,
+          createdAt: true,
+          currency: true,
+          preparedById: true,
+          total: true,
+          discountPct: true,
+          vatMode: true,
+          inquiry: { select: { customer: { select: { company: true } } } },
+          items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+        },
+      }),
+      slimClassificationByOrder(),
+    ]);
+    for (const row of quotes) {
+      const q = withSlimClassification(row, slim);
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
       const wf = readOrderWorkflow(q.classification);

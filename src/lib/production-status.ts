@@ -15,6 +15,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { readOrderWorkflow, PRODUCTION_DEPTS, stageIndex, type OrderStage, type OrderWorkflow } from "@/lib/order-workflow";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 
 /** The order's identity as the card shows it. */
 export interface ProductionOrderRef {
@@ -108,24 +109,31 @@ export const getProductionStatus = cache(async function getProductionStatus(): P
   // shown — and the real gate still runs, unchanged, on everything that returns.
   // Without it this read every quotation's whole `classification` — the entire
   // order workflow, kilobytes each — to find the handful still on the shop floor.
-  const wonQuotes = await prisma.quotation
-    .findMany({
-      where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
-      select: {
-        id: true,
-        classification: true,
-        quoteNumber: true,
-        projectName: true,
-        inquiry: { select: { projectName: true, customer: { select: { company: true } } } },
-      },
-    })
-    .catch(() => []);
+  //
+  // `classification` itself is fetched by `slimClassificationByOrder`, running
+  // alongside this query with the same filter and the revision history subtracted
+  // in Postgres — this card reads only `workflow` and `sale`.
+  const [wonQuotes, slim] = await Promise.all([
+    prisma.quotation
+      .findMany({
+        where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
+        select: {
+          id: true,
+          quoteNumber: true,
+          projectName: true,
+          inquiry: { select: { projectName: true, customer: { select: { company: true } } } },
+        },
+      })
+      .catch(() => []),
+    slimClassificationByOrder().catch(() => new Map<string, unknown>()),
+  ]);
 
   const onTime: ProductionRow[] = [];
   const nearDue: ProductionRow[] = [];
   const late: ProductionRow[] = [];
 
-  for (const q of wonQuotes) {
+  for (const row of wonQuotes) {
+    const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
     const wf = readOrderWorkflow(q.classification);

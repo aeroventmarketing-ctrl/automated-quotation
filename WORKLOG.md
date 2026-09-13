@@ -1,3 +1,63 @@
+## 2026-09-13 · The other six readers of every confirmed order stop shipping the revision history
+
+The subtraction in the entry below was applied to the approver alarm alone. The same `classification` column
+is read whole by six more screens — My Dashboard, the Management Dashboard and its finance-monitor
+twin, receivables, commissions and production status — every one of them scanning every confirmed
+order, and every one of them opening only `sale` and `workflow`.
+
+### One read of the column, shared, instead of one per card
+
+The obvious move was to rewrite six `findMany`s as raw SQL, as the alarm's was. Three of them carry
+`Decimal` money that Prisma maps, and four carry relation includes; putting all of that at risk for
+a saving that lives in ONE column is a bad trade. So each reader keeps its Prisma query exactly as
+it was, **minus `classification`**, and `lib/slim-classification` fetches the slimmed column
+alongside it:
+
+- it takes no arguments and applies the same `sale.po` filter every caller already uses, so it runs
+  **in parallel** with the reader's own query instead of waiting on a list of ids;
+- it is memoised per request, so My Dashboard — which draws four of these cards — pays once;
+- `withSlimClassification` puts the column back on each row, so the loops below read exactly what
+  they read before, including `payableTotal(q)`, which reaches into it for the VAT-exempt total.
+
+### Measured on My Dashboard, per render
+
+| | before | after |
+| --- | --- | --- |
+| statements carrying `classification` | 3 × 19 rows | 1 × 19 rows |
+| `classification` per order | 12,711 B | 429 B |
+| `classification` on the wire | ~724 kB | ~8 kB |
+| Postgres shared buffers | 1,230 | 1,070 |
+
+The extra statement was the risk — a fourth round trip to save bytes on three. It does not cost
+what it saves: each reader's own query drops from 410 buffers to 220 once it stops detoasting the
+column, so the total falls too.
+
+### The blacklist is pinned by name now
+
+`vatExemptTotal` and `pricing` are read off the ROW, by `payableTotal` and `netOfVat`, not through
+`sale` or `workflow` — the easiest two keys to subtract by accident. Nothing would have failed
+loudly: a VAT-exempt order would simply have been over-valued by 12%. `slim-classification.test.ts`
+asserts every key the readers open is absent from the subtraction list, and pins the ₱10,107.14 that
+distinguishes a kept `vatExemptTotal` from a dropped one.
+
+### Verified by rendering the whole app twice
+
+35 screens — five pages × seven roles — captured from the running app before and after, on the same
+seed. **Every line identical**, including the ₱622,358.40 receivables figure the cash position and
+the Management Dashboard have to agree on, and the harness's role grid byte-for-byte the same.
+
+The only difference between the two sweeps is the order of orders sharing a `createdAt` — eight of
+the fixture's nineteen share `2026-08-01 00:00:00`, and `orderBy: createdAt desc` leaves ties to
+Postgres. It reshuffles between seeds, not between code versions: two sweeps of the same running
+server came back identical. Worth remembering, because that instability is real and still there.
+
+### Not done, and deliberately
+
+The departmental P&L (`management/pnl-actions`) reads every quotation's `classification` whole, with
+its line items, unfiltered. It is the eighth reader and the last one left, but it is a report rather
+than a card on a page that re-renders on a timer — and it is the only one whose gate is not
+`isSaleConfirmed`, so it needs its own look rather than this pattern applied on sight.
+
 ## 2026-09-13 · The approver alarm stops shipping every revision of every order
 
 The top query by bytes for three rounds running: ~6,953 calls a day, 198 rows each. The filter and

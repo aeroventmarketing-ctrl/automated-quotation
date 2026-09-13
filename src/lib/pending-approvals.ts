@@ -10,6 +10,12 @@ import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl"
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
+// The alarm reads exactly two parts of `classification` — `sale`, to confirm the
+// order, and `workflow`, to find the pending step. The keys it never opens are
+// subtracted in Postgres so they never cross the wire; the list, and why it is a
+// blacklist rather than a whitelist, lives in `lib/slim-classification`, which
+// the other six confirmed-order readers share.
+import { UNREAD_CLASSIFICATION_KEYS } from "@/lib/slim-classification";
 
 export interface PendingApproval {
   id: string;
@@ -23,43 +29,6 @@ interface Viewer {
   id: string;
   role: string;
 }
-
-/**
- * The parts of `classification` **no reader of a confirmed order ever opens**,
- * stripped in Postgres so they never cross the wire.
- *
- * `classification` is one JSONB column carrying several unrelated things. The
- * alarm reads exactly two of them — `sale`, to confirm the order, and
- * `workflow`, to find the pending step. The rest is history:
- *
- *  - **`revisions`** is the heavy one. Every time a quotation is revised, a full
- *    snapshot is appended — every line, and `fullLines`, which the type calls
- *    *"full per-line content (incl. specs) for an exact restore"*. A quotation
- *    revised five times carries five complete copies of its line items, and the
- *    alarm was shipping all of them ~7,000 times a day to read a stage name.
- *  - `saleDocReads` / `depositSlipReads` / `slipValidations` are AI document
- *    reads, kept per file.
- *
- * Verified against all seven confirmed-order readers: not one mentions any of
- * these keys. They belong to the quotation builder and the document panels,
- * which load an order by id and are welcome to the whole blob.
- *
- * `-` on a `jsonb` column removes a key and leaves everything else exactly as it
- * was, so this subtracts dead weight rather than selecting a slice — a key added
- * to `classification` tomorrow still arrives, and the loop below cannot start
- * missing something because someone forgot to add it to a list.
- */
-const UNREAD_CLASSIFICATION_KEYS = [
-  "revisions",
-  "revision",
-  "revisionRestore",
-  "revisionRestores",
-  "saleDocReads",
-  "saleDocReadCounts",
-  "depositSlipReads",
-  "slipValidations",
-  "workflowResets",
-];
 
 interface AlarmOrder {
   id: string;

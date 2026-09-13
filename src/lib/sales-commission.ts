@@ -45,6 +45,7 @@ import { payableTotal, round2, readVatExemptTotal, vatModeChargesOutputVat } fro
 import { saleFromClassification, isSaleConfirmed, collectedTotal, type SaleRecord } from "@/lib/sale";
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getWorkflowRoles, usersWithWorkflowRole } from "@/lib/workflow-roles";
+import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 
 /** Rule 6 — the rate. */
 export const COMMISSION_RATE_PCT = 1.5;
@@ -647,7 +648,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
   // deals loaded — which is the point of the role, not a leak. Everyone else
   // still gets the narrow query.
   const scopeToRep = opts.salespersonId && !heads.has(opts.salespersonId) ? opts.salespersonId : undefined;
-  const [quotations, counterSales, paidRows] = await Promise.all([
+  const [quotations, slim, counterSales, paidRows] = await Promise.all([
     prisma.quotation.findMany({
       // Rule 1 needs the salesperson's WHOLE month, so this can be narrowed to
       // one salesperson but never to one order.
@@ -661,10 +662,17 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
         classification: { path: ["sale", "po"], not: Prisma.DbNull },
         ...(scopeToRep ? { preparedById: scopeToRep } : {}),
       },
+      //
+      // `classification` is fetched separately, by `slimClassificationByOrder`,
+      // with the revision snapshots this loop never opens subtracted in Postgres.
+      // It is NOT scoped to one rep — it is keyed by id and looked up, so a rep's
+      // response still contains only the deals built from the rows above, which
+      // are scoped. Extra map entries are never read, and holding one unscoped
+      // copy is what lets My Dashboard draw the commissions tile, the finance
+      // cards and the tasks feed from a single read of the column.
       select: {
         id: true,
         quoteNumber: true,
-        classification: true,
         total: true,
         discountPct: true,
         vatMode: true,
@@ -674,6 +682,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
         inquiry: { select: { customer: { select: { company: true } } } },
       },
     }),
+    slimClassificationByOrder(),
     prisma.counterSale
       .findMany({
         where: { status: "COMPLETED" },
@@ -699,7 +708,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
   const currency = quotations.find((q) => q.currency)?.currency ?? "PHP";
   const deals: CommissionDeal[] = [];
 
-  for (const q of quotations) {
+  for (const row of quotations) {
+    const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
     // Rule 2 — the PO date on terms, the first payment otherwise.
