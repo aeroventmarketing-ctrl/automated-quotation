@@ -1,3 +1,83 @@
+## 2026-09-13 · The approver alarm stops shipping every revision of every order
+
+The top query by bytes for three rounds running: ~6,953 calls a day, 198 rows each. The filter and
+the column list were already as tight as Prisma can express, so what was left was the payload —
+and it turned out most of it was never read.
+
+### `classification` is nine things in a trench coat
+
+One JSONB column carries the sale, the workflow, and a pile of history. The alarm opens exactly
+two of them: `sale`, to confirm the order, and `workflow`, to find the pending step.
+
+The heaviest thing it does NOT open is **`revisions`** — every time a quotation is revised the
+builder appends a full snapshot, including `fullLines`, which its own type calls *"full per-line
+content (incl. specs) for an exact restore"*. An order revised three times carries three complete
+copies of its line items, and the alarm was shipping all of them, seven thousand times a day, to
+read a stage name. Alongside it: `saleDocReads`, `depositSlipReads`, `slipValidations`,
+`workflowResets` and the revision-restore records.
+
+**None of the seven confirmed-order readers mentions any of those keys.** Checked, one file at a
+time, before touching anything.
+
+Postgres can subtract them: `classification - ARRAY[...]` on a `jsonb` column removes keys and
+leaves the rest untouched. That matters more than selecting a slice would — a key added to
+`classification` tomorrow still arrives, so the loop cannot start missing something because nobody
+updated a list.
+
+### Measured on a fixture built to be representative
+
+The harness's confirmed orders had **zero line items**, so the first measurement of this was
+worthless — the seeded revision snapshots were empty shells and the "saving" was an artefact. The
+same trap as the Materials feed with nothing in it. Six realistic lines per order and three
+revisions each, and the payload is:
+
+| per order | |
+| --- | --- |
+| full `classification` | **14 kB** |
+| minus the nine unread keys | **429 bytes** |
+
+**97% of what the alarm's heaviest column carried, it never looked at.**
+
+### The first shape was worse, and only measuring showed it
+
+The obvious version folded the customer and the line items into one query with a lateral
+`json_agg` — one round trip where Prisma made four, and rows per poll fell 146 → 22. It also cost
+**three times the Postgres IO**: 299 shared buffers against 223 for fetching the items separately.
+
+So the items are fetched separately and grouped here. Fewer round trips is not worth tripling the
+IO on the app's most-called query: the goal is bytes on the wire, and the wire does not care how
+many statements produced them.
+
+Two more shapes were measured and rejected on the numbers. Extracting the two keys the loop reads
+(`classification->'sale'`, `->'workflow'`) costs **181** buffers against **147** for subtracting the
+nine, and lands within eleven bytes of the same wire size — subtracting is both cheaper and safer.
+
+### The honest trade
+
+| | before | after |
+| --- | --- | --- |
+| wire bytes per order | 14 kB | **429 bytes** |
+| rows per poll | 146 | 142 |
+| Postgres buffers | ~155 | ~223 |
+
+Buffer IO is up about 1.4×, because subtracting keys means detoasting the blob and rebuilding it
+rather than streaming it as stored. That is the deal: **a 97% cut in the payload that dominates
+egress, for ~1.4× the IO on that query.** Supabase bills egress, and we are 3.4× over the
+allowance, so it is the right way round — but it is a trade, not a free win, and worth watching if
+compute starts to feel it.
+
+### Equivalence
+
+The alarm's output was captured for all seven roles before and after: **the same fifteen entries**.
+
+The order differed, which is worth recording because it was not a regression. Eight seeded orders
+share a `createdAt`, and `ORDER BY createdAt DESC` alone lets Postgres return tied rows in any
+order — so the alarm's list could reshuffle between polls. Prisma had exactly the same instability;
+comparing two implementations is what made it visible. `id` now breaks the tie, and three
+consecutive polls come back identical, order included.
+
+545 tests pass; lint and build clean. No migration.
+
 ## 2026-09-13 · Asking who you are once per request instead of four times
 
 Round five, on a clean window at last: the 11 September counters were reset, and the 12 September
