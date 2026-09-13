@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Barlow_Condensed, Manrope } from "next/font/google";
 import { COMPANY } from "@/lib/config";
-import { listStoreProducts, storeCategories } from "@/lib/store-catalog";
+import { storeNavCategories } from "@/lib/store-catalog";
 import { getStoreTheme, themeImageSrc } from "@/lib/store-theme";
 import { siteOrigin, storeUrl, jsonLd, storeHomeLd } from "@/lib/store-seo";
 import { WRAP, DISPLAY } from "@/lib/store-ui";
@@ -45,8 +45,11 @@ export async function generateMetadata(): Promise<Metadata> {
  * be re-tuned without touching code.
  */
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
-  const [theme, products] = await Promise.all([getStoreTheme(), listStoreProducts()]);
-  const categories = storeCategories(products);
+  // `storeNavCategories`, not `listStoreProducts` + `storeCategories`. This
+  // layout wraps EVERY /store route, so the fuller read had the cart, the
+  // checkout and an order-status page each fetching the whole catalogue and the
+  // whole inventory to draw a menu. Same categories, two columns instead.
+  const [theme, categories] = await Promise.all([getStoreTheme(), storeNavCategories()]);
   const logo = themeImageSrc(theme.logoUrl);
   // HVAC Tools sits just before the first external link — after the in-shop
   // sections, ahead of "Main Website ↗". It's a theme field of its own so it

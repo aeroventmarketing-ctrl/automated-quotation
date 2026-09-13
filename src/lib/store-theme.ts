@@ -14,6 +14,7 @@
  * came with it. Everything below is editable, so the shop can be re-pitched
  * without a deploy.
  */
+import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
@@ -401,10 +402,10 @@ export function normalizeStoreTheme(input: Partial<StoreTheme> | null | undefine
 }
 
 /** The live storefront theme (defaults when never configured). */
-export async function getStoreTheme(): Promise<StoreTheme> {
+export const getStoreTheme = cache(async function getStoreTheme(): Promise<StoreTheme> {
   const row = await prisma.appSetting.findUnique({ where: { key: STORE_THEME_KEY } }).catch(() => null);
   return normalizeStoreTheme(row?.value as Partial<StoreTheme> | null);
-}
+});
 
 /** Persist the theme, returning the normalized value that was stored. */
 export async function setStoreTheme(input: Partial<StoreTheme>): Promise<StoreTheme> {

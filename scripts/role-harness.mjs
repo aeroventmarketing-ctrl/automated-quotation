@@ -364,8 +364,20 @@ function makeWorktree() {
   // The one patch, applied only to the throwaway copy.
   const authPath = `${WORKTREE}/src/lib/auth.ts`;
   const src = readFileSync(authPath, "utf8");
-  const anchor = "export async function getCurrentUser(): Promise<User | null> {";
-  if (!src.includes(anchor)) throw new Error("auth.ts has moved — update the harness patch anchor.");
+  // Both shapes of `getCurrentUser`: the plain function, and the React
+  // `cache()`-wrapped one it became. Accepting either means the harness still
+  // boots when you stash a change to compare against a baseline — which is
+  // exactly when you need it most.
+  //
+  // Still checked loudly. A patch that silently failed to apply would leave
+  // every probe unauthenticated, and the harness would print an empty
+  // capability grid as though that were the truth.
+  const anchors = [
+    "export const getCurrentUser = cache(async function getCurrentUser(): Promise<User | null> {",
+    "export async function getCurrentUser(): Promise<User | null> {",
+  ];
+  const anchor = anchors.find((a) => src.includes(a));
+  if (!anchor) throw new Error("auth.ts has moved — update the harness patch anchor.");
   writeFileSync(authPath, src.replace(anchor, `${anchor}
   // HARNESS ONLY — throwaway worktree, never committed.
   if (process.env.HARNESS_AUTH === "1") {

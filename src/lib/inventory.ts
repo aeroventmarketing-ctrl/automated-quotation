@@ -5,6 +5,7 @@
  * running balance. RECEIPT adds, ISSUE subtracts (never below zero), ADJUSTMENT
  * sets the on-hand to the given quantity.
  */
+import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 
@@ -28,7 +29,17 @@ export interface StockOptWithAvail {
  * MRF / requisition / purchasing stock pickers so a line with nothing available
  * can hide its "Issue" control. Returns [] if the inventory tables aren't set up.
  */
-export async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
+/**
+ * Every active stock item with what is free to issue — **memoised for one
+ * request.**
+ *
+ * The heaviest read left in the ERP: 1,046 rows per call, on Requisitions,
+ * Purchasing and the MRF sheet, each of which asked independently of anything
+ * else on the page. Read-only, and no write path calls it — the stock actions
+ * write and then revalidate, so the re-render finds an empty memo and reads
+ * fresh.
+ */
+export const listStockItemsWithAvailability = cache(async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
   const items = await prisma.stockItem
     .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true, location: true } })
     .catch(() => [] as { id: string; sku: string | null; name: string; unit: string; quantity: unknown; location: string | null }[]);
@@ -45,7 +56,7 @@ export async function listStockItemsWithAvailability(): Promise<StockOptWithAvai
     location: i.location,
     available: Math.round((Number(i.quantity) - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
   }));
-}
+});
 
 export interface StockChange {
   stockItemId: string;

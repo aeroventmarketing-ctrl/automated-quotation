@@ -10,6 +10,7 @@
  * by spec in a quotation, so they carry no public price and no add-to-cart —
  * their product page sends the visitor to Request a Quotation instead.
  */
+import { cache } from "react";
 import { prisma } from "@/lib/db";
 import type { Family } from "@prisma/client";
 import {
@@ -156,8 +157,22 @@ const LISTED_SELECT = {
   },
 } as const;
 
-/** Every product currently listed on the storefront, with live availability. */
-export async function listStoreProducts(): Promise<StoreProduct[]> {
+/**
+ * Every product currently listed on the storefront, with live availability.
+ *
+ * **Memoised for one request.** This is the storefront's single most expensive
+ * read — every listed catalogue item with its `storePhotos` JSON and a price
+ * lookup each, *plus* `stockForCatalogueMany`, which reads the whole active
+ * `StockItem` table and a `StockReservation` groupBy. Every `/store/**` route
+ * reached it two to four times per request: the layout for its nav, the page
+ * for its grid, `generateMetadata` before that, and `storeProductBySlug`'s
+ * fallback for an item with no explicit slug.
+ *
+ * The store is public, uncached (`force-dynamic`) and deliberately open to
+ * crawlers via `robots.ts` and a sitemap listing every product page, so those
+ * duplicate reads were being paid for traffic nobody at AeroVent generates.
+ */
+export const listStoreProducts = cache(async function listStoreProducts(): Promise<StoreProduct[]> {
   const items = (await prisma.catalogueItem
     .findMany({
       where: { active: true, storeListed: true },
@@ -168,6 +183,53 @@ export async function listStoreProducts(): Promise<StoreProduct[]> {
   // One inventory read for the whole list (not one per product).
   const stock = await stockForCatalogueMany(items.map((it) => ({ modelCode: it.modelCode, name: it.name })));
   return items.map((it) => toStoreProduct(it, stock.get(it.modelCode)?.available ?? null));
+});
+
+/**
+ * The shop's categories, for the nav — **without** reading the catalogue.
+ *
+ * `storeCategories(await listStoreProducts())` gives the same answer, but pays
+ * for every product's photos, prices and live stock to do it. The nav wants
+ * three fields: a label, a slug and a count. The label comes from `family` and
+ * `storeCategory`, which are plain columns, and the slug is derived from the
+ * label — so this reproduces the fuller version exactly (a test asserts that)
+ * while touching neither `priceList` nor the inventory.
+ *
+ * It matters most on the pages that have no product grid at all. The store
+ * LAYOUT wraps every route, so `/store/cart`, `/store/checkout` and
+ * `/store/order/<n>` were each reading the entire catalogue and the entire
+ * inventory to draw a menu.
+ */
+export const storeNavCategories = cache(async function storeNavCategories(): Promise<StoreCategory[]> {
+  const rows = await prisma.catalogueItem
+    .findMany({
+      where: { active: true, storeListed: true },
+      select: { family: true, storeCategory: true },
+    })
+    .catch(() => [] as { family: Family; storeCategory: string | null }[]);
+  return navCategoriesFrom(rows);
+});
+
+/**
+ * The grouping itself, pure — so it can be asserted against `storeCategories`
+ * rather than the two being trusted to agree.
+ *
+ * They derive the same label from the same two fields (`storeCategoryLabel`) and
+ * the same slug from that label, so any divergence would be in the grouping, and
+ * that is what the test pins.
+ */
+export function navCategoriesFrom(
+  rows: readonly { family: Family; storeCategory: string | null }[],
+): StoreCategory[] {
+  const map = new Map<string, StoreCategory>();
+  for (const r of rows) {
+    const label = storeCategoryLabel(r.family, storeFieldsOf(r).storeCategory);
+    const slug = categorySlug(label);
+    const cur = map.get(slug);
+    if (cur) cur.count++;
+    else map.set(slug, { slug, label, count: 1 });
+  }
+  return [...map.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
 /** The storefront's categories, with how many products each holds. */
@@ -185,7 +247,7 @@ export function storeCategories(products: StoreProduct[]): StoreCategory[] {
  * One listed product by its store slug. Falls back to matching the derived slug
  * so an item that has never been given an explicit slug is still reachable.
  */
-export async function storeProductBySlug(slug: string): Promise<StoreProduct | null> {
+export const storeProductBySlug = cache(async function storeProductBySlug(slug: string): Promise<StoreProduct | null> {
   const clean = slug.trim().toLowerCase();
   if (!clean) return null;
   const direct = await prisma.catalogueItem
@@ -197,9 +259,11 @@ export async function storeProductBySlug(slug: string): Promise<StoreProduct | n
     return toStoreProduct(it, info?.available ?? null);
   }
   // No explicit slug set — scan the listed items for a matching derived slug.
+  // Memoised, so the product page's two calls (metadata, then the page) and its
+  // "related products" list share ONE catalogue read rather than three.
   const all = await listStoreProducts();
   return all.find((p) => p.slug === clean) ?? null;
-}
+});
 
 /**
  * Whether a storage path is one the public store is allowed to serve — the gate
