@@ -1,3 +1,57 @@
+## 2026-09-13 · The three Completed boxes stop shipping the whole archive every eight seconds
+
+Purchasing's *Completed department POs*, Requisitions' *Completed requisitions* and the settled
+*Completed cash vouchers* are archives: finished, collapsed by default, and read perhaps once a
+week. All three were sending every row they had ever held into the page — with each PO's lines,
+chain log, reconciliation, returns and check photos — on every render.
+
+And these are the three pages carrying `<AutoRefresh seconds={8}>`. So it was not one page load. It
+was the entire archive, every eight seconds, for every open tab, to draw a collapsed bar that says
+how many there are.
+
+### What a page load carries now
+
+The newest **25**, plus a `count()` so the bar can say *"25 of 62"* instead of pretending 25 is all
+of them. Measured on a 62-row archive: **73,771 bytes of finished purchase requests per render
+became 30,305** — but the size of the saving is not the point. The old read grew with the business
+for ever; this one does not grow at all.
+
+| /requisitions, per render | before | after |
+| --- | --- | --- |
+| `PurchaseRequest` rows | 85 | 49 |
+| rendered text in the box | 81,070 chars | 32,755 |
+
+### "Show all" is a link, not a fetch
+
+`?completed=all` re-renders the same server component with the limit lifted. That is not laziness:
+these rows are built with the viewer's roles, the names behind each step, the voucher numbers and
+the supplier terms folded in, and a second builder inside a "load more" action would be a second
+copy of that context to keep in step — the exact shape of the permission bug in CLAUDE.md. There is
+one builder. The page already refreshes on a timer, so an expanded archive refreshes with it.
+
+It loads the REST, not the next 25, because each box sits under a search box that filters what the
+page loaded. A half-loaded list behind a search box answers *"no matches"* when it means *"not here
+yet"* — so when anything is unloaded, the empty state says **"among the ones loaded"** and the
+control is right there.
+
+### Two things that must not fall off the end
+
+- **A completed row that isn't really finished.** A COMPLETED purchase request still carrying an
+  unresolved supplier return stays in the tabs with its buttons live. Those are fetched in full,
+  whatever the page limit, by the only condition SQL can test — *it has returns* — and the
+  unresolved ones are unioned back in. Which also makes the box's total exact: COMPLETED, less the
+  ones still in the tabs.
+- **A notification that deep-links to an old row.** `?req=` / `?id=` counts as "show all", so a
+  notification never lands on an empty box. Verified against the oldest row in a 62-row archive:
+  the box opens, the card is there.
+
+### Verified
+
+Four pages across seven roles, before and after on the same 62-row archive: the ONLY difference
+anywhere is the bar — `COMPLETED DEPARTMENT POS (62)` → `(25 OF 62)`. With `?completed=all` the box
+is byte-identical to what it was. Role-harness grid unchanged. On an install with fewer than 25
+completed rows, nothing changes at all: the count reads the same and the control does not render.
+
 ## 2026-09-13 · `include` was fetching whole orders to print a quote number
 
 Five reads, on four screens, that asked Prisma for a RELATION and got every column of it. The

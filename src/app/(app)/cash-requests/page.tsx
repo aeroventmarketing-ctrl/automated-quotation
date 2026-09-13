@@ -8,11 +8,14 @@ import { buildCashRequestRow, type CashRequestLike } from "@/lib/cash-request-ro
 import type { CashActor } from "@/lib/cash-request";
 import { CashRequestForm } from "./cash-request-form";
 import { CashRequestList } from "./cash-request-list";
+import { COMPLETED_PAGE, wantsAllCompleted } from "@/lib/completed-page";
 
 export const dynamic = "force-dynamic";
 
-export default async function CashRequestsPage({ searchParams }: { searchParams?: Promise<{ id?: string }> }) {
-  const highlightId = (await searchParams)?.id;
+export default async function CashRequestsPage({ searchParams }: { searchParams?: Promise<{ id?: string; completed?: string }> }) {
+  const sp = await searchParams;
+  const highlightId = sp?.id;
+  const allCompleted = wantsAllCompleted(sp, highlightId);
   const [viewer, assignments] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   if (!viewer) return null;
   const admin = isAdmin(viewer);
@@ -39,16 +42,31 @@ export default async function CashRequestsPage({ searchParams }: { searchParams?
   };
 
   let rows: ReturnType<typeof buildCashRequestRow>[] = [];
+  let completedTotal = 0;
   let tableMissing = false;
   try {
-    const [requests, allUsers] = await Promise.all([
+    // Live requests and settled ones are fetched separately so the settled
+    // archive — the collapsed "Completed cash vouchers" box — can be paged
+    // without ever squeezing a live request out of the list. `SETTLED` is the
+    // whole of the completed bucket (`cashBucket`), so this split is exactly the
+    // one the list makes below, made in SQL instead.
+    const scope = finance ? {} : { requestedById: viewer.id };
+    const [live, settled, settledTotal, allUsers] = await Promise.all([
       prisma.cashRequest.findMany({
-        where: finance ? {} : { requestedById: viewer.id },
+        where: { ...scope, status: { not: "SETTLED" } },
         orderBy: { createdAt: "desc" },
         take: 100,
       }),
+      prisma.cashRequest.findMany({
+        where: { ...scope, status: "SETTLED" },
+        orderBy: { createdAt: "desc" },
+        ...(allCompleted ? {} : { take: COMPLETED_PAGE }),
+      }),
+      prisma.cashRequest.count({ where: { ...scope, status: "SETTLED" } }),
       prisma.user.findMany({ select: { id: true, name: true } }),
     ]);
+    completedTotal = settledTotal;
+    const requests = [...live, ...settled];
     allUsers.forEach((u) => userName.set(u.id, u.name));
     rows = requests.map((r) =>
       buildCashRequestRow(r as CashRequestLike, {
@@ -81,7 +99,7 @@ export default async function CashRequestsPage({ searchParams }: { searchParams?
         {tableMissing ? (
           <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Cash requests aren&apos;t set up yet — run the database migration.</CardContent></Card>
         ) : (
-          <Card><CardContent className="pt-6"><CashRequestList rows={rows} highlightId={highlightId} /></CardContent></Card>
+          <Card><CardContent className="pt-6"><CashRequestList rows={rows} highlightId={highlightId} completedTotal={completedTotal} /></CardContent></Card>
         )}
       </div>
     </div>
