@@ -49,3 +49,40 @@ export const COMPLETED_PAGE = 25;
 export function wantsAllCompleted(sp: { completed?: string } | undefined, highlightId?: string): boolean {
   return sp?.completed === "all" || !!highlightId;
 }
+
+/**
+ * Which orders' purchase chains the Purchasing workspace loads.
+ *
+ * The workspace shows a chain per order, and every request ever raised against
+ * an order stayed on it for ever — a page that grew with the business, on an
+ * eight-second timer. Finished chains never change again, and each order's own
+ * page (Phase 4) carries its chain in full regardless, so the workspace pages
+ * them.
+ *
+ * The rule, and the two halves that keep the live workspace exactly as it was:
+ *
+ *  1. an order with ANYTHING still moving is always loaded, at any age;
+ *  2. and when it is, it is loaded WHOLE — its finished requests come too, so a
+ *     chain never renders with a gap in it;
+ *  3. only orders where every request is terminal can be paged out, newest kept.
+ *
+ * @param liveOrderIds        orders with at least one request still moving.
+ * @param finishedOrderIds    every order that has finished requests, newest first.
+ * @param all                 `?completed=all` (or a deep link): load everything.
+ */
+export function purchasingOrdersToLoad(
+  liveOrderIds: readonly string[],
+  finishedOrderIds: readonly string[],
+  all: boolean,
+): { orderIds: string[]; finishedShown: number; finishedTotal: number } {
+  const live = new Set(liveOrderIds);
+  // An order that also has something in flight is not "finished" — rule 1 has it
+  // already, and counting it here would both double it and overstate the total.
+  const finishedOnly = finishedOrderIds.filter((id) => !live.has(id));
+  const shown = all ? finishedOnly : finishedOnly.slice(0, COMPLETED_PAGE);
+  return {
+    orderIds: [...live, ...shown],
+    finishedShown: shown.length,
+    finishedTotal: finishedOnly.length,
+  };
+}

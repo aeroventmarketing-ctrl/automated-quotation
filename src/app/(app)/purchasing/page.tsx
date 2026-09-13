@@ -16,7 +16,7 @@ import { canRaiseReturnAt, hasUnresolvedReturn, coercePurchaseReturns } from "@/
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPurchasePrefix, withSpecDetail } from "@/lib/purchase-order";
 import { orderBoughtInLines } from "@/lib/department-pnl";
-import { poBatchId } from "@/lib/purchase-batch";
+import { poBatchId, poMemberIds } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY, matchKey } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
@@ -25,7 +25,7 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
-import { COMPLETED_PAGE, wantsAllCompleted } from "@/lib/completed-page";
+import { COMPLETED_PAGE, wantsAllCompleted, purchasingOrdersToLoad } from "@/lib/completed-page";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +108,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   let deptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let completedDeptRows: ReturnType<typeof buildPurchaseChainRow>[] = [];
   let completedDeptTotal = 0;
+  let finishedOrdersShown = 0;
+  let finishedOrdersTotal = 0;
   let tableMissing = false;
 
   // Which supplier companies give us payment terms — i.e. we pay them later, by
@@ -172,16 +174,74 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   for (const [n, c] of costByName) if (!catalogPrices[n]) catalogPrices[n] = { [REF_PRICE_KEY]: c };
 
   try {
-    const [orderPrs, deptPrs] = await Promise.all([
+    // Order-linked requests: everything still moving, plus a PAGE of the orders
+    // whose purchasing is finished.
+    //
+    // This read had no status filter and no limit: every purchase request ever
+    // raised against an order, whole — its PO lines, chain log, reconciliation,
+    // returns and check photos — on a page that refreshes every eight seconds.
+    // A finished purchase chain never changes again, and the order's own page
+    // (Phase 4) shows it in full for ever, so the workspace does not have to
+    // carry all of them to stay complete.
+    //
+    // Three rules decide what is loaded, and the first two are what keep the
+    // live workspace exactly as it was:
+    //
+    //  1. **Every request that is still moving**, at any age. Terminal means
+    //     COMPLETED / REJECTED / CANCELLED — nothing else can leave the chain.
+    //  2. **Every request of an order that has one.** An order with three
+    //     finished POs and one in flight shows all four, exactly as before:
+    //     a chain with a gap in it would be worse than a missing chain.
+    //  3. Then the newest `COMPLETED_PAGE` orders whose purchasing is entirely
+    //     finished — with `?completed=all` (and any deep link) loading the lot.
+    const TERMINAL: PRStatus[] = ["COMPLETED", "REJECTED", "CANCELLED"];
+    const [liveOrderPrs, finishedGroups, deptPrs] = await Promise.all([
       prisma.purchaseRequest.findMany({
-        where: { quotationId: { not: null } },
+        where: { quotationId: { not: null }, NOT: { status: { in: TERMINAL } } },
         orderBy: { createdAt: "desc" },
+      }),
+      // One small row per order that has any finished purchasing: the id and when
+      // it last moved. This is the index the page is paged by — never the rows.
+      prisma.purchaseRequest.groupBy({
+        by: ["quotationId"],
+        where: { quotationId: { not: null }, status: { in: TERMINAL } },
+        _max: { createdAt: true },
+        orderBy: { _max: { createdAt: "desc" } },
       }),
       prisma.purchaseRequest.findMany({
         where: { kind: "department", status: { notIn: ["COMPLETED"] } },
         orderBy: { createdAt: "desc" },
       }),
     ]);
+    const liveQuoteIds = [...new Set(liveOrderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
+    // Which orders to load — the rule, and why it cannot hide live work, is in
+    // `purchasingOrdersToLoad` with its tests.
+    const picked = purchasingOrdersToLoad(
+      liveQuoteIds,
+      finishedGroups.map((g) => g.quotationId).filter((q): q is string => !!q),
+      allCompleted,
+    );
+    const showOrderIds = picked.orderIds;
+    finishedOrdersShown = picked.finishedShown;
+    finishedOrdersTotal = picked.finishedTotal;
+    const finishedPrs = showOrderIds.length
+      ? await prisma.purchaseRequest.findMany({
+          where: { quotationId: { in: showOrderIds }, status: { in: TERMINAL } },
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+    // A combined PO spans several requests and can span several orders, so a
+    // member of one that is on this page may belong to an order that is not.
+    // Each member carries the whole membership (`po.memberPrIds`), so the gaps
+    // are exactly nameable — and a combined PO card missing a member would
+    // quietly understate what was ordered.
+    const loaded = new Map([...liveOrderPrs, ...finishedPrs].map((pr) => [pr.id, pr] as const));
+    const missingMembers = [...new Set([...loaded.values()].flatMap((pr) => poMemberIds(pr.po)))].filter((id) => !loaded.has(id));
+    const memberPrs = missingMembers.length
+      ? await prisma.purchaseRequest.findMany({ where: { id: { in: missingMembers } } })
+      : [];
+    const orderPrs = [...new Map([...loaded, ...memberPrs.map((pr) => [pr.id, pr] as const)]).values()]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.id.localeCompare(a.id));
     const quotationIds = [...new Set(orderPrs.map((p) => p.quotationId).filter((q): q is string => !!q))];
     const quotations = quotationIds.length
       ? await prisma.quotation.findMany({
@@ -508,6 +568,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               deptRows={deptRows}
               completedDeptRows={completedDeptRows}
               completedDeptTotal={completedDeptTotal}
+              finishedOrdersShown={finishedOrdersShown}
+              finishedOrdersTotal={finishedOrdersTotal}
               replenRows={replenRows}
               replenScan={replenScan}
               highlightReq={highlightReq}

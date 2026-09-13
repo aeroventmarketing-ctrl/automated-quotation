@@ -14,7 +14,18 @@ import { usePathname, useSearchParams } from "next/navigation";
  * Renders nothing when the page already holds everything, so the control simply
  * is not there on a young install with nine completed rows.
  */
-export function ShowAllCompleted({ shown, total, className = "" }: { shown: number; total: number; className?: string }) {
+export function ShowAllCompleted({
+  shown,
+  total,
+  noun,
+  className = "",
+}: {
+  shown: number;
+  total: number;
+  /** What is being counted, when the control sits outside a box that says so. */
+  noun?: string;
+  className?: string;
+}) {
   const pathname = usePathname();
   const params = useSearchParams();
   if (total <= shown) return null;
@@ -27,7 +38,7 @@ export function ShowAllCompleted({ shown, total, className = "" }: { shown: numb
       prefetch={false}
       className={`inline-block rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent ${className}`}
     >
-      Show all {total} — the {shown} most recent are loaded
+      Show all {total}{noun ? ` ${noun}` : ""} — the {shown} most recent are loaded
     </Link>
   );
 }

@@ -104,6 +104,8 @@ export function PurchasingWorkspace({
   deptRows = [],
   completedDeptRows = [],
   completedDeptTotal,
+  finishedOrdersShown = 0,
+  finishedOrdersTotal = 0,
   replenRows = [],
   replenScan = [],
   showAmounts = true,
@@ -135,6 +137,10 @@ export function PurchasingWorkspace({
   completedDeptRows?: PurchaseChainRow[];
   /** How many there are in total; the page carries only the newest page of them. */
   completedDeptTotal?: number;
+  /** Orders whose purchasing is entirely finished: how many are loaded, and how
+   *  many there are. Orders with anything still moving are always loaded. */
+  finishedOrdersShown?: number;
+  finishedOrdersTotal?: number;
   /** Replenishment (stock top-up) requests — render through the full chain, same tab filter. */
   replenRows?: PurchaseChainRow[];
   /** Replenishments ready to receive — feed the scan-to-receive quick box. */
@@ -536,6 +542,13 @@ export function PurchasingWorkspace({
       {nothing && (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No {tab === "all" ? "" : tab + " "}purchase orders.</CardContent></Card>
       )}
+
+      {/* Orders whose purchasing is entirely finished are paged: the page carries
+          the newest of them, and the rest are one click away. Anything still
+          moving is always here, at any age — so this control can only ever be
+          hiding chains where every request is completed, rejected or cancelled.
+          (Each order's own page keeps its full chain regardless.) */}
+      <ShowAllCompleted shown={finishedOrdersShown} total={finishedOrdersTotal} noun="finished orders" className="ml-1" />
 
       {/* Department requisitions — share the same tab filter as the order material
           requests, so switching to Rejected/Cancelled hides the open ones too. */}
