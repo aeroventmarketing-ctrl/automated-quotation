@@ -883,6 +883,11 @@ model Schedule {
 
   @@index([startAt])
   @@index([status])
+  // The reminder poll asks for recurring events by name — they are the ones a
+  // date window cannot bound (a weekly series from last year still fires this
+  // week). `recurrence` leads because it is the selective half: nearly every row
+  // is null there. See migration 0054.
+  @@index([recurrence, status])
 }
 
 /**

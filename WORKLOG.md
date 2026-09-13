@@ -1,3 +1,62 @@
+## 2026-09-14 · The reminder poll stops reading three years of calendar to draw one card
+
+The item parked as "a `Schedule` index" turned out to be two findings, and the index was the smaller
+of them.
+
+### The query had only one end
+
+`/api/calendar/reminders` is polled by every visible tab, once a minute. It asked for approved events
+with a reminder set and `startAt <= now + 3 days` — an upper bound and **no lower one** — so it read
+every such event ever recorded, whole rows, and then the loop below kept the handful that can
+actually fire.
+
+A non-recurring event fires only while `now <= startAt + 30 min`. Anything that started more than
+half an hour ago is already past firing, so the window `expandOccurrences` is given — 36 hours back —
+is far wider than the query needs, and now bounds it at both ends.
+
+The columns were wrong too. A `Schedule` row carries the event's details, to-do list, attachments and
+its whole comment thread; the reminder shows a title, a time, a place. It now selects the eleven
+fields the answer is made of, and builds them directly rather than through `buildScheduleView`, which
+exists to draw a schedule CARD — permissions, comments, to-dos — and none of that is rendered here.
+
+Measured on a three-year calendar of 3,000 events (2,443 of them approved with a reminder):
+
+| per poll | before | after |
+| --- | --- | --- |
+| rows | 1,625 | 14 |
+| bytes | **2,100,558** | **2,457** |
+| shared buffers | 265 | 12 |
+
+Two megabytes a minute, per visible tab, to decide whether to show a card.
+
+### The index, and the one I would have shipped
+
+The parked idea was an index on `(status, startAt)`. **It would have been pointless.** Once the query
+is bounded at both ends, the existing `Schedule_startAt_idx` already serves it: an index scan, seven
+buffers, twelve rows examined. Adding `status` would have removed three of them.
+
+The query that *does* need an index is the other one. Recurring events cannot be bounded by date — a
+weekly series that began last year still fires this week — so they are fetched by name, and with no
+index for that Postgres read the whole table to find six rows:
+
+```
+before   Seq Scan, 3,000 rows examined, 375 buffers, 1.298 ms
+after    Index Scan,                      2 buffers, 0.064 ms
+```
+
+Migration **0054** adds `Schedule(recurrence, status)`. `recurrence` leads because it is the selective
+half — nearly every row is null there, and a b-tree indexes nulls, so `IS NOT NULL` becomes a range at
+the end of the index instead of a filter over the table. It is declared in `schema.prisma` too, so
+Prisma and the database do not drift.
+
+### Verified
+
+Eight events seeded around "now" — one due in ten minutes, one two hours out, one that began twenty
+minutes ago, one two hours ago, one **forty hours** ago (the row the new lower bound stops fetching),
+one whose attendees do not include the viewer, one still pending approval, and a weekly series whose
+next occurrence is fifteen minutes away. Before and after, the route answers with exactly the same
+three: the one just begun, the one due soon, and the weekly occurrence.
+
 ## 2026-09-14 · The Purchasing workspace stops carrying every purchase chain ever raised
 
 The sibling of yesterday's Completed boxes, and the last unbounded read on that page: every purchase
