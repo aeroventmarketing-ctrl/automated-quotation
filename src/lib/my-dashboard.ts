@@ -379,7 +379,16 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   try {
     const prs = await prisma.purchaseRequest.findMany({
       where: { status: { notIn: ["COMPLETED", "REJECTED", "CANCELLED"] } },
-      include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+      // Three fields of the order, not the order. `include` on a relation loads
+      // every column of it — so this was fetching each linked quotation whole,
+      // `classification` and all (the same kilobytes three pull requests have
+      // just been spent keeping off the wire), plus the entire Inquiry and the
+      // entire Customer row, to print a quote number and a company name.
+      include: {
+        quotation: {
+          select: { quoteNumber: true, createdAt: true, inquiry: { select: { customer: { select: { company: true } } } } },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
     for (const pr of prs) {
@@ -492,7 +501,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       if (termsCompanies.size > 0) {
         const prs = await prisma.purchaseRequest.findMany({
           where: { status: { notIn: ["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "REJECTED", "CANCELLED"] } },
-          include: { quotation: { include: { inquiry: { include: { customer: true } } } } },
+          // The quote number and the company, as above — not the whole order.
+          include: {
+            quotation: {
+              select: { quoteNumber: true, inquiry: { select: { customer: { select: { company: true } } } } },
+            },
+          },
           orderBy: { createdAt: "desc" },
         });
         // A combined PO's members all carry the same `po` JSON, and the check
@@ -631,7 +645,21 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     try {
       const q = await prisma.quotation.findMany({
         where: { status: "PENDING_APPROVAL" },
-        include: { inquiry: { include: { customer: true } } },
+        // The six fields the task below reads. `classification` stays — these are
+        // drafts awaiting approval, not confirmed orders, so the slimmed map does
+        // not cover them, and `payableTotal` reads the mark-up / discount and the
+        // VAT-exempt total out of it.
+        select: {
+          id: true,
+          quoteNumber: true,
+          currency: true,
+          createdAt: true,
+          total: true,
+          discountPct: true,
+          vatMode: true,
+          classification: true,
+          inquiry: { select: { customer: { select: { company: true } } } },
+        },
         orderBy: { createdAt: "desc" },
         take: 100,
       });

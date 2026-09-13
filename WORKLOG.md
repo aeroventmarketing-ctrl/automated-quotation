@@ -1,3 +1,52 @@
+## 2026-09-13 · `include` was fetching whole orders to print a quote number
+
+Five reads, on four screens, that asked Prisma for a RELATION and got every column of it. The
+column that matters is the one three pull requests have just been spent keeping off the wire:
+`classification` rides along on any whole-row load of a `Quotation`, and nothing here opens it.
+
+| projection | bytes per row |
+| --- | --- |
+| whole `Quotation` row | **12,027** |
+| what the quotations list shows | **169** |
+| what a purchase request needs of its order (number + date) | **66** |
+| whole `Customer` row | 134 |
+| the company name | 34 |
+| whole `Inquiry` row | 228 |
+| the `customerId` | 39 |
+
+### What changed
+
+- **My Dashboard**, twice — every open purchase request was loading its linked order whole, plus
+  the entire `Inquiry` and the entire `Customer`, to show a quote number and a company.
+- **My Dashboard**, the quotations-awaiting-approval task — a hundred rows, whole, for six fields.
+  `classification` stays here: these are drafts, so the slimmed map (which covers confirmed orders)
+  does not reach them, and `payableTotal` reads the mark-up and VAT-exempt total out of it.
+- **The quotations list** — fifty whole quotations a page, each with a whole `Customer` and the
+  preparer's whole `User` row, mapped immediately onto ten fields. 601 kB a page became 8.5 kB.
+- **The Purchasing workspace** — whole orders, whole customers, and every column of every line item
+  including `unitPrice` and `lineTotal`, which that screen has no business showing. It reads three
+  item fields.
+- **The inquiries list** — the customer and the creator, whole, for a company and a name.
+
+### Measured, same rows, same data
+
+Running both projections against the same fixture: the quotations list's read costs **77 shared
+buffers before and 6 after** for its 21 rows — the difference is Postgres no longer going to TOAST
+for a column nobody reads. The same measurement through the page put it at 42 → 10.
+
+### Verified
+
+Six pages across seven roles, captured before and after on the same seed: **identical**, down to the
+same 130,750 bytes. The role-harness grid is unchanged. The only difference is the familiar
+tie-order reshuffle of orders sharing a `createdAt`, which moves between seeds and not between code
+versions.
+
+### Left alone
+
+`follow-ups` loads whole customers too, but it genuinely shows the company, contact name, email and
+phone — narrowing it would save the quotation columns only, on a page nobody sits on. Not worth the
+diff.
+
 ## 2026-09-13 · The departmental P&L stops reading every quotation, and every line item, to book one month
 
 The eighth and last reader of the whole `classification` column — and the one I had written off as

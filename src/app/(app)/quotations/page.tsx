@@ -70,7 +70,22 @@ export default async function QuotationsPage({
     prisma.quotation.findMany({
       where,
       orderBy: orderByFor(sort, dir),
-      include: { inquiry: { include: { customer: true } }, preparedBy: true },
+      // Exactly the columns `rows` below maps, and no relation loaded whole.
+      // `include` fetched every column of the quotation — `classification`
+      // included, kilobytes of revision history per row, fifty rows a page — plus
+      // the entire Customer and the entire preparer's User record, to print a
+      // company name and a name. The list never opens any of it.
+      select: {
+        id: true,
+        quoteNumber: true,
+        total: true,
+        subtotal: true, // the duplicate-flag candidate filter below
+        currency: true,
+        createdAt: true,
+        status: true,
+        inquiry: { select: { customerId: true, customer: { select: { company: true } } } },
+        preparedBy: { select: { name: true } },
+      },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),

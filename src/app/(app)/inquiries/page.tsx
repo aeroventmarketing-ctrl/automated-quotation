@@ -79,8 +79,9 @@ export default async function InquiriesPage({
       where,
       orderBy: orderByFor(sort, dir),
       include: {
-        customer: true,
-        createdBy: true,
+        // The list shows a company and a name; it was loading both rows whole.
+        customer: { select: { company: true } },
+        createdBy: { select: { name: true } },
         _count: { select: { items: true, quotations: true } },
         // For the "won amount": the payable total of each confirmed (won) quotation.
         quotations: { select: { total: true, discountPct: true, vatMode: true, currency: true, classification: true } },
