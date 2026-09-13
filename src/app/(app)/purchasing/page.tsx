@@ -182,7 +182,20 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     const quotations = quotationIds.length
       ? await prisma.quotation.findMany({
           where: { id: { in: quotationIds } },
-          include: { inquiry: { include: { customer: true } }, items: true },
+          // What this page reads off an order: its number, the client's company,
+          // the MRF form numbers out of `classification`, and the three item
+          // fields `orderBoughtInLines` takes. `include` was loading every column
+          // of the quotation, every column of the Inquiry and Customer, and every
+          // column of every line item — including `unitPrice` and `lineTotal`,
+          // which the Purchasing workspace has no business showing.
+          select: {
+            id: true,
+            quoteNumber: true,
+            projectName: true,
+            classification: true,
+            inquiry: { select: { projectName: true, customer: { select: { company: true } } } },
+            items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
+          },
         })
       : [];
     const quoteById = new Map(quotations.map((q) => [q.id, q]));
