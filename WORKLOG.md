@@ -1,3 +1,61 @@
+## 2026-09-15 · The testing stage stays quiet, even when someone touches it in September
+
+The owner: *"Transactions before August 1, 2026 should not give any alarm or notifications. Date
+before the said day is a testing stage."*
+
+The switch for this already exists, and its default is already that moment — `alerts_go_live`,
+1 Aug 2026 05:00 Manila. **No new setting, and nothing to turn on.** What was wrong is which
+timestamp each alert handed it.
+
+### Every alert has two dates, and they were asking about the wrong one
+
+An alert knows when the thing HAPPENED and when someone last TOUCHED it. The approver alarm asked
+about the second:
+
+```ts
+const pendingSince = stampTimes.length ? [...stampTimes].sort().at(-1)! : q.createdAt.toISOString();
+if (!alertPasses(pendingSince, golive)) continue;
+```
+
+`pendingSince` is the most recent approval stamp. So a practice order from July sits silent — until
+somebody presses one button on it in September, at which point it is "pending since September" and
+starts ringing. The gate was working perfectly on a question nobody meant to ask.
+
+Demonstrated on the harness before changing anything, with a July order carrying a September stamp:
+
+| approver alarm, Engineer | before | after |
+| --- | --- | --- |
+| `2026 - HARNESSDELIVERED` (raised 5 Sep) | rings | rings |
+| `2026 - JULYTEST` (raised 20 Jul, stamped 10 Sep) | **rings** | silent |
+
+### What changed
+
+The alarm now asks about the ORDER as well as the step. And on My Dashboard, the tasks and feeds
+whose `since` is a later stamp than the record itself now carry that record's own date:
+
+- purchase-request tasks (the request's date, not the step's)
+- supplier-return tasks and the returns feed (a return stamped after launch on a July purchase)
+- the missing-check chase (`since` is the voucher date, months after the purchase)
+- check clearing (`since` is the clearing date — a test PO's check can clear long after launch)
+- cash requests, commission payouts (the payout date is months after the sale), stock actions
+- the Materials feed (an MRF raised on a July order and released in September)
+
+`MyTask.createdAt` already existed for exactly this, documented as *"a pre-launch order stays quiet
+even after a post-launch stage stamp bumps `since`"*. It was simply not filled in on most surfaces.
+
+### The rule is pinned
+
+`alert-golive.test.ts` asserts the default moment really is 1 Aug 2026 in Manila, that a July
+transaction never passes, that a September stamp on a July transaction fails when both dates are
+asked about, and — the reason the fix was needed at all — that **a missing timestamp is a free pass**.
+That last one is why a surface holding a date must hand it over: `undefined` does not suppress
+anything.
+
+### Worth knowing
+
+This silences pre-August transactions completely, on the owner's word that everything before that
+date is practice. A real order raised in July and still in flight would go quiet too.
+
 ## 2026-09-15 · The PO refused the save for a good reason and told nobody
 
 Reported from Purchasing: **Save Changes** on a purchase order answers with

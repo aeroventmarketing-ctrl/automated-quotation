@@ -158,6 +158,16 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     // Alerts go-live gate: silent before launch; afterwards only approvals that
     // entered their step after the go-live moment ring (pre-launch backlog stays quiet).
     if (!alertPasses(pendingSince, golive)) continue;
+    // …and the ORDER's own date, not just the step's. The owner, 15 September
+    // 2026: *"Transactions before August 1, 2026 should not give any alarm or
+    // notifications. Date before the said day is a testing stage."*
+    //
+    // `pendingSince` is the most recent approval stamp, so a test order from the
+    // practice weeks starts ringing the moment anyone touches it — press one
+    // button on a July order in September and it is "pending since September".
+    // An order raised during the testing stage is test data whatever happens to
+    // it later, so the gate asks when the ORDER was raised as well.
+    if (!alertPasses(q.createdAt, golive)) continue;
 
     out.push({
       id: q.id,
