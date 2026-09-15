@@ -1,3 +1,111 @@
+## 2026-09-14 · The reminder poll stops reading three years of calendar to draw one card
+
+The item parked as "a `Schedule` index" turned out to be two findings, and the index was the smaller
+of them.
+
+### The query had only one end
+
+`/api/calendar/reminders` is polled by every visible tab, once a minute. It asked for approved events
+with a reminder set and `startAt <= now + 3 days` — an upper bound and **no lower one** — so it read
+every such event ever recorded, whole rows, and then the loop below kept the handful that can
+actually fire.
+
+A non-recurring event fires only while `now <= startAt + 30 min`. Anything that started more than
+half an hour ago is already past firing, so the window `expandOccurrences` is given — 36 hours back —
+is far wider than the query needs, and now bounds it at both ends.
+
+The columns were wrong too. A `Schedule` row carries the event's details, to-do list, attachments and
+its whole comment thread; the reminder shows a title, a time, a place. It now selects the eleven
+fields the answer is made of, and builds them directly rather than through `buildScheduleView`, which
+exists to draw a schedule CARD — permissions, comments, to-dos — and none of that is rendered here.
+
+Measured on a three-year calendar of 3,000 events (2,443 of them approved with a reminder):
+
+| per poll | before | after |
+| --- | --- | --- |
+| rows | 1,625 | 14 |
+| bytes | **2,100,558** | **2,457** |
+| shared buffers | 265 | 12 |
+
+Two megabytes a minute, per visible tab, to decide whether to show a card.
+
+### The index, and the one I would have shipped
+
+The parked idea was an index on `(status, startAt)`. **It would have been pointless.** Once the query
+is bounded at both ends, the existing `Schedule_startAt_idx` already serves it: an index scan, seven
+buffers, twelve rows examined. Adding `status` would have removed three of them.
+
+The query that *does* need an index is the other one. Recurring events cannot be bounded by date — a
+weekly series that began last year still fires this week — so they are fetched by name, and with no
+index for that Postgres read the whole table to find six rows:
+
+```
+before   Seq Scan, 3,000 rows examined, 375 buffers, 1.298 ms
+after    Index Scan,                      2 buffers, 0.064 ms
+```
+
+Migration **0054** adds `Schedule(recurrence, status)`. `recurrence` leads because it is the selective
+half — nearly every row is null there, and a b-tree indexes nulls, so `IS NOT NULL` becomes a range at
+the end of the index instead of a filter over the table. It is declared in `schema.prisma` too, so
+Prisma and the database do not drift.
+
+### Verified
+
+Eight events seeded around "now" — one due in ten minutes, one two hours out, one that began twenty
+minutes ago, one two hours ago, one **forty hours** ago (the row the new lower bound stops fetching),
+one whose attendees do not include the viewer, one still pending approval, and a weekly series whose
+next occurrence is fifteen minutes away. Before and after, the route answers with exactly the same
+three: the one just begun, the one due soon, and the weekly occurrence.
+
+## 2026-09-14 · The Purchasing workspace stops carrying every purchase chain ever raised
+
+The sibling of yesterday's Completed boxes, and the last unbounded read on that page: every purchase
+request ever raised against an order — no status filter, no limit, whole rows — on a page that
+refreshes every eight seconds. A finished purchase chain never changes again, and the order's own
+page (Phase 4) carries it in full for ever, so the workspace does not have to.
+
+### What is loaded now
+
+1. **Every request still moving**, at any age. Terminal is COMPLETED / REJECTED / CANCELLED; nothing
+   else leaves the chain.
+2. **Every request of an order that has one.** An order with three finished POs and one in flight
+   shows all four, exactly as before — a chain with a hole in it would be worse than a missing chain.
+3. Then the newest **25** orders whose purchasing is *entirely* finished, with `?completed=all` —
+   and any deep link — loading the lot. Same control, same parameter as the Completed boxes.
+
+Plus one guard that is easy to miss: **a combined PO can span orders**, so a member of a PO on this
+page may sit on an order that is not. Each member carries the whole membership (`po.memberPrIds`),
+so the gaps are exactly nameable and are fetched. A combined-PO card that quietly dropped a member
+would understate what was ordered.
+
+The rule lives in `purchasingOrdersToLoad` with tests, not inline in the page — the risky part is
+*which orders load*, and the failure it must never have is a live order paged out with the archive.
+
+### Measured, and honestly
+
+On a fixture of 32 order-linked requests: they are **31,727 bytes** as whole rows, ~991 bytes each.
+The index that replaces them — one row per finished order, its id and when it last moved — is **62
+bytes** an order.
+
+So the page no longer grows at a kilobyte per finished order; it grows at sixty-two bytes, and the
+chains themselves are capped at 25. This fixture is barely above the page size, so the saving *here*
+is small; projected onto a workspace with 300 finished orders it is roughly 297 kB per render
+becoming 44 kB, and at a thousand, 991 kB becoming 87 kB. Projections, clearly marked as such — what
+is measured is the per-row cost and the shape of the growth.
+
+### What changes on screen
+
+The tab counts now describe what is on the page: with 30 finished orders and 25 loaded, Budgeted
+reads 45 rather than 49, and the control below says *"Show all 30 finished orders — the 25 most
+recent are loaded"*. Pressing it restores both.
+
+Verified on a fixture built to catch the three ways this could go wrong — 30 finished orders, one
+order carrying both a live and a finished request, and a combined PO spanning the newest and the
+oldest seeded order. The live order shows its finished sibling; the combined PO shows both members
+(which is what pulls the oldest order back onto the page, 26 orders loaded rather than 25); and with
+`?completed=all` the page is exactly what it was. Across four pages and seven roles the only
+differences anywhere are those two tab counts and the new control.
+
 ## 2026-09-13 · The three Completed boxes stop shipping the whole archive every eight seconds
 
 Purchasing's *Completed department POs*, Requisitions' *Completed requisitions* and the settled
