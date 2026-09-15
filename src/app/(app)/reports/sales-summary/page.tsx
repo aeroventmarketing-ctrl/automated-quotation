@@ -58,7 +58,7 @@ export default async function SalesSummaryPage({
               </thead>
               <tbody>
                 {report.rows.map((r) => (
-                  <tr key={r.quotationId} className="border-t border-gray-100 align-top">
+                  <tr key={r.id} className="border-t border-gray-100 align-top">
                     <td className="py-1 pr-2 whitespace-nowrap">{formatDate(r.dateISO)}</td>
                     <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap">{dash(r.siNumber)}</td>
                     <td className="py-1 px-2 font-mono text-[11px] whitespace-nowrap">{dash(r.crNumber)}</td>

@@ -51,7 +51,7 @@ export function SalesSummaryPdf({ report }: { report: SalesSummary }) {
               <Text style={[s.cAddr, s.h]}>Company Address</Text>
             </View>
             {report.rows.map((r) => (
-              <View style={s.row} key={r.quotationId} wrap={false}>
+              <View style={s.row} key={r.id} wrap={false}>
                 <Text style={s.cDate}>{day(r.dateISO)}</Text>
                 <Text style={s.cSi}>{dash(r.siNumber)}</Text>
                 <Text style={s.cCr}>{dash(r.crNumber)}</Text>

@@ -20,6 +20,8 @@ import {
   isCashMethod,
   PAYMENT_METHODS,
   type CounterSaleVatMode,
+  unlinkedCounterLines,
+  unlinkedCounterLineMessage,
 } from "@/lib/counter-sale";
 import type { SaleDoc, SalePayment } from "@/lib/sale";
 
@@ -52,8 +54,14 @@ export interface CounterSaleInput {
   items: CounterSaleItemInput[];
 }
 
-function cleanItems(items: CounterSaleItemInput[]): { stockItemId: string | null; description: string; unit: string; qty: number; unitPrice: number; lineTotal: number; sortOrder: number }[] {
-  return (items ?? [])
+/**
+ * The lines as they will be stored — and the one rule they must all pass:
+ * **every line is an inventory item** (`unlinkedCounterLines`). Enforced here
+ * rather than only in the form, because a form is a courtesy and this is what
+ * makes "stock is deducted after you complete the sale" true.
+ */
+function cleanItems(items: CounterSaleItemInput[]): { stockItemId: string; description: string; unit: string; qty: number; unitPrice: number; lineTotal: number; sortOrder: number }[] {
+  const kept = (items ?? [])
     .map((it) => ({
       stockItemId: it.stockItemId || null,
       description: (it.description ?? "").trim(),
@@ -61,8 +69,17 @@ function cleanItems(items: CounterSaleItemInput[]): { stockItemId: string | null
       qty: num(it.qty),
       unitPrice: num(it.unitPrice),
     }))
-    .filter((it) => it.description !== "" && it.qty > 0)
-    .map((it, i) => ({ ...it, lineTotal: Math.round(it.qty * it.unitPrice * 100) / 100, sortOrder: i }));
+    .filter((it) => it.description !== "" && it.qty > 0);
+
+  const unlinked = unlinkedCounterLines(kept);
+  if (unlinked.length > 0) throw new Error(unlinkedCounterLineMessage(unlinked));
+
+  return kept.map((it, i) => ({
+    ...it,
+    stockItemId: it.stockItemId as string,
+    lineTotal: Math.round(it.qty * it.unitPrice * 100) / 100,
+    sortOrder: i,
+  }));
 }
 
 /** Resolve the customer id — reuse an existing one or create a new lightweight record. */

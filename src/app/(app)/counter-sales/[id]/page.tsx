@@ -52,6 +52,15 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
   });
   if (!sale) notFound();
 
+  // Only the admin edit needs these, and only an admin sees it.
+  const stockItems = admin
+    ? await prisma.stockItem.findMany({
+        where: { active: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true, unit: true, sellPrice: true, quantity: true },
+      }).catch(() => [])
+    : [];
+
   const status = sale.status as CounterSaleStatusKey;
   // The lines that bypass the warehouse — see `adhocLines`.
   const adhoc = adhocLines(sale.items.map((i) => ({ stockItemId: i.stockItemId, description: i.description, qty: Number(i.qty) })));
@@ -99,6 +108,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
       {admin && (
         <CounterSaleAdminEdit
           saleId={sale.id}
+          stockItems={stockItems.map((s) => ({ id: s.id, name: s.name, unit: s.unit, sellPrice: Number(s.sellPrice), quantity: Number(s.quantity) }))}
           initial={{
             vatMode,
             paymentMethod: sale.paymentMethod,
@@ -115,10 +125,15 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
           <CardHeader className="pb-2"><CardTitle className="text-sm">Items</CardTitle></CardHeader>
           <CardContent>
             {/* Which half of this sale touches the warehouse. A line only
-                deducts when its item was PICKED from the stock list, and the
-                picker defaults to "Ad-hoc / Not In Inventory" — so a typed line
-                sells the goods and leaves the on-hand untouched, silently. That
-                silence is what the owner reported as inventory "not deducting". */}
+                deducts when it carries an inventory item, and it used to be
+                possible to sell without one — the picker's default was "Ad-hoc /
+                Not In Inventory", so a typed line sold the goods and left the
+                on-hand untouched, silently. That silence is what the owner
+                reported as inventory "not deducting".
+
+                New sales can no longer do it (`unlinkedCounterLines`, enforced
+                on the server), so this banner is now about the sales recorded
+                BEFORE that rule — which still need someone to look at them. */}
             {adhoc.length > 0 && (
               <p className="mb-2 flex items-start gap-1.5 rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

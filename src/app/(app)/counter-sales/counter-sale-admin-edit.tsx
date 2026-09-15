@@ -6,10 +6,11 @@ import { Pencil, Trash2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { PAYMENT_METHODS, type CounterSaleVatMode } from "@/lib/counter-sale";
+import { PAYMENT_METHODS, unlinkedCounterLines, unlinkedCounterLineMessage, type CounterSaleVatMode } from "@/lib/counter-sale";
 import { adminEditCounterSale, adminDeleteCounterSale, type CounterSaleItemInput } from "./actions";
 
 interface EditLine { stockItemId: string | null; description: string; unit: string; qty: string; unitPrice: string }
+interface StockOpt { id: string; name: string; unit: string; sellPrice: number; quantity: number }
 
 /**
  * Admin-only edit / delete for a counter sale on ANY status. Edits the existing
@@ -20,8 +21,11 @@ interface EditLine { stockItemId: string | null; description: string; unit: stri
 export function CounterSaleAdminEdit({
   saleId,
   initial,
+  stockItems,
 }: {
   saleId: string;
+  /** Inventory to pick from — every line must be one of these. */
+  stockItems: StockOpt[];
   initial: {
     vatMode: CounterSaleVatMode;
     paymentMethod: string;
@@ -40,6 +44,17 @@ export function CounterSaleAdminEdit({
   const [err, setErr] = useState<string | null>(null);
 
   const setLine = (i: number, patch: Partial<EditLine>) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  const stockById = new Map(stockItems.map((s) => [s.id, s]));
+  /**
+   * Picking an item fills the line from inventory. A line with nothing picked
+   * cannot be saved — the owner's rule, and the reason a completed sale's edit
+   * always moves the same stock it claims to.
+   */
+  function pickStock(i: number, id: string) {
+    if (!id) { setLine(i, { stockItemId: null }); return; }
+    const s = stockById.get(id);
+    if (s) setLine(i, { stockItemId: id, description: s.name, unit: s.unit, unitPrice: s.sellPrice ? String(s.sellPrice) : "" });
+  }
   const num = (s: string) => { const n = Number((s || "").replace(/,/g, "")); return Number.isFinite(n) ? n : 0; };
 
   async function save() {
@@ -48,6 +63,8 @@ export function CounterSaleAdminEdit({
       .filter((l) => l.description.trim() && num(l.qty) > 0)
       .map((l) => ({ stockItemId: l.stockItemId, description: l.description.trim(), unit: l.unit || "pcs", qty: num(l.qty), unitPrice: num(l.unitPrice) }));
     if (items.length === 0) { setErr("Keep at least one item with a quantity."); return; }
+    const unlinked = unlinkedCounterLines(items);
+    if (unlinked.length > 0) { setErr(unlinkedCounterLineMessage(unlinked)); return; }
     setBusy(true);
     try {
       await adminEditCounterSale(saleId, { vatMode, paymentMethod, salespersonId: initial.salespersonId ?? undefined, notes, items });
@@ -90,18 +107,28 @@ export function CounterSaleAdminEdit({
       <div className="space-y-1.5">
         {lines.map((l, i) => (
           <div key={i} className="flex flex-wrap items-center gap-1.5">
-            <Input className="h-8 min-w-[10rem] flex-1" placeholder="Description" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
+            <Select
+              className={`h-8 min-w-[12rem] flex-1 ${l.stockItemId ? "" : "border-destructive/60"}`}
+              value={l.stockItemId ?? ""}
+              onChange={(e) => pickStock(i, e.target.value)}
+            >
+              <option value="">— Choose an inventory item —</option>
+              {/* A legacy line whose item is gone from inventory still shows what
+                  it was, so an old sale can be read before it is re-picked. */}
+              {l.stockItemId && !stockById.has(l.stockItemId) && <option value={l.stockItemId}>{l.description || "(item no longer in inventory)"}</option>}
+              {stockItems.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.quantity} {s.unit} On Hand</option>)}
+            </Select>
+            <Input className="h-8 min-w-[8rem] flex-1" placeholder="Description" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
             <Input className="h-8 w-16" type="number" min={0} step="any" placeholder="Qty" value={l.qty} onChange={(e) => setLine(i, { qty: e.target.value })} />
             <Input className="h-8 w-16" placeholder="Unit" value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })} />
             <Input className="h-8 w-24" type="number" min={0} step="any" placeholder="Unit price" value={l.unitPrice} onChange={(e) => setLine(i, { unitPrice: e.target.value })} />
-            {l.stockItemId && <span className="text-[10px] text-muted-foreground">stock</span>}
             {lines.length > 1 && (
               <button type="button" onClick={() => setLines((ls) => ls.filter((_, idx) => idx !== i))} className="text-muted-foreground hover:text-destructive" aria-label="Remove line"><X className="h-3.5 w-3.5" /></button>
             )}
           </div>
         ))}
         <button type="button" onClick={() => setLines((ls) => [...ls, { stockItemId: null, description: "", unit: "pcs", qty: "1", unitPrice: "" }])} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-          <Plus className="h-3 w-3" /> Add Ad-hoc Line
+          <Plus className="h-3 w-3" /> Add Item
         </button>
       </div>
       <div className="flex flex-wrap gap-2">

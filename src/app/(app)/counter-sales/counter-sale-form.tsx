@@ -9,14 +9,20 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, isNextControlFlowError } from "@/lib/utils";
-import { PAYMENT_METHODS, type CounterSaleVatMode } from "@/lib/counter-sale";
+import { PAYMENT_METHODS, unlinkedCounterLines, unlinkedCounterLineMessage, type CounterSaleVatMode } from "@/lib/counter-sale";
 import { createCounterSale, type CounterSaleItemInput } from "./actions";
 
 interface StockOpt { id: string; name: string; unit: string; sellPrice: number; quantity: number; sku: string | null; category: string | null; location: string | null }
 interface Line { stockItemId: string; description: string; unit: string; qty: string; unitPrice: string }
 
 const VAT_RATE = 0.12;
-const emptyLine = (): Line => ({ stockItemId: "__adhoc", description: "", unit: "pcs", qty: "1", unitPrice: "" });
+/**
+ * A new line starts with NO item chosen. It used to start on "Ad-hoc / Not In
+ * Inventory", which meant a sale rung up without touching the dropdown deducted
+ * nothing — the owner's *"Counter sales not deducting quantity in inventory
+ * tab."* An empty picker asks the question instead of answering it wrongly.
+ */
+const emptyLine = (): Line => ({ stockItemId: "", description: "", unit: "pcs", qty: "1", unitPrice: "" });
 
 type ItemSortKey = "name" | "sellPrice" | "quantity";
 type ItemGroupKey = "none" | "category" | "location";
@@ -77,7 +83,7 @@ export function CounterSaleForm({
 
   const setLine = (i: number, patch: Partial<Line>) => setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   function pickStock(i: number, id: string) {
-    if (id === "__adhoc") { setLine(i, { stockItemId: id }); return; }
+    if (!id) { setLine(i, { stockItemId: "" }); return; }
     const s = stockById.get(id);
     if (s) setLine(i, { stockItemId: id, description: s.name, unit: s.unit, unitPrice: s.sellPrice ? String(s.sellPrice) : "" });
   }
@@ -89,7 +95,7 @@ export function CounterSaleForm({
   const vat = vatMode === "INCLUSIVE" ? Math.round((grand - subtotal) * 100) / 100 : 0;
 
   // Stock items already on the sale (so the picker can flag them).
-  const inSale = useMemo(() => new Set(lines.map((l) => l.stockItemId).filter((id) => id !== "__adhoc")), [lines]);
+  const inSale = useMemo(() => new Set(lines.map((l) => l.stockItemId).filter(Boolean)), [lines]);
 
   /** Add a stock item to the sale — bump its quantity if it's already a line. */
   function addStock(item: StockOpt) {
@@ -98,7 +104,7 @@ export function CounterSaleForm({
       if (idx >= 0) return ls.map((l, i) => (i === idx ? { ...l, qty: String((num(l.qty) || 0) + 1) } : l));
       const newLine: Line = { stockItemId: item.id, description: item.name, unit: item.unit, qty: "1", unitPrice: item.sellPrice ? String(item.sellPrice) : "" };
       // Reuse the initial blank line rather than leaving an empty row behind.
-      if (ls.length === 1 && ls[0].stockItemId === "__adhoc" && !ls[0].description.trim()) return [newLine];
+      if (ls.length === 1 && !ls[0].stockItemId && !ls[0].description.trim()) return [newLine];
       return [...ls, newLine];
     });
   }
@@ -156,8 +162,11 @@ export function CounterSaleForm({
     if (isNewCustomer && !company.trim()) { setErr("Enter the client's company or name."); return; }
     const items: CounterSaleItemInput[] = lines
       .filter((l) => l.description.trim() && num(l.qty) > 0)
-      .map((l) => ({ stockItemId: l.stockItemId === "__adhoc" ? null : l.stockItemId, description: l.description.trim(), unit: l.unit, qty: num(l.qty), unitPrice: num(l.unitPrice) }));
+      .map((l) => ({ stockItemId: l.stockItemId || null, description: l.description.trim(), unit: l.unit, qty: num(l.qty), unitPrice: num(l.unitPrice) }));
     if (items.length === 0) { setErr("Add at least one item with a quantity."); return; }
+    // Same rule as the server, said here so nobody fills in a whole sale first.
+    const unlinked = unlinkedCounterLines(items);
+    if (unlinked.length > 0) { setErr(unlinkedCounterLineMessage(unlinked)); return; }
     setBusy(true);
     try {
       await createCounterSale({
@@ -293,8 +302,8 @@ export function CounterSaleForm({
             <div key={i} className="grid grid-cols-1 gap-2 rounded-md border p-2 sm:grid-cols-12 sm:items-end">
               <div className="space-y-1 sm:col-span-4">
                 <Label className="text-[11px] text-muted-foreground">Item</Label>
-                <Select value={l.stockItemId} onChange={(e) => pickStock(i, e.target.value)}>
-                  <option value="__adhoc">Ad-hoc / Not In Inventory</option>
+                <Select value={l.stockItemId} onChange={(e) => pickStock(i, e.target.value)} className={l.stockItemId ? "" : "border-destructive/60"}>
+                  <option value="">— Choose an inventory item —</option>
                   {stockItems.map((s) => <option key={s.id} value={s.id}>{s.name} · {s.quantity} {s.unit} On Hand</option>)}
                 </Select>
               </div>

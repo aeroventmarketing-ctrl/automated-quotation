@@ -233,3 +233,38 @@ export function adhocLines<T extends { stockItemId?: string | null; description:
 export function hasAdhocLines(items: Array<{ stockItemId?: string | null }>): boolean {
   return items.some((i) => !i.stockItemId);
 }
+
+/**
+ * Every line on a counter sale must be an inventory item.
+ *
+ * The owner, 15 September: *"Counter sales not deducting quantity in inventory
+ * tab."* The deduction itself was never broken — `completeCounterSale` issues
+ * stock for each line that carries a `stockItemId`. What was broken is that a
+ * line did not have to carry one: the item picker's DEFAULT was *"Ad-hoc / Not
+ * In Inventory"*, so a sale rung up without touching that dropdown sold
+ * something the warehouse never heard of, on a page whose own subtitle promises
+ * *"stock is deducted after you complete the sale."*
+ *
+ * Asked how to close it, the owner chose the strictest of the three options
+ * offered: **a counter sale can only sell things that exist in inventory.** So
+ * ad-hoc lines are gone — not warned about, not auto-matched, gone — and this is
+ * the rule that says so, checked on the server because a dropdown is a courtesy
+ * and not a control.
+ *
+ * Returns the descriptions of the lines that break it, so the refusal can name
+ * them instead of saying "something is wrong".
+ */
+export function unlinkedCounterLines<T extends { stockItemId?: string | null; description?: string }>(
+  items: readonly T[],
+): string[] {
+  return items
+    .filter((it) => !it.stockItemId)
+    .map((it, i) => (it.description ?? "").trim() || `line ${i + 1}`);
+}
+
+/** The sentence a person reads when a sale still has an off-inventory line. */
+export function unlinkedCounterLineMessage(names: readonly string[]): string {
+  if (names.length === 0) return "";
+  const list = names.slice(0, 4).join(", ") + (names.length > 4 ? `, and ${names.length - 4} more` : "");
+  return `Every item on a counter sale must come from inventory, so the stock is deducted when you complete it. Pick an inventory item for: ${list}. If it isn't stocked yet, add it in Inventory first.`;
+}
