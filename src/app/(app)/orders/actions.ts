@@ -51,7 +51,7 @@ import {
 } from "@/lib/order-workflow";
 import { buildAutoJobOrders } from "@/lib/job-order-autogen";
 import { getFanMotorBrand } from "@/lib/fan-motor-brand";
-import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
+import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, isCancellable, canCancelPurchase, statusBucket, DEPT_REQUISITION_WHERE, PURCHASE_STEPS, PR_MAIN_ORDER, prMainIndex, priorPurchaseStatuses, type PRStatus } from "@/lib/purchasing";
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, canAttachCheck, canApproveCheckDiscrepancy, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, effectiveCheckAmount, effectiveCheckNo, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
@@ -3290,11 +3290,28 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   const admin = isAdmin(user);
   const purchaser = userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey);
   const requestor = members.some((m) => m.createdById === user.id);
-  const approvedPhase = members.some((m) => (m.status as PRStatus) !== "PENDING_APPROVAL");
-  if (approvedPhase) {
-    if (!admin) throw new Error("Once approved, a purchase order can only be cancelled by an admin.");
-  } else if (!(admin || purchaser || requestor)) {
-    throw new Error("Only the requestor, the purchaser, or an admin can cancel this.");
+  // `canCancelPurchase` in `lib/purchasing` — the same rule the Purchasing page
+  // draws the button from, so the button and the door can never disagree.
+  // Checked against EVERY member: cancelling a combined PO cancels all of them,
+  // so it is only allowed when each one on its own could be cancelled.
+  const combined = targetIds.length > 1;
+  const allowed = members.every((m) =>
+    canCancelPurchase(
+      {
+        status: m.status as PRStatus,
+        bucket: statusBucket(m.status as PRStatus, { isDept: isDeptRequisition(m), poApproved: isPoApproved(m.chainLog) }),
+        poPrepared: coercePurchaseOrder(m.po) != null,
+        combined,
+      },
+      { admin, purchaser, requestor },
+    ),
+  );
+  if (!allowed) {
+    throw new Error(
+      members.some((m) => (m.status as PRStatus) !== "PENDING_APPROVAL")
+        ? "Only an admin can cancel this — the Purchaser's window closes once a purchase order is prepared, and a combined PO covers other departments' requests."
+        : "Only the requestor, the purchaser, or an admin can cancel this.",
+    );
   }
 
   const now = new Date();

@@ -6,7 +6,7 @@ import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, isCancellable, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, statusBucket, canCancelPurchase, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, requisitionDeptLabel, REQUISITION_DEPTS } from "@/lib/order-workflow";
 import { jobOrderDues, type JobOrderDue } from "@/lib/job-order-due";
 import { PH_TIME_ZONE } from "@/lib/utils";
@@ -51,7 +51,10 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     );
   }
 
-  const canManagePO = admin || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey));
+  // The ROLE on its own, because the cancel rule distinguishes the Purchaser
+  // from an admin; `canManagePO` deliberately conflates them.
+  const isPurchaser = viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser" as WorkflowRoleKey);
+  const canManagePO = admin || isPurchaser;
   // PO money amounts show only to money-handling roles (Purchaser, Accounting,
   // Payment Approver) + admins; hidden from Warehouse / Logistics / Plant Manager.
   const showAmounts = canViewOrderAmounts(viewer, assignments);
@@ -79,15 +82,26 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   });
   // Printed cash-voucher number covering each purchase request (if any).
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
-  // Who may cancel: before approval the requestor / purchaser / admin; once
-  // approved (or further) only an admin. Never once received into stock.
-  const canCancelPr = (pr: { status: string; createdById: string }): boolean => {
+  // Who may cancel — the rule is `canCancelPurchase` in `lib/purchasing`, shared
+  // with the server action that does the work. Before approval: the requestor,
+  // the Purchaser or an admin. Once approved: an admin, plus the Purchaser on a
+  // single request that has no PO written for it yet (the owner's 15 September
+  // ask, scoped by them to exactly that).
+  const cancelCtxFor = (pr: { status: string; po?: unknown; chainLog?: unknown; kind?: string | null; mrfId?: string | null }) => {
     const status = pr.status as PRStatus;
-    if (!isCancellable(status)) return false;
-    if (status !== "PENDING_APPROVAL") return admin; // approved phase → admin only
-    const isRequestor = viewer != null && pr.createdById === viewer.id;
-    return admin || canManagePO || isRequestor;
+    return {
+      status,
+      bucket: statusBucket(status, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }),
+      poPrepared: coercePurchaseOrder(pr.po) != null,
+      combined: poMemberIds(pr.po).length > 1,
+    };
   };
+  const canCancelPr = (pr: { status: string; createdById: string; po?: unknown; chainLog?: unknown; kind?: string | null; mrfId?: string | null }): boolean =>
+    canCancelPurchase(cancelCtxFor(pr), {
+      admin,
+      purchaser: isPurchaser,
+      requestor: viewer != null && pr.createdById === viewer.id,
+    });
   // Delete: admin only.
   const canDeleteStatus = (_status: string): boolean => admin;
 
@@ -354,7 +368,12 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         return { key: step.key, label: step.label, canAct: canAct(role), roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}` };
       });
       const bRequestor = viewer != null && members.some((m) => m.createdById === viewer.id);
-      const canCancel = isCancellable(status) && (status !== "PENDING_APPROVAL" ? admin : admin || canManagePO || bRequestor);
+      // A batch is a combined PO by construction, so the Purchaser's new window
+      // never opens here — cancelling one would cancel every department on it.
+      const canCancel = canCancelPurchase(
+        { ...cancelCtxFor(anchor), combined: members.length > 1 },
+        { admin, purchaser: isPurchaser, requestor: bRequestor },
+      );
       const canDelete = canDeleteStatus(status);
       // Supplier returns ride on the anchor request (the whole PO).
       const returns = buildReturnViews(anchor);
@@ -469,7 +488,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       ...new Map([...completedWithReturns, ...completedPage].map((pr) => [pr.id, pr])).values(),
     ].filter((pr) => !pr.quotationId);
     const hasOpenReturn = (pr: (typeof completedDept)[number]) => hasUnresolvedReturn(coercePurchaseReturns(pr.returns));
-    const deptRowCtx = (pr: { id: string; status: string; createdById: string }) => ({
+    const deptRowCtx = (pr: { id: string; status: string; createdById: string; po?: unknown; chainLog?: unknown; kind?: string | null; mrfId?: string | null }) => ({
       mrfNo: null,
       canManagePO,
       canCancel: canCancelPr(pr),
