@@ -7,6 +7,7 @@ import { FanSelector } from "./fan-selector";
 import { DuctulatorTool } from "./ductulator-tool";
 import { PulleyTool } from "./pulley-tool";
 import { FanLawTool } from "./fan-law-tool";
+import { AirHeatTool } from "./air-heat-tool";
 
 /**
  * The public tools workbench: one tab strip over the four calculators.
@@ -51,6 +52,7 @@ export function ToolsWorkbench({ initial }: { initial: ToolKey }) {
       {tool === "ductulator" && <DuctulatorTool />}
       {tool === "pulley" && <PulleyTool />}
       {tool === "fan-law" && <FanLawTool />}
+      {tool === "air-heat" && <AirHeatTool />}
     </section>
   );
 }

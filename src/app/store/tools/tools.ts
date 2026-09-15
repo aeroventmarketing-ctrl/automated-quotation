@@ -7,7 +7,7 @@
  * `TOOL_KEYS.includes(...)` would throw at request time even though the build
  * and the typecheck both pass. Shared constants belong on this side.
  */
-export const TOOL_KEYS = ["fan-selector", "ductulator", "pulley", "fan-law"] as const;
+export const TOOL_KEYS = ["fan-selector", "ductulator", "pulley", "fan-law", "air-heat"] as const;
 export type ToolKey = (typeof TOOL_KEYS)[number];
 
 export const TOOL_TABS: { key: ToolKey; label: string }[] = [
@@ -15,6 +15,7 @@ export const TOOL_TABS: { key: ToolKey; label: string }[] = [
   { key: "ductulator", label: "Ductulator" },
   { key: "pulley", label: "Pulley" },
   { key: "fan-law", label: "Fan Law" },
+  { key: "air-heat", label: "Air Heat" },
 ];
 
 /** Narrow an untrusted `?tool=` value to a real tab. */
