@@ -11,12 +11,17 @@ import { Prisma } from "@prisma/client";
 import { WORKFLOW_ROLE_KEYS } from "@/lib/workflow-roles";
 import {
   canAttachCommissionProof,
+  cleanProofName,
   coerceProofDocs,
+  editProofDocs,
   proofTargets,
   salespersonIdFromProofPath,
   MAX_PROOF_DOCS,
+  type ProofEdit,
 } from "@/lib/commission-proof";
-import { buildCommissionsFresh, allDeals, canMarkPaid, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
+import { releaseDay, voucherMates } from "@/lib/commission-voucher-set";
+import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
+import { buildCommissionsFresh, allDeals, canMarkPaid, dealKey, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -302,16 +307,18 @@ export async function attachCommissionProof(
 
   let attached = 0;
   for (const r of rows) {
-    const docs = coerceProofDocs(r.paymentProof);
-    if (docs.some((d) => d.path === doc.path)) continue; // already on this row
-    if (docs.length >= MAX_PROOF_DOCS) continue;
+    const next = editProofDocs(coerceProofDocs(r.paymentProof), { op: "add", doc });
+    if (!next) continue; // already on this row, or the row is full
     await prisma.commission.update({
       where: { id: r.id },
-      data: { paymentProof: [...docs, doc] as unknown as Prisma.InputJsonValue },
+      data: { paymentProof: next as unknown as Prisma.InputJsonValue },
     });
     attached++;
   }
-  if (attached === 0) return refuse(`Each payout can carry ${MAX_PROOF_DOCS} files — remove one first.`);
+  if (attached === 0) {
+    if (rows.every((r) => coerceProofDocs(r.paymentProof).some((d) => d.path === doc.path))) return { ...done, count: 0 };
+    return refuse(`Each payout can carry ${MAX_PROOF_DOCS} files — remove one first.`);
+  }
 
   const person = targets[0]?.salespersonName ?? "a salesperson";
   await logActivity(viewer.user, {
@@ -326,135 +333,218 @@ export async function attachCommissionProof(
   return { ...done, count: attached };
 }
 
-/** Remove a proof from a salesperson's open payout. Same three seats. */
-export async function removeCommissionProof(salespersonId: string, path: string): Promise<ActionResult> {
-  const viewer = await commissionViewer();
-  if (!viewer) return refuse("Please sign in again.");
-  if (!canAttachCommissionProof(viewer)) {
-    return refuse("Only Accounting, the Payment Approver or an admin can remove proof of payment.");
-  }
-  if (salespersonIdFromProofPath(path) !== salespersonId) return refuse("That file doesn't belong to this salesperson's payout.");
+/* ------------------------------------------------------------------ *
+ * One attachment, every row of the voucher
+ *
+ * The owner: *"once file is attached. File will also attach to other rows that
+ * is related to the said voucher and can be viewable. Purpose of such is faster
+ * attachment of voucher. I attach once and auto attach to other"* — and
+ * *"Add an option to delete, replace and edit the attached file."*
+ *
+ * Two different sets, for two different reasons:
+ *
+ *  · **Attaching** follows the VOUCHER. One payment, one slip, and
+ *    `voucherMates` works out which rows that payment paid.
+ *  · **Deleting, replacing and renaming** follow the FILE — every row of that
+ *    salesperson carrying it, wherever it came from. A file has one identity: if
+ *    a rename reached some copies and not others, the same document would be
+ *    filed under two names and there would be no way to tell which was right.
+ * ------------------------------------------------------------------ */
 
-  const rows = await prisma.commission.findMany({
-    where: { salespersonId, receivedAt: null },
-    select: { id: true, paymentProof: true },
-  });
-  let removed = 0;
+/** Everything the two rules below read off a `Commission` row. */
+const PROOF_ROW_SELECT = {
+  id: true, quotationId: true, counterSaleId: true, kind: true,
+  salespersonId: true, salespersonName: true,
+  paid: true, paidAt: true, receivedAt: true, paymentProof: true,
+} as const;
+
+type ProofRow = {
+  id: string; quotationId: string | null; counterSaleId: string | null; kind: string;
+  salespersonId: string; salespersonName: string;
+  paid: boolean; paidAt: Date | null; receivedAt: Date | null; paymentProof: unknown;
+};
+
+/** A row as the voucher rule sees it, with its proofs already read. */
+function toVoucherRow(r: ProofRow) {
+  return {
+    id: r.id,
+    salespersonId: r.salespersonId,
+    salespersonName: r.salespersonName,
+    dealKey: dealKey({
+      kind: (r.quotationId ? "order" : "counter") as CommissionDealKind,
+      refId: r.quotationId ?? r.counterSaleId ?? "",
+      payeeKind: r.kind as CommissionPayeeKind,
+    }),
+    paid: r.paid,
+    paidYMD: releaseDay(r.paidAt),
+    receivedAt: r.receivedAt ? r.receivedAt.toISOString() : null,
+    docs: coerceProofDocs(r.paymentProof),
+  };
+}
+
+const dealProofWhere = (kind: CommissionDealKind, refId: string, payeeKind: CommissionPayeeKind) =>
+  kind === "order"
+    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
+    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
+
+/** Write one edit to every row it applies to; returns how many actually moved. */
+async function writeProofEdit(rows: ReturnType<typeof toVoucherRow>[], edit: ProofEdit): Promise<number> {
+  let changed = 0;
   for (const r of rows) {
-    const docs = coerceProofDocs(r.paymentProof);
-    const kept = docs.filter((d) => d.path !== path);
-    if (kept.length === docs.length) continue;
+    const next = editProofDocs(r.docs, edit);
+    if (!next) continue;
     await prisma.commission.update({
       where: { id: r.id },
-      data: { paymentProof: kept as unknown as Prisma.InputJsonValue },
+      data: { paymentProof: next as unknown as Prisma.InputJsonValue },
     });
-    removed++;
+    changed++;
   }
-  if (removed === 0) return refuse("That proof is no longer attached — the payee may have confirmed receipt already.");
-
-  await logActivity(viewer.user, {
-    action: "commission.proof.removed",
-    category: "commission",
-    summary: `Proof of payment removed from a payout (${removed} ${removed === 1 ? "row" : "rows"})`,
-    entity: "commission",
-    entityId: rows[0]?.id ?? salespersonId,
-    href: "/commissions",
-  });
-  revalidatePath("/commissions");
-  return done;
+  return changed;
 }
 
 /**
- * Attach a proof to ONE commission row — the eye in the Action column.
+ * Attach a proof to one commission row — the eye in the Action column — **and to
+ * every other row of the same voucher.**
  *
  * The owner: *"Put the proof of payment or signed voucher on the corresponding
- * row or client where the commission is paid."*
+ * row or client where the commission is paid"*, and then: *"I attach once and
+ * auto attach to other."* The row is still where the slip is CHOSEN, because that
+ * is where a person can see the client and the amount they are evidencing. It is
+ * no longer where the slip STOPS.
  *
- * The payout-level attach (`attachCommissionProof`) covers a whole voucher and
- * deliberately leaves alone anything the payee has already signed for: one click
- * that swept a confirmed payout into a later payment's slip would be a mistake
- * nobody asked for. Here the row is chosen by hand, one at a time, so that
- * reasoning does not apply — an already-confirmed row can be evidenced too, which
- * is exactly the case in the owner's screenshot: rows confirmed at 2:14 PM with
- * no slip on them yet.
+ * Which other rows is `voucherMates` — the printed voucher if there is one, the
+ * release that paid them if not. Unlike the payout-level attach, a row the payee
+ * has already signed for is fair game: that is the case in the owner's
+ * screenshot, rows confirmed at 2:14 PM with no slip on them yet.
  *
- * Still the same three seats, and still only a row that has actually been paid:
- * there is no `Commission` record before that, and no payment to prove.
+ * Still the same three seats, and still only a row that has been paid: there is
+ * no `Commission` record before that, and no payment to prove.
  */
 export async function attachDealProof(
   kind: CommissionDealKind,
   refId: string,
   payeeKind: CommissionPayeeKind,
   doc: { path: string; name: string; uploadedAt: string; uploadedById: string; uploadedByName: string },
-): Promise<ActionResult> {
+): Promise<ActionResult & { count?: number }> {
   const viewer = await commissionViewer();
   if (!viewer) return refuse("Please sign in again.");
   if (!canAttachCommissionProof(viewer)) {
     return refuse("Only Accounting, the Payment Approver or an admin can attach proof of payment.");
   }
 
-  const where = kind === "order"
-    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
-    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
-  const row = await prisma.commission.findUnique({ where, select: { id: true, salespersonId: true, paid: true, paymentProof: true } });
-  if (!row) return refuse("Mark this commission paid first — a proof of payment needs a payment.");
-  if (!row.paid) return refuse("This commission hasn't been paid yet.");
+  const target = await prisma.commission.findUnique({
+    where: dealProofWhere(kind, refId, payeeKind),
+    select: PROOF_ROW_SELECT,
+  });
+  if (!target) return refuse("Mark this commission paid first — a proof of payment needs a payment.");
+  if (!target.paid) return refuse("This commission hasn't been paid yet.");
   // The path carries the payee's id, and it is where the file really is. A
   // mismatch means the upload and the row disagree about whose money this is.
-  if (salespersonIdFromProofPath(doc.path) !== row.salespersonId) {
+  if (salespersonIdFromProofPath(doc.path) !== target.salespersonId) {
     return refuse("That file doesn't belong to this salesperson's payout.");
   }
 
-  const docs = coerceProofDocs(row.paymentProof);
-  if (docs.some((d) => d.path === doc.path)) return done; // already there
-  if (docs.length >= MAX_PROOF_DOCS) return refuse(`A commission can carry ${MAX_PROOF_DOCS} files — remove one first.`);
-  await prisma.commission.update({
-    where: { id: row.id },
-    data: { paymentProof: [...docs, doc] as unknown as Prisma.InputJsonValue },
-  });
+  const [all, voucherByDeal] = await Promise.all([
+    prisma.commission.findMany({ where: { salespersonId: target.salespersonId, paid: true }, select: PROOF_ROW_SELECT }),
+    getCommissionVoucherNoByDeal().catch(() => new Map<string, string>()),
+  ]);
+  const t = toVoucherRow(target as ProofRow);
+  const mates = voucherMates(t, all.map((r) => toVoucherRow(r as ProofRow)), voucherByDeal);
+
+  const attached = await writeProofEdit(mates, { op: "add", doc });
+  if (attached === 0) {
+    // Nothing moved for one of two reasons, and they are not the same news.
+    if (mates.every((m) => m.docs.some((d) => d.path === doc.path))) return { ...done, count: 0 };
+    return refuse(`A commission can carry ${MAX_PROOF_DOCS} files — remove one first.`);
+  }
 
   await logActivity(viewer.user, {
     action: "commission.proof.attached",
     category: "commission",
-    summary: `Proof of payment attached to one commission — ${doc.name}`,
+    summary: `Proof of payment attached — ${t.salespersonName} · ${doc.name} (${attached} ${attached === 1 ? "commission" : "commissions"} on the voucher)`,
     entity: "commission",
-    entityId: row.id,
+    entityId: target.id,
     href: `/commissions#commission-${kind}-${refId}-${payeeKind}`,
   });
   revalidatePath("/commissions");
-  return done;
+  return { ...done, count: attached };
 }
 
-/** Remove one file from one commission row. Same three seats. */
-export async function removeDealProof(
-  kind: CommissionDealKind,
-  refId: string,
-  payeeKind: CommissionPayeeKind,
-  path: string,
-): Promise<ActionResult> {
+/**
+ * Delete, replace or rename an attached file — everywhere it is attached, for
+ * this salesperson.
+ *
+ * One implementation for all three, and for both places a proof is shown (the
+ * eye on a row, the list on the payout panel), because all three are the same
+ * question: *this document changed — where is it?*
+ *
+ * The salesperson is taken from the PATH, never from the caller: the file lives
+ * under the payee's id, so the set of rows this can touch is fixed by where the
+ * file actually is.
+ */
+async function editProofFile(
+  salespersonId: string,
+  edit: Exclude<ProofEdit, { op: "add" }>,
+): Promise<ActionResult & { count?: number }> {
   const viewer = await commissionViewer();
   if (!viewer) return refuse("Please sign in again.");
   if (!canAttachCommissionProof(viewer)) {
-    return refuse("Only Accounting, the Payment Approver or an admin can remove proof of payment.");
+    return refuse("Only Accounting, the Payment Approver or an admin can change proof of payment.");
   }
-  const where = kind === "order"
-    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
-    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
-  const row = await prisma.commission.findUnique({ where, select: { id: true, paymentProof: true } });
-  if (!row) return refuse("That commission no longer has a payout record.");
-  const kept = coerceProofDocs(row.paymentProof).filter((d) => d.path !== path);
-  await prisma.commission.update({
-    where: { id: row.id },
-    data: { paymentProof: kept as unknown as Prisma.InputJsonValue },
-  });
+  if (salespersonIdFromProofPath(edit.path) !== salespersonId) {
+    return refuse("That file doesn't belong to this salesperson's payout.");
+  }
+  if (edit.op === "replace" && salespersonIdFromProofPath(edit.doc.path) !== salespersonId) {
+    return refuse("The new file doesn't belong to this salesperson's payout.");
+  }
+  if (edit.op === "rename" && !cleanProofName(edit.name)) {
+    return refuse("Give the file a name.");
+  }
+
+  const rows = (await prisma.commission.findMany({ where: { salespersonId }, select: PROOF_ROW_SELECT }))
+    .map((r) => toVoucherRow(r as ProofRow))
+    .filter((r) => r.docs.some((d) => d.path === edit.path));
+  if (rows.length === 0) return refuse("That proof is no longer attached.");
+
+  const changed = await writeProofEdit(rows, edit);
+  if (changed === 0) {
+    return refuse(edit.op === "rename" ? "That is already the file's name." : "That proof is no longer attached.");
+  }
+
+  const what = edit.op === "remove" ? "removed" : edit.op === "replace" ? "replaced" : "renamed";
   await logActivity(viewer.user, {
-    action: "commission.proof.removed",
+    action: `commission.proof.${what}`,
     category: "commission",
-    summary: "Proof of payment removed from one commission",
+    summary: `Proof of payment ${what} — ${rows[0].salespersonName} (${changed} ${changed === 1 ? "commission" : "commissions"})`,
     entity: "commission",
-    entityId: row.id,
-    href: `/commissions#commission-${kind}-${refId}-${payeeKind}`,
+    entityId: rows[0].id,
+    href: "/commissions",
   });
   revalidatePath("/commissions");
-  return done;
+  return { ...done, count: changed };
+}
+
+/** Delete an attached file from every commission carrying it. */
+export async function removeProofFile(salespersonId: string, path: string) {
+  return editProofFile(salespersonId, { op: "remove", path });
+}
+
+/** Swap an attached file for a freshly uploaded one, in place, everywhere. */
+export async function replaceProofFile(
+  salespersonId: string,
+  path: string,
+  doc: { path: string; name: string; uploadedAt: string; uploadedById: string; uploadedByName: string },
+) {
+  return editProofFile(salespersonId, { op: "replace", path, doc });
+}
+
+/**
+ * Rename an attached file — the "edit" of the owner's three.
+ *
+ * The file itself cannot be edited in a browser, and should not be: it is
+ * evidence. What can usefully change is the label it is read by, so
+ * `1758000000000-4.pdf` can become `BDO deposit 09-15`.
+ */
+export async function renameProofFile(salespersonId: string, path: string, name: string) {
+  return editProofFile(salespersonId, { op: "rename", path, name });
 }

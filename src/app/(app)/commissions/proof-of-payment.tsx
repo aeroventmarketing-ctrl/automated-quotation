@@ -2,13 +2,151 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, FileCheck2, X, Eye } from "lucide-react";
-import { attachCommissionProof, removeCommissionProof, attachDealProof, removeDealProof } from "./actions";
+import { Paperclip, FileCheck2, X, Eye, Pencil, RefreshCw, Check } from "lucide-react";
+import {
+  attachCommissionProof,
+  attachDealProof,
+  removeProofFile,
+  replaceProofFile,
+  renameProofFile,
+} from "./actions";
 import { actionError } from "@/lib/action-result";
 import type { CommissionProofDoc } from "@/lib/commission-proof";
 
 const viewHref = (d: CommissionProofDoc) =>
   `/api/commission-uploads?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
+
+/** Put a file in the bucket. Returns the stored document, or the reason it failed. */
+async function uploadProof(file: File, salespersonId: string): Promise<CommissionProofDoc | string> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("salespersonId", salespersonId);
+  const res = await fetch("/api/commission-uploads", { method: "POST", body: form });
+  const data = (await res.json()) as {
+    error?: string; path?: string; name?: string; uploadedAt?: string; uploadedById?: string; uploadedByName?: string;
+  };
+  if (!res.ok || !data.path) return data.error ?? "Upload failed.";
+  return {
+    path: data.path,
+    name: data.name ?? file.name,
+    uploadedAt: data.uploadedAt ?? new Date().toISOString(),
+    uploadedById: data.uploadedById ?? "",
+    uploadedByName: data.uploadedByName ?? "",
+  };
+}
+
+/**
+ * Delete, replace and rename — the owner's *"option to delete, replace and edit
+ * the attached file"* — shared by the two places a proof is listed.
+ *
+ * All three are addressed by FILE, not by row: the server applies them to every
+ * commission carrying that file. One document, one name, one deletion.
+ */
+function useProofFileEdits(salespersonId: string) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const replacing = useRef<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+
+  async function run(path: string, work: () => Promise<string | null>) {
+    setBusy(path);
+    setErr(null);
+    try {
+      const refusal = await work();
+      if (refusal) setErr(refusal);
+      else router.refresh();
+    } catch {
+      setErr("That didn't go through. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return {
+    busy,
+    err,
+    renaming,
+    setRenaming,
+    remove: (path: string) => void run(path, async () => actionError(await removeProofFile(salespersonId, path))),
+    rename: (path: string, name: string) =>
+      void run(path, async () => {
+        const refusal = actionError(await renameProofFile(salespersonId, path, name));
+        if (!refusal) setRenaming(null);
+        return refusal;
+      }),
+    /** Pick the replacement, then swap it in where the old one was. */
+    askReplace: (path: string) => { replacing.current = path; input.current?.click(); },
+    /** One hidden input serves every file in the list — `replacing` says which. */
+    fileInput: (
+      <input
+        ref={input}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const path = replacing.current;
+          e.target.value = "";
+          if (!file || !path) return;
+          void run(path, async () => {
+            const up = await uploadProof(file, salespersonId);
+            if (typeof up === "string") return up;
+            return actionError(await replaceProofFile(salespersonId, path, up));
+          });
+        }}
+      />
+    ),
+  };
+}
+
+type ProofEdits = ReturnType<typeof useProofFileEdits>;
+
+/** The three controls, beside a file. */
+function ProofActions({ doc, edits }: { doc: CommissionProofDoc; edits: ProofEdits }) {
+  const disabled = edits.busy === doc.path;
+  const cls = "flex-none text-muted-foreground disabled:opacity-40";
+  return (
+    <span className="inline-flex flex-none items-center gap-1">
+      <button type="button" disabled={disabled} onClick={() => edits.setRenaming(doc.path)} title="Rename this file" className={`${cls} hover:text-foreground`}>
+        <Pencil className="h-3 w-3" />
+      </button>
+      <button type="button" disabled={disabled} onClick={() => edits.askReplace(doc.path)} title="Replace this file" className={`${cls} hover:text-foreground`}>
+        <RefreshCw className="h-3 w-3" />
+      </button>
+      <button type="button" disabled={disabled} onClick={() => edits.remove(doc.path)} title="Delete this file" className={`${cls} hover:text-destructive`}>
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+/** Rename in place: Enter saves, Escape leaves it alone. */
+function RenameBox({ doc, edits }: { doc: CommissionProofDoc; edits: ProofEdits }) {
+  const [name, setName] = useState(doc.name);
+  return (
+    <span className="inline-flex items-center gap-1">
+      <input
+        value={name}
+        autoFocus
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); edits.rename(doc.path, name); }
+          if (e.key === "Escape") edits.setRenaming(null);
+        }}
+        className="h-6 w-44 rounded border bg-background px-1.5 text-[11px]"
+        aria-label="File name"
+      />
+      <button type="button" disabled={edits.busy === doc.path} onClick={() => edits.rename(doc.path, name)} title="Save the name" className="flex-none text-emerald-700 disabled:opacity-40 dark:text-emerald-400">
+        <Check className="h-3.5 w-3.5" />
+      </button>
+      <button type="button" onClick={() => edits.setRenaming(null)} title="Cancel" className="flex-none text-muted-foreground hover:text-foreground">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </span>
+  );
+}
 
 /**
  * The attached slips, as links.
@@ -30,50 +168,36 @@ export function ProofList({
   canAttach?: boolean;
   emptyNote?: string;
 }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function remove(path: string) {
-    setBusy(path);
-    setErr(null);
-    const refusal = actionError(await removeCommissionProof(salespersonId, path).catch(() => null));
-    if (refusal) setErr(refusal);
-    else router.refresh();
-    setBusy(null);
-  }
+  const edits = useProofFileEdits(salespersonId);
 
   if (docs.length === 0) {
     return emptyNote ? <span className="text-[10px] text-muted-foreground">{emptyNote}</span> : null;
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
+      {canAttach && edits.fileInput}
       {docs.map((d) => (
         <span key={d.path} className="inline-flex items-center gap-1">
-          <a
-            href={viewHref(d)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={d.uploadedByName ? `Attached by ${d.uploadedByName}` : undefined}
-            className="inline-flex items-center gap-1 rounded border border-emerald-600/40 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-600/10 dark:text-emerald-400"
-          >
-            <FileCheck2 className="h-3 w-3" />
-            {d.name}
-          </a>
-          {canAttach && (
-            <button
-              type="button"
-              disabled={busy === d.path}
-              onClick={() => remove(d.path)}
-              title="Remove this proof"
-              className="text-muted-foreground hover:text-destructive disabled:opacity-50"
-            >
-              <X className="h-3 w-3" />
-            </button>
+          {canAttach && edits.renaming === d.path ? (
+            <RenameBox doc={d} edits={edits} />
+          ) : (
+            <>
+              <a
+                href={viewHref(d)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={d.uploadedByName ? `Attached by ${d.uploadedByName}` : undefined}
+                className="inline-flex items-center gap-1 rounded border border-emerald-600/40 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-600/10 dark:text-emerald-400"
+              >
+                <FileCheck2 className="h-3 w-3" />
+                {d.name}
+              </a>
+              {canAttach && <ProofActions doc={d} edits={edits} />}
+            </>
           )}
         </span>
       ))}
-      {err && <span className="text-[10px] text-destructive">{err}</span>}
+      {edits.err && <span className="text-[10px] text-destructive">{edits.err}</span>}
     </span>
   );
 }
@@ -93,19 +217,9 @@ export function AttachProof({ salespersonId, salespersonName }: { salespersonId:
     setBusy(true);
     setErr(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("salespersonId", salespersonId);
-      const res = await fetch("/api/commission-uploads", { method: "POST", body: form });
-      const data = (await res.json()) as { error?: string; path?: string; name?: string; uploadedAt?: string; uploadedById?: string; uploadedByName?: string };
-      if (!res.ok || !data.path) { setErr(data.error ?? "Upload failed."); return; }
-      const refusal = actionError(await attachCommissionProof(salespersonId, {
-        path: data.path,
-        name: data.name ?? file.name,
-        uploadedAt: data.uploadedAt ?? new Date().toISOString(),
-        uploadedById: data.uploadedById ?? "",
-        uploadedByName: data.uploadedByName ?? "",
-      }));
+      const up = await uploadProof(file, salespersonId);
+      if (typeof up === "string") { setErr(up); return; }
+      const refusal = actionError(await attachCommissionProof(salespersonId, up));
       if (refusal) { setErr(refusal); return; }
       router.refresh();
     } catch {
@@ -148,11 +262,14 @@ export function AttachProof({ salespersonId, salespersonName }: { salespersonId:
  * corresponding row or client where the commission is paid."*
  *
  * Both halves of that sentence live here. The eye OPENS what is attached — shown
- * to the three finance seats and to the salesperson the row pays, which is the
- * requirement from the day before. And for those three seats the same panel
- * ATTACHES, one row at a time, so a slip can go on the exact commission it
- * evidences — including one the payee has already signed for, which the
- * payout-level attach deliberately leaves alone.
+ * to the three finance seats and to the salesperson the row pays. And for those
+ * three seats the same panel ATTACHES, on the row that names the client and the
+ * amount being evidenced.
+ *
+ * Attaching here does not stop here. The next day: *"I attach once and auto
+ * attach to other"* — so the file lands on every commission the same voucher
+ * paid, and the panel says how many that was. Delete, replace and rename likewise
+ * reach every copy, because they are edits to a document, not to a row.
  *
  * The eye carries a dot when something is attached, so a row with evidence can be
  * told from one without at a glance, without opening anything.
@@ -177,25 +294,21 @@ export function RowProof({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const edits = useProofFileEdits(salespersonId);
 
   async function upload(file: File) {
     setBusy(true);
     setErr(null);
+    setNote(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("salespersonId", salespersonId);
-      const res = await fetch("/api/commission-uploads", { method: "POST", body: form });
-      const data = (await res.json()) as { error?: string; path?: string; name?: string; uploadedAt?: string; uploadedById?: string; uploadedByName?: string };
-      if (!res.ok || !data.path) { setErr(data.error ?? "Upload failed."); return; }
-      const refusal = actionError(await attachDealProof(kind, refId, payeeKind, {
-        path: data.path,
-        name: data.name ?? file.name,
-        uploadedAt: data.uploadedAt ?? new Date().toISOString(),
-        uploadedById: data.uploadedById ?? "",
-        uploadedByName: data.uploadedByName ?? "",
-      }));
+      const up = await uploadProof(file, salespersonId);
+      if (typeof up === "string") { setErr(up); return; }
+      const res = await attachDealProof(kind, refId, payeeKind, up);
+      const refusal = actionError(res);
       if (refusal) { setErr(refusal); return; }
+      const n = res.count ?? 1;
+      setNote(n > 1 ? `Attached to ${n} commissions on this voucher.` : "Attached to this commission.");
       router.refresh();
     } catch {
       setErr("Couldn't attach the proof. Try again.");
@@ -203,15 +316,6 @@ export function RowProof({
       setBusy(false);
       if (input.current) input.current.value = "";
     }
-  }
-
-  async function drop(path: string) {
-    setBusy(true);
-    setErr(null);
-    const refusal = actionError(await removeDealProof(kind, refId, payeeKind, path).catch(() => null));
-    if (refusal) setErr(refusal);
-    else router.refresh();
-    setBusy(false);
   }
 
   return (
@@ -248,27 +352,30 @@ export function RowProof({
           />
           <div className="relative w-full max-w-sm rounded-lg border bg-card p-4 text-left text-card-foreground shadow-xl">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of payment</p>
+          {canAttach && edits.fileInput}
           {docs.length === 0 ? (
             <p className="text-xs text-muted-foreground">
               {canAttach ? "Nothing attached yet. Add the slip or the signed voucher below." : "Nothing attached yet — ask Accounting for the slip."}
             </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {docs.map((d) => (
                 <li key={d.path} className="flex items-center justify-between gap-2">
-                  <a
-                    href={viewHref(d)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
-                  >
-                    <FileCheck2 className="h-3 w-3 flex-none" />
-                    <span className="truncate">{d.name}</span>
-                  </a>
-                  {canAttach && (
-                    <button type="button" disabled={busy} onClick={() => drop(d.path)} title="Remove" className="flex-none text-muted-foreground hover:text-destructive disabled:opacity-50">
-                      <X className="h-3 w-3" />
-                    </button>
+                  {canAttach && edits.renaming === d.path ? (
+                    <RenameBox doc={d} edits={edits} />
+                  ) : (
+                    <>
+                      <a
+                        href={viewHref(d)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                      >
+                        <FileCheck2 className="h-3 w-3 flex-none" />
+                        <span className="truncate">{d.name}</span>
+                      </a>
+                      {canAttach && <ProofActions doc={d} edits={edits} />}
+                    </>
                   )}
                 </li>
               ))}
@@ -295,9 +402,15 @@ export function RowProof({
                 <Paperclip className="h-3 w-3" />
                 {busy ? "Attaching…" : docs.length > 0 ? "Attach another" : "Attach proof / signed voucher"}
               </button>
+              {/* Said before it is done, because it is the point of the button:
+                  one slip covers the whole voucher. */}
+              <p className="mt-1 text-[10px] leading-tight text-muted-foreground">
+                Goes on every commission this voucher paid — attach it once.
+              </p>
             </>
           )}
-          {err && <p className="mt-1 text-[11px] text-destructive">{err}</p>}
+          {note && <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">{note}</p>}
+          {(err || edits.err) && <p className="mt-1 text-[11px] text-destructive">{err ?? edits.err}</p>}
           <button type="button" onClick={() => setOpen(false)} className="mt-3 w-full rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-accent">Close</button>
           </div>
         </div>

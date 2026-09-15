@@ -33,7 +33,12 @@ export interface PrintedCommissionVoucher {
   no: string;
   salespersonId: string;
   paidTo: string;
-  /** The deal keys this voucher covers — `<order|counter>:<refId>:<base|override>`. */
+  /**
+   * The deal keys this voucher covers — `dealKey` in `sales-commission`, i.e.
+   * `<order|counter>-<refId>-<base|override>`. `commission-voucher-set` reads
+   * them to work out which rows one proof of payment belongs to, so the spelling
+   * has to match what `dealKey` produces.
+   */
   dealKeys: string[];
   lines: CommissionVoucherLine[];
   total: number;
