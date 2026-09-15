@@ -1,3 +1,55 @@
+## 2026-09-16 · Air heat, backwards: the airflow a load needs
+
+The owner, straight after using the forward one: *"Add the reverse solve for required CFM."* It is the
+commoner question on a real job — you are handed a room load and a supply temperature, and what you
+need is the fan.
+
+```
+CFM = Qs ÷ (1.08 × ΔT)
+```
+
+### One code path, not a second calculator
+
+The two modes disagree about exactly one thing: where `cfm` comes from. In `heat` mode it is typed
+in; in `airflow` mode it is solved from the load. **Everything after that line is shared** — the same
+constants, the same density factor, the same latent and total and SHR.
+
+That is the whole design, and it is what makes the round trip hold: feed the airflow it gives back
+into the forward mode and the load it was asked for comes out. A test asserts exactly that, because
+two calculators for one equation is two things that can drift, and the drift would show up as an
+engineer's quote being wrong in a way nobody could explain.
+
+The screen shows it too: ask for 24,000 BTU/hr and the Sensible box reads **24,000 BTU/hr** beside
+the 889 CFM it needs.
+
+### Sensible drives it, never total
+
+The airflow through a coil is set by the sensible load and the supply-air temperature difference. The
+total decides how big the coil is, not how much air the fan moves. So the load box asks for the
+sensible load and says so.
+
+The latent and total still appear, because once the airflow is known the air states determine them:
+889 cfm between those two states also removes 9,290 BTU/hr of latent, for 33,290 total. The SHR is
+**0.721 either way round**, which is right — it belongs to the air states, not to the airflow.
+
+### Two details worth the words
+
+**Magnitudes, not signs.** A job sheet says "24,000 BTU/hr" whether the coil heats or cools. Working
+it signed would make a heating load come out as a negative airflow and get refused over a sign the
+user never typed, so the reverse uses magnitudes — while the sensible figure it reports back stays
+signed, negative for heating, exactly as the forward mode has always shown it.
+
+**ΔT = 0 is a sentence, not an Infinity.** Equal entering and leaving temperatures divide by zero.
+Rather than print an infinite airflow it says: *"air at the room temperature carries no sensible heat,
+however much of it there is."*
+
+### Verified by using it
+
+24,000 BTU/hr across 80 °F → 55 °F gives **889 CFM**, and 24000 ÷ (1.08 × 25) = 888.9. Entering the
+same load as **2 TR** lands on the identical airflow; switching the readout to L/s gives **420 L/s**,
+and 889 ÷ 2.11888 = 419.6. ASHRAE's bigger constant needs less air; thin air needs more. Both screens,
+staff and storefront, give the same numbers from the same library.
+
 ## 2026-09-16 · Air heat: sensible, latent, total and SHR
 
 The owner: *"I would like to add sensible heat computation. Before adding it in the system. Show to me

@@ -205,6 +205,11 @@ export const GRAINS_PER_GKG = 7;
 export const btuToKw = (btuh: number) => (btuh * 1055.05585) / 3600 / 1000;
 export const btuToTons = (btuh: number) => btuh / BTU_PER_TON;
 
+/** …and back, for a load typed in whatever the job sheet used. */
+export type LoadUnit = "btuh" | "tons" | "kw";
+export const toBtuh = (v: number, u: LoadUnit) =>
+  u === "tons" ? v * BTU_PER_TON : u === "kw" ? (v * 1000 * 3600) / 1055.05585 : v;
+
 /* ------------------------------------------------------------------ *
  * The calculation
  * ------------------------------------------------------------------ */
@@ -219,9 +224,31 @@ export interface AirState {
   enthalpy?: number | null;
 }
 
+/**
+ * Which way round the sum is worked.
+ *
+ * `heat` — the airflow is known, find the heat it carries.
+ * `airflow` — the sensible load is known, find the airflow that carries it.
+ *
+ * The second is the commoner question in practice: a job gives you a room load
+ * and a supply temperature, and what you need is the fan. It is the same
+ * equation rearranged, so it is the same code with `cfm` arriving from a
+ * different place — not a second calculator that could disagree with the first.
+ *
+ * **Sensible drives it, never total.** The airflow through a coil is set by the
+ * sensible load and the supply-air temperature difference; the total decides how
+ * big the coil is, not how much air the fan moves.
+ */
+export type AirHeatMode = "heat" | "airflow";
+
 export interface AirHeatInput {
+  mode: AirHeatMode;
+  /** `heat` mode: the airflow being moved. */
   airflow: number | null;
   airflowUnit: HeatAirflowUnit;
+  /** `airflow` mode: the SENSIBLE load the air has to carry. */
+  load?: number | null;
+  loadUnit?: LoadUnit;
   tempUnit: TempUnit;
   humidityUnit: HumidityUnit;
   /** Entering air — the room, or the coil's on-coil condition. */
@@ -237,6 +264,8 @@ export interface AirHeatInput {
 }
 
 export interface AirHeatSolution {
+  /** The airflow, in cfm — given in `heat` mode, solved in `airflow` mode. */
+  cfm: number;
   /** The constants actually used, after the density factor. */
   constants: HeatConstants;
   densityFactor: number;
@@ -273,11 +302,10 @@ export const isAirHeatError = (r: AirHeatResult): r is { error: string } =>
  * an error telling the user off for not having finished typing.
  */
 export function solveAirHeat(input: AirHeatInput): AirHeatResult {
-  const { airflow, entering, leaving, basis } = input;
-  if (airflow == null || entering.temp == null || leaving.temp == null) return null;
-
-  const cfm = toCfm(airflow, input.airflowUnit);
-  if (!(cfm > 0) || !Number.isFinite(cfm)) return { error: "Enter an airflow greater than zero." };
+  const { entering, leaving, basis } = input;
+  if (entering.temp == null || leaving.temp == null) return null;
+  const reverse = input.mode === "airflow";
+  if (reverse ? input.load == null : input.airflow == null) return null;
 
   const altFt = toFt(input.altitude ?? 0, input.altitudeUnit);
   if (!Number.isFinite(altFt) || altFt < -1500 || altFt > 30000) {
@@ -292,6 +320,27 @@ export function solveAirHeat(input: AirHeatInput): AirHeatResult {
   const t1 = toF(entering.temp, input.tempUnit);
   const t2 = toF(leaving.temp, input.tempUnit);
   const deltaTF = t1 - t2;
+
+  // The only thing the two modes disagree about is where `cfm` comes from.
+  // Everything past this point is one code path, so the reverse answer can never
+  // drift from the forward one — put the airflow it gives back in and the load
+  // it was asked for comes out.
+  let cfm: number;
+  if (reverse) {
+    // Magnitudes: a job sheet says "24,000 BTU/hr" whether the coil heats or
+    // cools, and refusing a heating load because the arithmetic made the airflow
+    // negative would be pedantry about a sign the user never typed.
+    const btuh = Math.abs(toBtuh(input.load!, input.loadUnit ?? "btuh"));
+    if (!(btuh > 0)) return { error: "Enter the sensible load the air has to carry." };
+    if (Math.abs(deltaTF) < 0.05) {
+      return { error: "Give the entering and leaving air different temperatures — air at the room temperature carries no sensible heat, however much of it there is." };
+    }
+    cfm = btuh / (constants.sensible * Math.abs(deltaTF));
+  } else {
+    cfm = toCfm(input.airflow!, input.airflowUnit);
+    if (!(cfm > 0) || !Number.isFinite(cfm)) return { error: "Enter an airflow greater than zero." };
+  }
+  if (!Number.isFinite(cfm)) return { error: "Check the figures." };
 
   const sensible = constants.sensible * cfm * deltaTF;
 
@@ -338,6 +387,7 @@ export function solveAirHeat(input: AirHeatInput): AirHeatResult {
   }
 
   return {
+    cfm,
     constants,
     densityFactor: dFactor,
     density: airDensity(altFt, flowF),

@@ -9,6 +9,7 @@ import {
   isAirHeatError,
   MASS_PER_CFM,
   solveAirHeat,
+  toBtuh,
   type AirHeatInput,
   type AirHeatSolution,
 } from "./psychrometrics";
@@ -22,6 +23,7 @@ import {
  * that is worth a failing test.
  */
 const base: AirHeatInput = {
+  mode: "heat",
   airflow: 2000,
   airflowUnit: "cfm",
   tempUnit: "f",
@@ -249,5 +251,97 @@ describe("a half-filled form says nothing, a wrong one says what", () => {
   it("a heating coil reads negative rather than refusing", () => {
     const s = solve({ entering: { temp: 60, humidity: null }, leaving: { temp: 95, humidity: null } });
     expect(s.sensible).toBeCloseTo(-75600, 0);
+  });
+});
+
+/**
+ * The reverse: a load and a temperature difference, find the airflow.
+ *
+ * The owner, after using the forward one: *"Add the reverse solve for required
+ * CFM."* It is the commoner question on a real job — you are given a room load
+ * and a supply temperature and what you need is the fan.
+ *
+ * It shares the forward mode's code from `cfm` onwards, and these tests exist to
+ * prove that sharing holds: the airflow it gives back, fed into the forward
+ * mode, must return the load it was asked for.
+ */
+describe("solving backwards for the airflow", () => {
+  const rev = (over: Partial<AirHeatInput> = {}): AirHeatSolution => {
+    const r = solveAirHeat({ ...base, mode: "airflow", airflow: null, load: 24000, loadUnit: "btuh", ...over });
+    if (r === null || isAirHeatError(r)) throw new Error(`expected a solution, got ${JSON.stringify(r)}`);
+    return r;
+  };
+
+  it("24,000 BTU/hr across 25 °F needs 889 cfm", () => {
+    // 24000 / (1.08 × 25) = 888.9
+    expect(rev().cfm).toBeCloseTo(888.9, 1);
+  });
+
+  /** The round trip. If these ever disagree, the two modes have drifted apart. */
+  it("round-trips: put that airflow back in and the load comes out", () => {
+    const cfm = rev().cfm;
+    const forward = solveAirHeat({ ...base, airflow: cfm });
+    if (forward === null || isAirHeatError(forward)) throw new Error("no forward solution");
+    expect(forward.sensible).toBeCloseTo(24000, 6);
+  });
+
+  it("the solved airflow carries the latent and total heat those air states imply", () => {
+    const s = rev();
+    expect(s.latent).toBeCloseTo(s.constants.latentGrains * s.cfm * (s.enteringGrains! - s.leavingGrains!), 6);
+    expect(s.total).toBeCloseTo(s.sensible + s.latent!, 6);
+    expect(s.shr!).toBeCloseTo(0.721, 3);
+  });
+
+  it("a bigger constant needs less air for the same load", () => {
+    expect(rev({ basis: "ashrae" }).cfm).toBeLessThan(rev({ basis: "carrier" }).cfm);
+  });
+
+  /** Thin air carries less heat per cfm, so the fan has to move more of it. */
+  it("and thin air needs more", () => {
+    expect(rev({ altitude: 4900 }).cfm).toBeGreaterThan(rev({ altitude: 0 }).cfm);
+  });
+
+  describe("the load, in whatever the job sheet used", () => {
+    it("tons and kW land on the same airflow as BTU/hr", () => {
+      const a = rev().cfm;
+      expect(rev({ load: 2, loadUnit: "tons" }).cfm).toBeCloseTo(a, 6);
+      expect(rev({ load: 24000 * 1055.05585 / 3600 / 1000, loadUnit: "kw" }).cfm).toBeCloseTo(a, 6);
+    });
+    it("and the conversions are what they claim", () => {
+      expect(toBtuh(1, "tons")).toBe(12000);
+      expect(toBtuh(1, "kw")).toBeCloseTo(3412.14, 2);
+      expect(toBtuh(500, "btuh")).toBe(500);
+    });
+  });
+
+  /**
+   * A job sheet says "24,000 BTU/hr" whether the coil heats or cools. Refusing a
+   * heating load over a sign the user never typed would be pedantry.
+   */
+  it("a heating coil is the same sum", () => {
+    const s = rev({ entering: { temp: 60, humidity: null }, leaving: { temp: 95, humidity: null } });
+    expect(s.cfm).toBeCloseTo(24000 / (1.08 * 35), 6);
+    expect(s.sensible).toBeCloseTo(-24000, 6); // negative: heat going IN, as in the forward mode
+  });
+
+  describe("what it refuses", () => {
+    it("no load yet is a blank, not an error", () => {
+      expect(solveAirHeat({ ...base, mode: "airflow", airflow: null, load: null })).toBeNull();
+    });
+
+    /** The division by zero, said in words rather than as Infinity cfm. */
+    it("equal temperatures cannot carry a load at any airflow", () => {
+      const r = solveAirHeat({ ...base, mode: "airflow", airflow: null, load: 24000, leaving: { temp: 80, humidity: 95 } });
+      expect(isAirHeatError(r) && r.error).toMatch(/different temperatures/);
+    });
+
+    it("a zero load is a mistake, not a blank", () => {
+      const r = solveAirHeat({ ...base, mode: "airflow", airflow: null, load: 0 });
+      expect(isAirHeatError(r) && r.error).toMatch(/sensible load/);
+    });
+
+    it("and the airflow box is ignored entirely in this mode", () => {
+      expect(rev({ airflow: 99999 }).cfm).toBeCloseTo(888.9, 1);
+    });
   });
 });
