@@ -11,6 +11,7 @@ const TABS = [
   { href: "/tools/pulley", label: "Pulley" },
   { href: "/tools/fan-law", label: "Fan Law" },
   { href: "/tools/sensible-heat", label: "Air Heat" },
+  { href: "/tools/ventilation", label: "Ventilation" },
   { href: "/tools/job-order", label: "Job Order" },
 ];
 
