@@ -1,3 +1,55 @@
+## 2026-09-15 · The PO refused the save for a good reason and told nobody
+
+Reported from Purchasing: **Save Changes** on a purchase order answers with
+
+> An error occurred in the Server Components render. The specific message is omitted in production
+> builds to avoid leaking sensitive details. A digest property is included on this error instance…
+
+Nothing was broken. The save was refused, correctly, by a rule the app has always had — and the one
+sentence that says what to do about it never reached the screen.
+
+### What the rule actually said
+
+Reproduced against the harness, where the dev server does not redact:
+
+> **“GI SHEET 24GA” is priced at 850 but the catalogue says 100. Give a reason for the different
+> price, or use the catalogue price.**
+
+That is the price-deviation guard: a price off the catalogue is allowed — a supplier quoting
+something new on a Friday must not stop purchasing — but it has to carry a reason, recorded and
+reviewed afterwards. The purchaser needed to type a reason. Instead they got a paragraph about
+digests, five times in a row, with no way to tell which of the PO's lines was the problem.
+
+### Why the sentence vanished
+
+**Next.js redacts every error thrown by a server action in production.** That is the right default
+for a crash — a stack trace or a database message must never reach a browser — and exactly wrong for
+the refusals this app writes on purpose. `savePurchaseOrder` has five of them, every one a careful
+sentence, and production replaced all five with the same paragraph.
+
+A RETURNED value is not redacted. So the refusals are returned now (`lib/action-result`), and `throw`
+goes back to meaning what it should: something went wrong that the user can do nothing about.
+
+The rules themselves are untouched — the same conditions refuse the same saves, and nothing is
+written when one does. `save-po-price.test.ts`, which runs against a real Postgres, still asserts
+that the refusal happens, that the figures are in it, and that nothing was written; it now also
+asserts the refusal **resolves rather than rejects**, because a thrown one is the bug.
+
+### Not just this button
+
+`throw new Error("…")` appears **391 times in the order actions alone**, 657 across all the action
+files, and a good share of those are sentences meant for a person. Every one of them is currently a
+paragraph about digests when it fires in production. This entry fixes the one that was reported;
+the pattern is `lib/action-result`, and the ones worth converting next are the buttons that refuse
+in normal use rather than only when something is wrong — the approval steps, the cash-voucher
+guards, and the stock-issue checks.
+
+### A note on the harness
+
+`save-po-price.test.ts` truncates `PurchaseRequest` and `Product` in `beforeEach`. Pointing
+`TEST_DATABASE_URL` at the database the role harness was using emptied its fixture mid-session —
+harmless (a reboot reseeds) but worth knowing before running it anywhere that matters.
+
 ## 2026-09-15 · A client got the check-in email every hour for a day
 
 Reported by the client, through Purchasing: the "Keeping in touch" email arriving hourly, through

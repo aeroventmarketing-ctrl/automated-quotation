@@ -16,6 +16,7 @@ import { carriersForLines, suppliersForDescription, catalogPriceFor, catalogRefe
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
+import { actionError } from "@/lib/action-result";
 
 function todayInput(): string {
   // yyyy-mm-dd for the date input, in PH time.
@@ -234,7 +235,7 @@ export function PurchaseOrderPanel({
     setBusy(true);
     setErr(null);
     try {
-      await savePurchaseOrder(prId, {
+      const result = await savePurchaseOrder(prId, {
         supplier: { company, attention, address },
         date,
         lines,
@@ -243,10 +244,18 @@ export function PurchaseOrderPanel({
         ewtAmount: effectiveEwtAmount,
         remarks,
       });
+      // A refusal comes back as a sentence to read (the catalogue-price rule, an
+      // approved PO, a missing line). It is RETURNED rather than thrown because
+      // production replaces a thrown message with a paragraph about digests —
+      // see `lib/action-result`. The form stays open on a refusal, with the
+      // reason under the buttons and the typing intact.
+      const refusal = actionError(result);
+      if (refusal) { setErr(refusal); setBusy(false); return; }
       router.refresh();
       onDone();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed");
+      // A genuine failure — the network, a crash. Nothing to explain.
+      setErr(e instanceof Error ? e.message : "Couldn't save the purchase order. Try again.");
       setBusy(false);
     }
   }

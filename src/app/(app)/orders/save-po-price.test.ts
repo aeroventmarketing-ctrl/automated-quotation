@@ -86,9 +86,22 @@ run("savePurchaseOrder — a price off the catalogue", () => {
     expect(po!.lines[0].priceOverride).toBeUndefined();
   });
 
+  /**
+   * The refusal is RETURNED, not thrown — which is the whole point of it. A
+   * thrown message is replaced in production by "An error occurred in the Server
+   * Components render…", and on 15 September the Purchaser was shown that
+   * paragraph instead of the two figures they needed. See `lib/action-result`.
+   */
   it("refuses a different price with no reason, and says both figures", async () => {
-    await expect(save("128")).rejects.toThrow(/128.*catalogue says.*210|catalogue says 210/i);
+    const result = await save("128");
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toMatch(/128.*catalogue says.*210|catalogue says 210/i);
     expect(await saved()).toBeNull(); // nothing written
+  });
+
+  it("a refusal reaches the screen as a sentence, not as a thrown error", async () => {
+    // `rejects` would mean production shows the redaction paragraph instead.
+    await expect(save("128")).resolves.toMatchObject({ ok: false });
   });
 
   it("accepts a different price WITH a reason, and stamps who and when", async () => {
