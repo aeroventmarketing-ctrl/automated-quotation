@@ -2,10 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   canAttachCommissionProof,
   canViewCommissionProof,
+  cleanProofName,
   coerceProofDocs,
+  editProofDocs,
+  MAX_PROOF_DOCS,
+  MAX_PROOF_NAME,
   proofPathPrefix,
   proofTargets,
   salespersonIdFromProofPath,
+  type CommissionProofDoc,
   type ProofTarget,
 } from "./commission-proof";
 
@@ -116,5 +121,82 @@ describe("reading the stored JSON", () => {
 
   it("a file with no name is still openable", () => {
     expect(coerceProofDocs([{ path: "commissions/rep-1/a.pdf" }])[0].name).toBe("proof");
+  });
+});
+
+/**
+ * *"Add an option to delete, replace and edit the attached file."*
+ *
+ * Null everywhere below means "this row didn't move" — not a failure. One edit
+ * is fanned across every row of a voucher, and those rows are not all in the
+ * same state.
+ */
+describe("editing an attached file", () => {
+  const doc = (path: string, name = path): CommissionProofDoc => ({
+    path, name, uploadedAt: "2026-09-15T00:00:00Z", uploadedById: "acct-1", uploadedByName: "Michelle",
+  });
+  const a = doc("commissions/rep-1/a.pdf", "slip.pdf");
+  const b = doc("commissions/rep-1/b.pdf", "screenshot.png");
+
+  describe("add", () => {
+    it("appends", () => {
+      expect(editProofDocs([a], { op: "add", doc: b })).toEqual([a, b]);
+    });
+    it("is idempotent — the same file twice is one file", () => {
+      expect(editProofDocs([a], { op: "add", doc: a })).toBeNull();
+    });
+    it("stops at the cap", () => {
+      const full = Array.from({ length: MAX_PROOF_DOCS }, (_, i) => doc(`commissions/rep-1/${i}.pdf`));
+      expect(editProofDocs(full, { op: "add", doc: b })).toBeNull();
+    });
+  });
+
+  describe("delete", () => {
+    it("takes only the one named", () => {
+      expect(editProofDocs([a, b], { op: "remove", path: a.path })).toEqual([b]);
+    });
+    it("a file that isn't here doesn't move this row", () => {
+      expect(editProofDocs([a], { op: "remove", path: b.path })).toBeNull();
+    });
+  });
+
+  describe("replace", () => {
+    /** The list is read top to bottom; a swap must not reshuffle it. */
+    it("puts the new file where the old one was", () => {
+      const c = doc("commissions/rep-1/c.pdf", "corrected slip.pdf");
+      expect(editProofDocs([a, b], { op: "replace", path: a.path, doc: c })).toEqual([c, b]);
+    });
+    it("never leaves the same file listed twice", () => {
+      expect(editProofDocs([a, b], { op: "replace", path: a.path, doc: b })).toEqual([b]);
+    });
+    it("replaces nothing when the old file is gone", () => {
+      expect(editProofDocs([b], { op: "replace", path: a.path, doc: a })).toBeNull();
+    });
+  });
+
+  describe("rename", () => {
+    it("changes the label and nothing else", () => {
+      const out = editProofDocs([a, b], { op: "rename", path: a.path, name: "BDO deposit 09-15" })!;
+      expect(out[0]).toEqual({ ...a, name: "BDO deposit 09-15" });
+      expect(out[1]).toBe(b);
+    });
+    it("an unchanged name is not a change", () => {
+      expect(editProofDocs([a], { op: "rename", path: a.path, name: "slip.pdf" })).toBeNull();
+    });
+    it("a blank name is refused — a file with no label can't be told apart", () => {
+      expect(editProofDocs([a], { op: "rename", path: a.path, name: "   " })).toBeNull();
+    });
+  });
+});
+
+describe("the label a file is read by", () => {
+  it("collapses whitespace and control characters", () => {
+    expect(cleanProofName("  BDO\tslip\n\n 09-15 ")).toBe("BDO slip 09-15");
+  });
+  it("is bounded", () => {
+    expect(cleanProofName("x".repeat(500))).toHaveLength(MAX_PROOF_NAME);
+  });
+  it("and an empty one stays empty, so the caller can refuse it", () => {
+    expect(cleanProofName("   ")).toBe("");
   });
 });

@@ -1,3 +1,82 @@
+## 2026-09-15 · One slip, the whole voucher — and the three things you can do to it
+
+The owner, in two lines: *"once file is attached. File will also attach to other rows that is related
+to the said voucher and can be viewable. Purpose of such is faster attachment of voucher. I attach
+once and auto attach to other"*, and *"Add an option to delete, replace and edit the attached file."*
+
+### What "the said voucher" actually is
+
+A commission voucher pays a whole set of commissions at once — *"Total every approved inquiry and
+make a single cash voucher per sales personnel"* — so one deposit slip evidences every row on it.
+Attaching it fifteen times is not fifteen facts. It is one fact typed fifteen times.
+
+`lib/commission-voucher-set.ts` works out the set, in order of how well each answer knows what it is
+talking about:
+
+1. **The printed voucher.** `recordPrintedCommissionVoucher` already stores the exact deal keys a
+   numbered voucher covers. That is not an inference — it is the document.
+2. **The release day.** No voucher printed: the person's commissions released the same day in Manila.
+3. **The payout in flight.** A payment that straddled midnight: their paid-and-unsigned-for rows.
+
+And two boundaries that hold in every case: never across salespeople (the file lives under the
+payee's id, and the route serving it reads the payee out of that path), and never from no voucher
+onto a voucher — a voucher says which rows it covers, and this one is not among them.
+
+### The rule I nearly shipped
+
+Rule 2 was first written as *the same `paidAt`, exactly*. "Mark voucher paid" stamps a whole voucher
+in one millisecond, so it looked right, and it passed.
+
+Then the harness data: Sam Sales's two commissions, released 11:33 AM and 2:27 PM on 2 September —
+Accounting pressing the button on each row in turn, which is the ordinary way it happens. Under the
+exact rule, attaching would have landed on one row and the owner would have reported the same thing
+again a day later. A **day**, not a timestamp. In Manila, not UTC: the two agree through the working
+day and part company before 8 AM local, which is stamped on the previous date in UTC.
+
+That case is now a test, and it was found by running against real rows rather than by reasoning about
+the code.
+
+### Attach follows the voucher; delete, replace and rename follow the file
+
+Two different sets, deliberately. An attachment spreads across a voucher. An edit to a document
+follows **that document** — every row of that salesperson carrying it — because a file has one
+identity: a rename that reached some copies and not others would file the same slip under two names
+with no way to tell which was right.
+
+So `removeDealProof` and `removeCommissionProof`, which each removed from their own little scope, are
+gone. In their place `removeProofFile` / `replaceProofFile` / `renameProofFile`, addressed by
+`(salespersonId, path)` and shared by both places a proof is shown — the eye on a row and the list on
+the payout panel. The salesperson is taken from the **path**, never from the caller.
+
+**Edit** is a rename. The file itself cannot be edited in a browser and should not be — it is
+evidence. What can usefully change is the label it is read by, so `1789457410841-2178031.pdf` becomes
+`Metrobank slip 09-12`.
+
+`editProofDocs` in `lib/commission-proof.ts` is the one place all four verbs are defined, returning
+null for "this row didn't move" — not an error: one edit fans across rows that are not all in the
+same state, and the caller counts the ones that changed. Replace swaps **in place**, so the order a
+person reads does not shuffle under them.
+
+### Verified by using it, not by reading it
+
+The harness has no Supabase bucket, so `uploadToStorage` was stubbed to a local folder **in the
+throwaway worktree only** — the repository's copy is untouched. Then, as Accounting:
+
+- attached one slip to one of Sam Sales's two commissions → *"Attached to 2 commissions on this
+  voucher"*, and both rows carried it in the database;
+- renamed it from one row → both renamed; replaced it → both swapped, in place; attached a second
+  file → both got it; deleted both → both cleared. Rey Gil's payout, released the same day, never
+  moved: a different person is a different voucher;
+- as **Sam Sales** (the payee): the slip visible on both rows, and no rename / replace / delete
+  controls anywhere;
+- as **Elena Cruz** (another salesperson): Sam's rows not on her page at all.
+
+The document route still answers 502 (authorised, file not in this bucket) for the payee, Accounting
+and the Payment Approver, and 404 for the other salesperson and for Warehouse — unchanged.
+
+The panel was screenshotted at each step rather than trusted, which is the lesson from the morning:
+the rename box sits inside the panel, the panel inside the viewport, and every line readable.
+
 ## 2026-09-15 · The eye's panel was invisible, and then it was cut in half
 
 Reported an hour after it shipped: *"message in eye view cannot be read."* The screenshot showed the
