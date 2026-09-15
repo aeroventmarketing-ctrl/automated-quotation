@@ -64,13 +64,72 @@ export function statusBucket(status: PRStatus, ctx?: { isDept?: boolean; poAppro
   return "approved"; // VOUCHER_READY, PURCHASED, CHECKED, RECEIVED, COMPLETED (+ approved dept & non-dept APPROVED)
 }
 
-/** A PO can be cancelled by the purchaser up until it's received into stock. */
+/** The statuses at which a purchase can still be called off at all. */
 export function isCancellable(status: PRStatus): boolean {
   return ([
     "PENDING_APPROVAL", "APPROVED", "VOUCHER_READY", "VOUCHER_SIGNED", "CASH_RELEASED",
     "WITH_PURCHASER", "CASH_CONFIRMED", "TASKED", "LOGISTICS_CONFIRMED",
     "PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED",
   ] as PRStatus[]).includes(status);
+}
+
+/** Who is asking to cancel. The three seats this rule tells apart. */
+export interface PurchaseCancelActor {
+  admin: boolean;
+  /** Holds the Purchaser workflow role. */
+  purchaser: boolean;
+  /** Raised this request (or one of a combined PO's members). */
+  requestor: boolean;
+}
+
+/** What is being cancelled, as the rule needs to see it. */
+export interface PurchaseCancelContext {
+  status: PRStatus;
+  /** Which tab it sits in — a department MRF at APPROVED may still be pending. */
+  bucket: PRBucket;
+  /** A purchase order has already been written for it (`pr.po` holds one). */
+  poPrepared: boolean;
+  /** This PO covers more than one request, so cancelling kills them all. */
+  combined: boolean;
+}
+
+/**
+ * May this person cancel this purchase?
+ *
+ * ONE definition, called by the Purchasing page that draws the button and by
+ * `cancelPurchaseRequest` that does the work — the lesson from `catalogue-access`
+ * and the note in CLAUDE.md: a gate written twice eventually means two things,
+ * and the half that drifts is the one nobody is looking at.
+ *
+ * **Before approval**, the person who raised the request, the Purchaser and an
+ * admin may all call it off. Nothing has been promised to anybody yet.
+ *
+ * **Once approved**, the Purchaser keeps exactly one window, which the owner
+ * asked for on 15 September: *"Add an option to cancel PO in approved Purchasing
+ * tab for purchaser role."* It is deliberately the narrowest reading of that —
+ * a purchase that is **approved and has no purchase order written for it yet**.
+ * The reasoning, in the owner's own choice of scope:
+ *
+ *  - Once a PO exists it carries a number, a supplier and a voucher moving
+ *    behind it. Cancelling then unwinds other people's work — the Approver's
+ *    signature, Accounting's voucher, released cash — so it stays with an admin.
+ *  - A **combined** PO covers several departments' requests, and cancelling it
+ *    cancels every one of them. One press by one Purchaser should not be able to
+ *    wipe out three other departments' requests, so combined POs stay with an
+ *    admin too.
+ *
+ * An admin's reach is unchanged: anything `isCancellable` allows, right up to
+ * the moment the goods are received into stock.
+ */
+export function canCancelPurchase(ctx: PurchaseCancelContext, who: PurchaseCancelActor): boolean {
+  if (!isCancellable(ctx.status)) return false;
+  if (who.admin) return true;
+  if (ctx.bucket === "pending") {
+    // A department MRF the Plant Manager has approved is out of the requestor's
+    // hands even though it still shows as pending — the Approver owns it next.
+    return ctx.status === "PENDING_APPROVAL" && (who.purchaser || who.requestor);
+  }
+  return who.purchaser && ctx.status === "APPROVED" && !ctx.poPrepared && !ctx.combined;
 }
 
 export interface PurchaseStepDef {

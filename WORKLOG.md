@@ -1,3 +1,68 @@
+## 2026-09-15 · The Purchaser can call off a purchase they haven't written a PO for
+
+The owner: *"Add an option to cancel PO in approved Purchasing tab for purchaser role."*
+
+This is **Phase 4 · Purchasing**, frozen. The owner asked for it directly, which is the approval
+CLAUDE.md requires — but "the Approved tab" is ten statuses wide, running from *Approved — awaiting
+Purchase Order* all the way to *Plant Manager approved*, so the scope was put back to the owner
+before anything was written. They chose the narrowest reading available, twice:
+
+> **Only before a PO is prepared**, and **single-request POs only.**
+
+So the Purchaser's new window is exactly one state: **approved, no purchase order written yet, not a
+combined PO.** Everything else stays admin-only, unchanged.
+
+### Why those two edges are the right ones
+
+Once a PO exists it carries a number, a supplier and a voucher moving behind it; cancelling then
+unwinds the Approver's signature and Accounting's voucher, which is not the Purchaser's to undo. And
+cancelling a **combined** PO cancels every request on it — one press by one Purchaser would withdraw
+three other departments' requests without their knowing.
+
+### One rule, not two
+
+The gate was written in two places that had to agree: `canCancelPr` on the Purchasing page (draws the
+button) and `cancelPurchaseRequest` in `orders/actions` (does the work). Both are now thin callers of
+**`canCancelPurchase` in `lib/purchasing`** — the `catalogue-access` lesson from CLAUDE.md, where a
+gate written twice eventually meant two things and the half nobody watched was the one that drifted.
+
+The server checks it against **every member** of a combined PO, so a batch can only be cancelled when
+each request on it could be cancelled on its own.
+
+One trap the rule has to see and a status-only check would not: a **department MRF at APPROVED** is
+only *Plant-Manager*-approved and still sits in the **Pending** tab awaiting the Approver. Its status
+says APPROVED; its tab says pending. The owner asked for the Approved tab, so the rule keys off the
+bucket, and that case is pinned by a test.
+
+### Measured, not assumed
+
+`isCancellable`'s comment has always claimed *"a PO can be cancelled by the purchaser up until it's
+received into stock"*, while both gates said admin-only past approval. The comment described an
+intention that the code never implemented; it now describes what it does.
+
+In the role harness, on the Approved tab, counting the actual "Cancel this PO" buttons:
+
+| | before | after |
+|---|---|---|
+| Purchaser | 0 | **5** — the five approved requests with no PO |
+| Admin | 5 | 5 — unchanged |
+| Accounting / Payment Approver / Warehouse | 0 | 0 |
+
+The admin row is the one worth having measured: the baseline was taken by checking the pre-change
+files into the harness and counting, rather than by reasoning that the admin branch was untouched.
+
+Then the button was actually pressed as **Allan Ramos (purchaser)** — the request moved to CANCELLED
+with `decidedByName = "Allan Ramos"`, and the count dropped 5 → 4.
+
+And the server's own composition, run over the real rows rather than over invented ones:
+
+```
+APPROVED      | approved | po:false | comb:false   admin:YES  purchaser:YES  requestor:no
+APPROVED      | approved | po:true  | comb:false   admin:YES  purchaser:no   requestor:no
+CASH_RELEASED | approved | po:true  | comb:false   admin:YES  purchaser:no   requestor:no
+COMPLETED     | approved | po:true  | comb:false   admin:no   purchaser:no   requestor:no
+```
+
 ## 2026-09-15 · One slip, the whole voucher — and the three things you can do to it
 
 The owner, in two lines: *"once file is attached. File will also attach to other rows that is related
