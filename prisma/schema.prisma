@@ -508,6 +508,12 @@ model Commission {
   paid            Boolean   @default(false)
   paidAt          DateTime?
   paidByName      String?
+  /// The PAYEE's own acknowledgement that the money reached them — never written
+  /// by Accounting or an admin, which is the only thing that makes it proof.
+  /// See migration 0055.
+  receivedAt      DateTime?
+  receivedById    String?
+  receivedByName  String?
 
   quotation   Quotation?   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   counterSale CounterSale? @relation(fields: [counterSaleId], references: [id], onDelete: Cascade)

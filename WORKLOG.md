@@ -1,3 +1,64 @@
+## 2026-09-15 · Every salesperson signs for their own commission
+
+The owner: *"show a link in every sales personnel. Link can be clickable by sales personnel when
+receiving commissions. Once clicked it will be the proof that the sales personnel received the
+amount."*
+
+### One word decided the whole design
+
+**Proof.** Everything below follows from it:
+
+- **Only the payee may click.** Not Accounting, who released the money; not an admin, who can do
+  everything else on that page. A receipt the payer can stamp on the payee's behalf says *"Accounting
+  believes Accounting paid this"* — it records nothing that was not already known. The value of the
+  record is that a second, interested person wrote it.
+- **Only after it was paid.** Confirming receipt of money nobody has released is a guess.
+- **Once.** There is no un-confirming. A receipt that can be withdrawn is not evidence, and the
+  mistake it would guard against — clicking too early — is already answered by the rule above.
+
+The action takes **no arguments at all**. It reads the payee's id from the session and stamps what
+that person is owed, so there is nothing to point at somebody else's row.
+
+### What it looks like
+
+A green panel above the month cards, for the viewer and nobody else: *"₱13,392.86 has been released
+to you — 2 commissions. Confirm below once the money is in your hands."* It asks a second time
+before writing, because it cannot be undone.
+
+Each paid row then carries the stamp in place of nothing: **Received by Sam Sales · Sep 15, 2026,
+1:44 PM**, visible to everyone who can see that row. Until it exists the row says *"Awaiting the
+payee's confirmation"* — that is information too, and it is what Accounting needs to chase.
+
+One click covers everything released and unconfirmed, because one cash voucher is what the person is
+handed. Each row still gets its own stamp, so a single line can be checked on its own later.
+
+### Verified across four people
+
+| on the Commissions page | offered a link | sees Sam's stamp |
+| --- | --- | --- |
+| Sam Sales (the payee), before | ₱13,392.86 | — |
+| Admin Ana, before | **₱26,785.71 — her own** | — |
+| Accounting (not a payee), before | **nothing** | — |
+| Sam Sales, after clicking | nothing left | ✓ ×2 |
+| Admin Ana, after Sam clicked | still her own ₱26,785.71 | ✓ ×2 |
+
+Accounting can see two rows sitting at *"Awaiting the payee's confirmation"* and has no way to
+answer for them. That row of the table is the feature.
+
+### Migration 0055 — apply by hand in Supabase
+
+```sql
+alter table "Commission"
+  add column if not exists "receivedAt" timestamp(3),
+  add column if not exists "receivedById" text,
+  add column if not exists "receivedByName" text;
+```
+
+`paidAt` / `paidByName` stay exactly what they were — what Accounting did. These three are what the
+salesperson said. They are separate columns rather than a second meaning for the first pair precisely
+because a different person writes them. `receivedById` rides alongside the name so the proof survives
+a rename: the name is what a person reads, the id is what it can be checked against.
+
 ## 2026-09-15 · The testing stage stays quiet, even when someone touches it in September
 
 The owner: *"Transactions before August 1, 2026 should not give any alarm or notifications. Date

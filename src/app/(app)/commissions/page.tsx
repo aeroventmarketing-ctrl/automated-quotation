@@ -27,6 +27,8 @@ import {
   type CommissionDeal,
 } from "@/lib/sales-commission";
 import { MarkPaid } from "./mark-paid";
+import { ReceiptLink, ReceivedStamp } from "./receipt-link";
+import { awaitingReceipt } from "@/lib/commission-receipt";
 import { VoucherSelection, DealTick, CardTick, type SelectableDeal } from "./voucher-selection";
 import { PayoutPanel, type PayoutRow } from "./payout-panel";
 import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
@@ -90,6 +92,10 @@ export default async function CommissionsPage() {
   // August's sales on 15 September, September's on 15 October. `pendingRelease`
   // is what is earned and waiting for that day.
   const todayYMD = commissionToday();
+  // What the VIEWER is owed a confirmation for: released to them, not yet
+  // acknowledged. Computed from their own id, so a manager viewing everybody's
+  // commissions is offered nothing to sign.
+  const mine = awaitingReceipt(viewer?.id ?? "", deals);
   const payableNow = deals.filter((d) => isPayable(d, todayYMD));
   const pendingRelease = deals.filter((d) => isPending(d, todayYMD));
   const pendingReleaseTotal = pendingRelease.reduce((a, d) => a + d.amount, 0);
@@ -209,6 +215,12 @@ export default async function CommissionsPage() {
           / Payment Approver / admin, so showing a salesperson a "Cash voucher"
           button that 404s for them would be a dead end. They see their own totals
           on the month cards and the dashboard tile. */}
+      {/* The viewer's own receipt link. Everyone who earns a commission sees it
+          for their own money and nobody else's — which is what makes clicking it
+          proof rather than paperwork. A manager viewing this page sees the stamp
+          it leaves on each paid row, never the button. */}
+      {mine.rows.length > 0 && <ReceiptLink total={mine.total} count={mine.rows.length} currency={currency} />}
+
       {canSeeAll && payoutRows.length > 0 && <PayoutPanel rows={payoutRows} canManage={canManage} currency={currency} />}
 
       {failed ? (
@@ -392,7 +404,17 @@ function MonthCard({
 }
 
 function DealStatus({ deal: d, qualifies, currency }: { deal: CommissionDeal; qualifies: boolean; currency: string }) {
-  if (d.paid) return <Badge variant="success">Paid{d.paidByName ? ` · ${d.paidByName}` : ""}</Badge>;
+  // Paid says what ACCOUNTING did; the stamp underneath says what the PAYEE
+  // said. Two different people, so two different lines — see
+  // `lib/commission-receipt`.
+  if (d.paid) {
+    return (
+      <span className="inline-flex flex-col gap-0.5">
+        <Badge variant="success" className="w-fit">Paid{d.paidByName ? ` · ${d.paidByName}` : ""}</Badge>
+        <ReceivedStamp receivedAt={d.receivedAt} receivedByName={d.receivedByName} />
+      </span>
+    );
+  }
   if (d.approved) {
     return (
       <span className="inline-flex flex-col gap-0.5">
