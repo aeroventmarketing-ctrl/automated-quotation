@@ -9,6 +9,7 @@ import {
   solveAirHeat,
   isAirHeatError,
   basisDef,
+  heatConstants,
   btuToKw,
   btuToTons,
   HEAT_BASES,
@@ -17,6 +18,8 @@ import {
   type TempUnit,
   type HumidityUnit,
   type AltitudeUnit,
+  type AirHeatMode,
+  type LoadUnit,
 } from "@/lib/hvac/psychrometrics";
 import { positive as num, signed, nonNegative, r1, r2, r3 } from "@/lib/hvac/parse";
 
@@ -41,8 +44,16 @@ import { positive as num, signed, nonNegative, r1, r2, r3 } from "@/lib/hvac/par
 
 const fmt = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 0 });
 
+/** cfm back out into whatever the reader asked for. */
+const AIRFLOW_LABEL: Record<HeatAirflowUnit, string> = { cfm: "CFM", m3hr: "m³/h", lps: "L/s" };
+const fromCfm = (cfm: number, u: HeatAirflowUnit) =>
+  u === "m3hr" ? cfm * 1.69901082 : u === "lps" ? cfm / 2.11888 : cfm;
+
 export function AirHeatCalculator() {
+  const [mode, setMode] = useState<AirHeatMode>("heat");
   const [airflow, setAirflow] = useState("2000");
+  const [load, setLoad] = useState("24000");
+  const [loadUnit, setLoadUnit] = useState<LoadUnit>("btuh");
   const [airflowUnit, setAirflowUnit] = useState<HeatAirflowUnit>("cfm");
   const [tempUnit, setTempUnit] = useState<TempUnit>("f");
   const [humidityUnit, setHumidityUnit] = useState<HumidityUnit>("rh");
@@ -62,7 +73,10 @@ export function AirHeatCalculator() {
   const result = useMemo(
     () =>
       solveAirHeat({
+        mode,
         airflow: num(airflow),
+        load: num(load),
+        loadUnit,
         airflowUnit,
         tempUnit,
         humidityUnit,
@@ -73,10 +87,11 @@ export function AirHeatCalculator() {
         altitudeUnit,
         flowTemp: signed(flowTemp),
       }),
-    [airflow, airflowUnit, tempUnit, humidityUnit, t1, h1, e1, t2, h2, e2, basis, altitude, altitudeUnit, flowTemp],
+    [mode, airflow, load, loadUnit, airflowUnit, tempUnit, humidityUnit, t1, h1, e1, t2, h2, e2, basis, altitude, altitudeUnit, flowTemp],
   );
 
   const deg = tempUnit === "c" ? "°C" : "°F";
+  const ks = r2(heatConstants(basis).sensible);
   const humidityLabel =
     humidityUnit === "rh" ? "RH (%)" : humidityUnit === "grains" ? "gr/lb" : "g/kg";
 
@@ -84,15 +99,30 @@ export function AirHeatCalculator() {
     <Card>
       <CardContent className="space-y-5 pt-6">
         <p className="text-sm text-muted-foreground">
-          Qs = {basisDef(basis).label.split(" · ")[0]} × CFM × ΔT. Latent from the moisture removed, total from the
-          two together.
+          {mode === "heat"
+            ? <>Qs = {ks} × CFM × ΔT. Latent from the moisture removed, total from the two together.</>
+            : <>CFM = Qs ÷ ({ks} × ΔT). The same equation rearranged — the airflow that carries a known sensible load.</>}
         </p>
 
-        {/* Air being moved */}
+        {/* Which way round the sum is worked. */}
         <div className="flex flex-wrap items-end gap-3">
-          <Field label="Airflow" value={airflow} onChange={setAirflow} placeholder="e.g. 2000" />
-          <Picker label="Unit" value={airflowUnit} onChange={(v) => setAirflowUnit(v as HeatAirflowUnit)} className="w-28"
-            options={[["cfm", "CFM"], ["m3hr", "m³/h"], ["lps", "L/s"]]} />
+          <Picker label="Solve for" value={mode} onChange={(v) => setMode(v as AirHeatMode)} className="w-52"
+            options={[["heat", "Heat from an airflow"], ["airflow", "Airflow for a load"]]} />
+          {mode === "heat" ? (
+            <>
+              <Field label="Airflow" value={airflow} onChange={setAirflow} placeholder="e.g. 2000" />
+              <Picker label="Unit" value={airflowUnit} onChange={(v) => setAirflowUnit(v as HeatAirflowUnit)} className="w-28"
+                options={[["cfm", "CFM"], ["m3hr", "m³/h"], ["lps", "L/s"]]} />
+            </>
+          ) : (
+            <>
+              <Field label="Sensible load" value={load} onChange={setLoad} placeholder="e.g. 24000" />
+              <Picker label="Unit" value={loadUnit} onChange={(v) => setLoadUnit(v as LoadUnit)} className="w-28"
+                options={[["btuh", "BTU/hr"], ["tons", "TR"], ["kw", "kW"]]} />
+              <Picker label="Show airflow in" value={airflowUnit} onChange={(v) => setAirflowUnit(v as HeatAirflowUnit)} className="w-32"
+                options={[["cfm", "CFM"], ["m3hr", "m³/h"], ["lps", "L/s"]]} />
+            </>
+          )}
           <Picker label="Temperature" value={tempUnit} onChange={(v) => setTempUnit(v as TempUnit)} className="w-24"
             options={[["f", "°F"], ["c", "°C"]]} />
           <Picker label="Humidity as" value={humidityUnit} onChange={(v) => setHumidityUnit(v as HumidityUnit)} className="w-32"
@@ -131,6 +161,19 @@ export function AirHeatCalculator() {
 
         {result && !isAirHeatError(result) && (
           <div className="space-y-3 border-t pt-4">
+            {mode === "airflow" && (
+              <div className="rounded-md border border-primary/40 bg-primary/5 p-3">
+                <div className="text-xs text-muted-foreground">Airflow required</div>
+                <div className="text-2xl font-bold tabular-nums">
+                  {fmt(fromCfm(result.cfm, airflowUnit))}{" "}
+                  <span className="text-sm font-normal">{AIRFLOW_LABEL[airflowUnit]}</span>
+                </div>
+                <div className="text-[11px] text-muted-foreground tabular-nums">
+                  {fmt(result.cfm)} CFM · {r1(Math.abs(result.deltaTF))} °F {result.deltaTF >= 0 ? "drop" : "rise"}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Sensible" btu={result.sensible} />
               {result.latent != null && <Stat label="Latent" btu={result.latent} />}

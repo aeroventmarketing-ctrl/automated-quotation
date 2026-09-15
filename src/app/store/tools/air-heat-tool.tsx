@@ -5,6 +5,7 @@ import {
   solveAirHeat,
   isAirHeatError,
   basisDef,
+  heatConstants,
   btuToKw,
   btuToTons,
   HEAT_BASES,
@@ -13,6 +14,8 @@ import {
   type TempUnit,
   type HumidityUnit,
   type AltitudeUnit,
+  type AirHeatMode,
+  type LoadUnit,
 } from "@/lib/hvac/psychrometrics";
 import { positive as num, signed, nonNegative, r1, r2, r3 } from "@/lib/hvac/parse";
 import { NumField, PickField, Stat, Stats, ToolCard, Hint, SubGroup } from "./tool-ui";
@@ -23,8 +26,15 @@ import { NumField, PickField, Stat, Stats, ToolCard, Hint, SubGroup } from "./to
  */
 const fmt = (n: number) => n.toLocaleString("en-PH", { maximumFractionDigits: 0 });
 
+const AIRFLOW_LABEL: Record<HeatAirflowUnit, string> = { cfm: "CFM", m3hr: "m³/h", lps: "L/s" };
+const fromCfm = (cfm: number, u: HeatAirflowUnit) =>
+  u === "m3hr" ? cfm * 1.69901082 : u === "lps" ? cfm / 2.11888 : cfm;
+
 export function AirHeatTool() {
+  const [mode, setMode] = useState<AirHeatMode>("heat");
   const [airflow, setAirflow] = useState("2000");
+  const [load, setLoad] = useState("24000");
+  const [loadUnit, setLoadUnit] = useState<LoadUnit>("btuh");
   const [airflowUnit, setAirflowUnit] = useState<HeatAirflowUnit>("cfm");
   const [tempUnit, setTempUnit] = useState<TempUnit>("f");
   const [humidityUnit, setHumidityUnit] = useState<HumidityUnit>("rh");
@@ -42,7 +52,10 @@ export function AirHeatTool() {
   const result = useMemo(
     () =>
       solveAirHeat({
+        mode,
         airflow: num(airflow),
+        load: num(load),
+        loadUnit,
         airflowUnit,
         tempUnit,
         humidityUnit,
@@ -53,7 +66,7 @@ export function AirHeatTool() {
         altitudeUnit,
         flowTemp: signed(flowTemp),
       }),
-    [airflow, airflowUnit, tempUnit, humidityUnit, t1, h1, t2, h2, basis, altitude, altitudeUnit, flowTemp],
+    [mode, airflow, load, loadUnit, airflowUnit, tempUnit, humidityUnit, t1, h1, t2, h2, basis, altitude, altitudeUnit, flowTemp],
   );
 
   const deg = tempUnit === "c" ? "°C" : "°F";
@@ -66,14 +79,25 @@ export function AirHeatTool() {
       title="Air Heat — Sensible, Latent & Total"
       intro={
         <>
-          How much heat an airflow carries. Sensible from the temperature drop, latent from the moisture removed,
-          total from the two together — with the sensible heat ratio, and corrected for altitude and air temperature.
+          How much heat an airflow carries — or how much air a load needs. Sensible from the temperature drop, latent
+          from the moisture removed, total from the two together, with the sensible heat ratio and corrected for
+          altitude and air temperature.
         </>
       }
     >
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <NumField label="Airflow" value={airflow} onChange={setAirflow} placeholder="e.g. 2000" />
-        <PickField label="Airflow unit" value={airflowUnit} onChange={(v) => setAirflowUnit(v as HeatAirflowUnit)}
+        <PickField label="Solve for" value={mode} onChange={(v) => setMode(v as AirHeatMode)}
+          options={[{ value: "heat", label: "Heat from an airflow" }, { value: "airflow", label: "Airflow for a load" }]} />
+        {mode === "heat" ? (
+          <NumField label="Airflow" value={airflow} onChange={setAirflow} placeholder="e.g. 2000" />
+        ) : (
+          <NumField label="Sensible load" value={load} onChange={setLoad} placeholder="e.g. 24000" />
+        )}
+        {mode === "airflow" && (
+          <PickField label="Load unit" value={loadUnit} onChange={(v) => setLoadUnit(v as LoadUnit)}
+            options={[{ value: "btuh", label: "BTU/hr" }, { value: "tons", label: "TR" }, { value: "kw", label: "kW" }]} />
+        )}
+        <PickField label={mode === "heat" ? "Airflow unit" : "Show airflow in"} value={airflowUnit} onChange={(v) => setAirflowUnit(v as HeatAirflowUnit)}
           options={[{ value: "cfm", label: "CFM" }, { value: "m3hr", label: "m³/h" }, { value: "lps", label: "L/s" }]} />
         <PickField label="Temperature" value={tempUnit} onChange={(v) => setTempUnit(v as TempUnit)}
           options={[{ value: "f", label: "°F" }, { value: "c", label: "°C" }]} />
@@ -108,11 +132,24 @@ export function AirHeatTool() {
       </SubGroup>
 
       {isAirHeatError(result) && <Hint>{result.error}</Hint>}
-      {result === null && <Hint>Enter an airflow and both air temperatures to see the heat carried.</Hint>}
+      {result === null && (
+        <Hint>
+          {mode === "heat"
+            ? "Enter an airflow and both air temperatures to see the heat carried."
+            : `Enter the sensible load and both air temperatures — CFM = Qs ÷ (${r2(heatConstants(basis).sensible)} × ΔT).`}
+        </Hint>
+      )}
 
       {result && !isAirHeatError(result) && (
         <>
           <Stats>
+            {mode === "airflow" && (
+              <Stat
+                label="Airflow required"
+                value={`${fmt(fromCfm(result.cfm, airflowUnit))} ${AIRFLOW_LABEL[airflowUnit]}`}
+                sub={`${fmt(result.cfm)} CFM · ${r1(Math.abs(result.deltaTF))} °F ${result.deltaTF >= 0 ? "drop" : "rise"}`}
+              />
+            )}
             <Stat label="Sensible" value={heat(result.sensible)} sub={sub(result.sensible)} />
             {result.latent != null && <Stat label="Latent" value={heat(result.latent)} sub={sub(result.latent)} />}
             <Stat label="Total" value={heat(result.total)} sub={sub(result.total)} />
