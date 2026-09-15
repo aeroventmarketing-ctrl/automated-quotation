@@ -228,10 +228,28 @@ export function RowProof({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-64 rounded-md border bg-popover p-2 text-left shadow-lg">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of payment</p>
+        // A centred overlay rather than a popover hung off the button, for two
+        // reasons found by looking at it:
+        //
+        //  · it was drawn with `bg-popover`, and this project's CSS defines
+        //    `--card` but has never defined `--popover` — so the panel had NO
+        //    background and the rows behind read straight through it;
+        //  · and the commissions table sits in an `overflow-x-auto` wrapper, which
+        //    clips anything hanging out of it. The attach button was cut in half.
+        //
+        // Fixed positioning escapes the scroll container, the backdrop makes the
+        // text unambiguous, and there is no z-index race with the row badges.
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+            className="absolute inset-0 cursor-default bg-black/30"
+          />
+          <div className="relative w-full max-w-sm rounded-lg border bg-card p-4 text-left text-card-foreground shadow-xl">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of payment</p>
           {docs.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {canAttach ? "Nothing attached yet. Add the slip or the signed voucher below." : "Nothing attached yet — ask Accounting for the slip."}
             </p>
           ) : (
@@ -242,7 +260,7 @@ export function RowProof({
                     href={viewHref(d)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                    className="inline-flex min-w-0 items-center gap-1 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
                   >
                     <FileCheck2 className="h-3 w-3 flex-none" />
                     <span className="truncate">{d.name}</span>
@@ -257,7 +275,7 @@ export function RowProof({
             </ul>
           )}
           {docs.some((d) => d.uploadedByName) && (
-            <p className="mt-1 text-[10px] text-muted-foreground">Attached by {docs.find((d) => d.uploadedByName)!.uploadedByName}</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">Attached by {docs.find((d) => d.uploadedByName)!.uploadedByName}</p>
           )}
           {canAttach && (
             <>
@@ -272,15 +290,16 @@ export function RowProof({
                 type="button"
                 disabled={busy}
                 onClick={() => input.current?.click()}
-                className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
+                className="mt-3 inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-accent disabled:opacity-50"
               >
                 <Paperclip className="h-3 w-3" />
                 {busy ? "Attaching…" : docs.length > 0 ? "Attach another" : "Attach proof / signed voucher"}
               </button>
             </>
           )}
-          {err && <p className="mt-1 text-[10px] text-destructive">{err}</p>}
-          <button type="button" onClick={() => setOpen(false)} className="mt-1 w-full text-[10px] text-muted-foreground hover:underline">Close</button>
+          {err && <p className="mt-1 text-[11px] text-destructive">{err}</p>}
+          <button type="button" onClick={() => setOpen(false)} className="mt-3 w-full rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-accent">Close</button>
+          </div>
         </div>
       )}
     </span>

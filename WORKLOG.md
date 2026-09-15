@@ -1,3 +1,37 @@
+## 2026-09-15 · The eye's panel was invisible, and then it was cut in half
+
+Reported an hour after it shipped: *"message in eye view cannot be read."* The screenshot showed the
+words of the panel and the words of the rows behind it printed on top of one another.
+
+### A colour that was never there
+
+The panel was drawn with `bg-popover`. **This project's CSS has never defined `--popover`** — it
+defines `--card`, `--muted`, `--accent`, `--border` and the rest, but not that one. Tailwind emitted
+`background-color: hsl(var(--popover))`, the variable resolved to nothing, and the panel had no
+background at all. Every row behind it read straight through.
+
+Nothing caught it: it is valid Tailwind, valid CSS, and it type-checks. The only use of the class in
+the whole codebase was the one I had just written.
+
+### And underneath it, a second one
+
+With a real background the panel was readable — and clipped. The commissions table sits in an
+`overflow-x-auto` wrapper so a wide table can scroll, and that wrapper cuts off anything hanging out
+of it. **The "Attach another" button was sliced in half**, and the Close button was gone entirely.
+
+Which would have been the next thing reported. It was found by taking a screenshot and looking at
+it, rather than by asking whether the colour was fixed.
+
+### One change answers both
+
+The panel is now a centred overlay with a dimmed backdrop: `position: fixed` escapes the scroll
+container, so nothing clips it; the backdrop settles what is panel and what is page; and there is no
+z-index race with the status badges of neighbouring rows. It also behaves on a phone, where a 16rem
+popover hung off a button in a scrolling table never would have.
+
+Verified by opening it and measuring, not by looking at the diff: background
+`rgb(255, 255, 255)`, fully inside the viewport, topmost element at its own centre, and the full text
+readable both when a slip is attached and when none is.
 ## 2026-09-15 · An eye on every paid commission
 
 The owner: *"put an eye view at action column, when eye view is clicked, proof of payment can be
