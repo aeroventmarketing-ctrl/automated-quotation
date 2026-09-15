@@ -13,19 +13,36 @@ import { normalizeCart, MAX_LINE_QTY, type CartLine } from "@/lib/store-cart";
 
 const KEY = "aerovent.store.cart.v1";
 
-let cache: CartLine[] = [];
+/**
+ * The empty cart, as ONE array that is always the same array.
+ *
+ * `useSyncExternalStore` compares snapshots with `Object.is`, so a snapshot
+ * function returning a fresh `[]` never compares equal to its own previous
+ * result. React says so on every storefront page:
+ *
+ *     The result of getServerSnapshot should be cached to avoid an infinite loop
+ *
+ * `read` below was already written to hand back a stable reference — see the
+ * note about reusing `cache` — but the SERVER snapshot was the literal `() => []`
+ * and slipped past. The two need the same care for the same reason.
+ *
+ * Never mutated: every cart change builds a new array through `write`.
+ */
+const EMPTY: CartLine[] = [];
+
+let cache: CartLine[] = EMPTY;
 let cacheJson = "[]";
 const listeners = new Set<() => void>();
 
 function read(): CartLine[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined") return EMPTY;
   let json = "[]";
   try { json = window.localStorage.getItem(KEY) ?? "[]"; } catch { json = "[]"; }
   // Reuse the previous array when the stored JSON is unchanged, so
   // useSyncExternalStore sees a stable reference and doesn't loop.
   if (json !== cacheJson) {
     cacheJson = json;
-    try { cache = normalizeCart(JSON.parse(json)); } catch { cache = []; }
+    try { cache = normalizeCart(JSON.parse(json)); } catch { cache = EMPTY; }
   }
   return cache;
 }
@@ -45,9 +62,13 @@ function subscribe(cb: () => void) {
   return () => { listeners.delete(cb); window.removeEventListener("storage", onStorage); };
 }
 
-/** The cart as the browser holds it. `[]` during SSR. */
+/** Hoisted rather than written inline at the call site, so it is one function
+ *  returning one array — see `EMPTY`. */
+const serverSnapshot = (): CartLine[] => EMPTY;
+
+/** The cart as the browser holds it. Empty during SSR. */
 export function useCart(): CartLine[] {
-  return useSyncExternalStore(subscribe, read, () => []);
+  return useSyncExternalStore(subscribe, read, serverSnapshot);
 }
 
 /** Total item count — what the header badge shows. */

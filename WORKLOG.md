@@ -1,3 +1,121 @@
+## 2026-09-16 · Sizing an exhaust fan: a calculation of its own
+
+The owner: *"What is the proper computation for an exhaust fan or ventilation fan?"* — then, offered
+three ways to serve it, *"Pick 3"*: a calculation of its own rather than a patched sign on Air Heat.
+
+### Why it could not just be a mode on Air Heat
+
+Air Heat *could* already do the heat balance — run it backwards, enter the load. Two things stopped
+that being the answer.
+
+**The sign.** Enter a ventilation job there the way the air actually flows — entering 88 °F at the
+louvre, leaving 95 °F at the fan — and it returns **−30,240 BTU/hr**. Correct: the AIR is being
+heated. Also the opposite sign from the figure anybody wants to quote, and the diagram beside it
+prints the same job as +30,240 "heat removed". Two screens, one job, opposite signs.
+
+**ΔT is a decision, not a measurement.** This is the real reason. You cannot measure the room
+temperature of a building whose fan does not exist yet. ΔT is *how far above outdoor you are willing
+to let the room sit*, and the airflow falls out of that choice — halve the allowed rise and the fan
+doubles. A screen whose two boxes say "entering" and "leaving" cannot say that.
+
+### The two computations, and the one that wins
+
+```
+1 · AIR CHANGES   CFM = volume(ft³) × ACH / 60      the occupancy minimum
+2 · HEAT BALANCE  CFM = Q(BTU/hr) / (1.08 × ΔT)     what the heat needs
+                  install the LARGER, and say which governed
+```
+
+The heat gain is built up on screen — motors, people, lighting, roof, process — each with its share
+of the total as a bar, because the shares are the interesting part.
+
+**Motors divide by efficiency rather than multiply.** Nameplate HP is SHAFT power; the motor's own
+losses land in the room too, so `q = HP × 2545 × loadFactor ÷ efficiency`. A test pins that the
+result is larger than the naive `HP × 2545 × load`, because getting this backwards is silent.
+
+**People use the sensible half only** — 245 / 275 / 375 / 580 BTU/hr by activity (ASHRAE ch. 18). An
+earlier figure of 500 quoted in conversation was too high and is corrected here.
+
+### The refusal that earns its place
+
+> Ventilation cannot cool below the outdoor air — it can only bring outdoor air in. Set the room
+> target above the outdoor temperature, or the job needs refrigeration rather than a fan.
+
+A target at or below outdoor is refused outright rather than returning an enormous airflow. Finding
+that out after installation is the expensive way, and a calculator that quietly returns 400,000 cfm
+for a 24 °C target in Manila is participating in the mistake.
+
+A rise under 1 °C is refused too — ventilation chases ambient loosely, and the airflow runs away.
+
+### The commercial fact the tool now states
+
+On the worked example — a 20 × 30 × 6 m fabrication shop, 30 HP of motors, 20 people, 5 kW of
+lighting, bare GI roof — **the roof is 78% of a 447,058 BTU/hr load**. The fan comes out at 45,994
+cfm, and the heat governs.
+
+Switch the roof to insulated and the total drops to 149,974 BTU/hr, the heat balance falls to 15,429
+cfm, and the **air-change minimum takes over** at 16,951 cfm. Insulation does not shrink the fan a
+little; it changes which computation is in charge.
+
+So when one source is over half the load the tool says so: *"Roof / solar alone is 78% of the load —
+worth attacking directly before buying the fan for it."* That is a second product line rather than a
+lost sale.
+
+### Two bugs found by using it, not by reading it
+
+1. **Duplicate React keys in the occupancy list.** Workshop and Assembly are both 8 ACH; Welding and
+   Kitchen are both 20. The ACH NUMBER was serving as both React key and option value, so each pair
+   collided — duplicate-key errors in the console, and a `<select>` that could not tell the two apart.
+   Key and value are now the preset's own key. All four verified selectable independently.
+2. **The "attack this first" advice never fired.** It read `gains[0]`, and the gains come back in
+   definition order — so it was testing *motors* at 16%, not the roof at 78%. It sorts now. Visible
+   only by reading the rendered sentence and noticing something missing.
+## 2026-09-16 · The storefront's React warning, on every page of the shop
+
+Noticed while screenshotting the HVAC tools page, reported to the owner as pre-existing, and then:
+*"Fix the getServerSnapshot warning."*
+
+```
+The result of getServerSnapshot should be cached to avoid an infinite loop
+```
+
+### One line, and the file already knew
+
+`useSyncExternalStore` compares snapshots with `Object.is`. A snapshot function that returns a fresh
+value never compares equal to its own previous result, so React cannot tell "unchanged" from
+"changed" — hence the warning, and the infinite loop it is named after.
+
+`cart-store.ts` passed `() => []` as its server snapshot. A new array, every call.
+
+The striking part is that **the file already contains the fix, two lines above, for the other
+snapshot**: `read()` caches `cache` and reuses it whenever the stored JSON is unchanged, with a
+comment saying *"so useSyncExternalStore sees a stable reference and doesn't loop."* Somebody
+understood the hazard exactly, applied it to the client snapshot, and wrote `() => []` for the server
+one in the same breath. Both now share a module-level `EMPTY`, and the snapshot function is hoisted
+rather than written inline at the call site — an arrow there is a new function on every render, which
+is the same mistake wearing a different hat.
+
+`ui-store.ts` was checked too and was already correct: its `SERVER_STATE` is a module constant.
+
+### Why it showed up on a fan calculator
+
+Nothing on the HVAC tools page has a cart. The storefront **header** does — the `Cart 0` badge runs
+`useCartCount` → `useCart` — so the warning fired on every page of the shop, tools included. That is
+also why it was visible in three different tabs' console output and looked like it belonged to the
+page being worked on.
+
+### Verified by watching the console, then by using the cart
+
+Gone from `/store`, `/store/cart`, and the tools page on both the `air-heat` and `fan-law` tabs —
+which matters, because a fix that only cleared the tab being worked on would have proved nothing.
+
+Then the cart itself, since the change touched both the snapshot and the seed for `cache`: the header
+badge reads 0 → 3 → 5 → 0 as lines are added and cleared, and a deliberately corrupt localStorage
+payload falls back to an empty cart without throwing. That last one exercises the `cache = EMPTY`
+path specifically.
+
+(The storefront home also logs four 502s for product images. Those are Supabase Storage reads and the
+harness has no bucket — an artefact of the test environment, not of the shop.)
 ## 2026-09-16 · "Where do I measure these?" — a diagram on the Air Heat tool
 
 The owner, looking at the live tool on a phone: *"How do I measure leaving air and entering air. Make

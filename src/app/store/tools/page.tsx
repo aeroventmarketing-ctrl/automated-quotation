@@ -10,9 +10,9 @@ import { toolKeyFrom } from "./tools";
 
 export const dynamic = "force-dynamic";
 
-const TITLE = "HVAC Tools — Fan Selector, Ductulator, Pulley, Fan Law & Air Heat";
+const TITLE = "HVAC Tools — Fan Selector, Ductulator, Pulley, Fan Law, Air Heat & Ventilation";
 const DESCRIPTION =
-  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, apply the fan affinity laws, and work out the sensible, latent and total heat an airflow carries.";
+  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, apply the fan affinity laws, work out the sensible, latent and total heat an airflow carries, and size an exhaust or ventilation fan.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 /**
  * Public HVAC Tools page.
  *
- * The five calculators an engineer actually reaches for while specifying a job.
+ * The six calculators an engineer actually reaches for while specifying a job.
  * The Fan Selector runs the same selection engine as the staff quotation
  * builder through `/api/public/fan-select`, which is performance-only — no
  * price, no cost, no internal id ever crosses to the public side. The other
