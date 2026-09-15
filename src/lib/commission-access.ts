@@ -31,6 +31,20 @@ export interface CommissionAccess {
   canSeeAll: boolean;
   /** May record payouts (mark paid / release a voucher) and open a cash voucher. */
   canManage: boolean;
+  /**
+   * May attach (and remove) the proof that a payout was actually sent — the
+   * deposit slip or transfer screenshot.
+   *
+   * WIDER than `canManage` by one seat, deliberately. The owner: *"add an option
+   * to attach proof of payment to sales personnel for accounting, payment
+   * approver and admin."* The Payment Approver still does not RECORD the payout
+   * — that stays Accounting's — but they approve the money leaving, so they hold
+   * the evidence of it leaving.
+   *
+   * Viewing is wider still and is not a role at all: the payee sees the proof of
+   * their own payment. See `lib/commission-proof`.
+   */
+  canAttachProof: boolean;
 }
 
 export function commissionAccess(opts: {
@@ -45,5 +59,6 @@ export function commissionAccess(opts: {
   // The Payment Approver approves the money, so they see the whole picture —
   // but they do not record the payout.
   const canSeeAll = canManage || has("payment_approver");
-  return { canView: canSeeAll || earnsCommission(opts), canSeeAll, canManage };
+  const canAttachProof = canManage || has("payment_approver");
+  return { canView: canSeeAll || earnsCommission(opts), canSeeAll, canManage, canAttachProof };
 }

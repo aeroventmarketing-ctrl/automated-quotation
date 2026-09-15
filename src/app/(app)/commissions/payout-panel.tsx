@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payAllForSalesperson } from "./actions";
+import { ProofList } from "./proof-of-payment";
+import type { CommissionProofDoc } from "@/lib/commission-proof";
 
 export interface PayoutRow {
   salespersonId: string;
@@ -27,6 +29,8 @@ export interface PayoutRow {
    * payout", so it asks for exactly what it counted.
    */
   keys: string[];
+  /** The slips already attached to this payout (see `lib/commission-proof`). */
+  proof: CommissionProofDoc[];
 }
 
 /**
@@ -37,7 +41,18 @@ export interface PayoutRow {
  * The amounts below are still listed month by month; this is the payout view of
  * the same figures, because that is the unit money actually leaves the company in.
  */
-export function PayoutPanel({ rows, canManage, currency }: { rows: PayoutRow[]; canManage: boolean; currency: string }) {
+export function PayoutPanel({
+  rows,
+  canManage,
+  canAttachProof,
+  currency,
+}: {
+  rows: PayoutRow[];
+  canManage: boolean;
+  /** Accounting / Payment Approver / admin — one seat wider than `canManage`. */
+  canAttachProof: boolean;
+  currency: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -78,6 +93,9 @@ export function PayoutPanel({ rows, canManage, currency }: { rows: PayoutRow[]; 
                 {r.nextReleaseYMD ? ` · from ${formatDate(r.nextReleaseYMD)}` : ""}
                 {r.voucherNo ? <> · voucher <span className="font-semibold text-red-600">No. {r.voucherNo}</span> printed</> : ""}
               </p>
+              {r.proof.length > 0 && (
+                <p className="mt-1"><ProofList docs={r.proof} salespersonId={r.salespersonId} canAttach={canAttachProof} /></p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold tabular-nums">{formatCurrency(r.total, currency)}</span>

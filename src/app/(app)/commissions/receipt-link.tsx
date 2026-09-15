@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { BadgeCheck, HandCoins } from "lucide-react";
 import { confirmCommissionReceipt } from "./actions";
 import { actionError } from "@/lib/action-result";
+import { ProofList } from "./proof-of-payment";
+import type { CommissionProofDoc } from "@/lib/commission-proof";
 
 /**
  * The salesperson's own "I received this".
@@ -17,7 +19,20 @@ import { actionError } from "@/lib/action-result";
  * Nobody else sees it: a manager looking at the same page sees the stamp it
  * leaves behind (`ReceivedStamp`), never the button.
  */
-export function ReceiptLink({ total, count, currency }: { total: number; count: number; currency: string }) {
+export function ReceiptLink({
+  total,
+  count,
+  currency,
+  proof = [],
+  salespersonId,
+}: {
+  total: number;
+  count: number;
+  currency: string;
+  /** The slips Accounting attached — the payee may open their own. */
+  proof?: CommissionProofDoc[];
+  salespersonId: string;
+}) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,6 +65,13 @@ export function ReceiptLink({ total, count, currency }: { total: number; count: 
           <p className="mt-0.5 text-xs text-emerald-800/80 dark:text-emerald-300/80">
             {count === 1 ? "One commission" : `${count} commissions`} — confirm below once the money is in your hands.
             Your confirmation is the record that you received it, so only you can give it, and it can&apos;t be taken back.
+          </p>
+          <p className="mt-1.5">
+            <ProofList
+              docs={proof}
+              salespersonId={salespersonId}
+              emptyNote="No proof of payment attached yet — ask Accounting if you haven't received it."
+            />
           </p>
         </div>
         {confirming ? (

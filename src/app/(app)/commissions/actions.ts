@@ -7,9 +7,31 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { logActivity } from "@/lib/activity-log";
 import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { round2 } from "@/lib/quote";
+import { Prisma } from "@prisma/client";
+import { WORKFLOW_ROLE_KEYS } from "@/lib/workflow-roles";
+import {
+  canAttachCommissionProof,
+  coerceProofDocs,
+  proofTargets,
+  salespersonIdFromProofPath,
+  MAX_PROOF_DOCS,
+} from "@/lib/commission-proof";
 import { buildCommissionsFresh, allDeals, canMarkPaid, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/** The viewer plus the roles the proof rules read. */
+async function commissionViewer() {
+  const user = await getCurrentUser();
+  if (!user) return null;
+  const assignments = await getWorkflowRoles();
+  return {
+    user,
+    id: user.id,
+    admin: isAdmin(user),
+    workflowRoles: WORKFLOW_ROLE_KEYS.filter((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey)),
+  };
+}
 
 async function assertAccounting() {
   const user = await getCurrentUser();
@@ -228,4 +250,116 @@ export async function confirmCommissionReceipt(): Promise<ActionResult & { count
   revalidatePath("/commissions");
   revalidatePath("/my-dashboard");
   return { ...done, count: stamped.count, total };
+}
+
+/**
+ * Attach the proof that a payout was actually sent — the deposit slip or the
+ * transfer screenshot.
+ *
+ * Three seats may do it (Accounting, the Payment Approver, an admin); the payee
+ * may only read it. Which rows it lands on is `proofTargets`: the payout that
+ * person is in the middle of — released or about to be, and not yet signed for.
+ *
+ * The file is already in storage by the time this runs (the upload route put it
+ * there and checked the same permission). This records where it is.
+ */
+export async function attachCommissionProof(
+  salespersonId: string,
+  doc: { path: string; name: string; uploadedAt: string; uploadedById: string; uploadedByName: string },
+): Promise<ActionResult & { count?: number }> {
+  const viewer = await commissionViewer();
+  if (!viewer) return refuse("Please sign in again.");
+  if (!canAttachCommissionProof(viewer)) {
+    return refuse("Only Accounting, the Payment Approver or an admin can attach proof of payment.");
+  }
+  // The path carries the payee's id, and it is the path the file actually lives
+  // at — so a mismatch here means the form and the upload disagree about whose
+  // money this is. Refuse rather than guess.
+  if (salespersonIdFromProofPath(doc.path) !== salespersonId) {
+    return refuse("That file doesn't belong to this salesperson's payout.");
+  }
+
+  const todayYMD = commissionToday();
+  const deals = allDeals(await buildCommissionsFresh()).map((d) => ({
+    ...d,
+    payableNow: canMarkPaid(d, todayYMD),
+  }));
+  const targets = proofTargets(salespersonId, deals);
+  if (targets.length === 0) return refuse("There's no open payout for this salesperson to attach a proof to.");
+
+  const rows = await prisma.commission.findMany({
+    where: {
+      salespersonId,
+      OR: targets.map((d) => (d.kind === "order"
+        ? { quotationId: d.refId, kind: d.payeeKind }
+        : { counterSaleId: d.refId, kind: d.payeeKind })),
+    },
+    select: { id: true, paymentProof: true },
+  });
+  if (rows.length === 0) {
+    return refuse("Mark the voucher paid first — the proof attaches to a payout that has a record.");
+  }
+
+  let attached = 0;
+  for (const r of rows) {
+    const docs = coerceProofDocs(r.paymentProof);
+    if (docs.some((d) => d.path === doc.path)) continue; // already on this row
+    if (docs.length >= MAX_PROOF_DOCS) continue;
+    await prisma.commission.update({
+      where: { id: r.id },
+      data: { paymentProof: [...docs, doc] as unknown as Prisma.InputJsonValue },
+    });
+    attached++;
+  }
+  if (attached === 0) return refuse(`Each payout can carry ${MAX_PROOF_DOCS} files — remove one first.`);
+
+  const person = targets[0]?.salespersonName ?? "a salesperson";
+  await logActivity(viewer.user, {
+    action: "commission.proof.attached",
+    category: "commission",
+    summary: `Proof of payment attached for ${person} — ${doc.name} (${attached} ${attached === 1 ? "payout" : "payouts"})`,
+    entity: "commission",
+    entityId: rows[0].id,
+    href: "/commissions",
+  });
+  revalidatePath("/commissions");
+  return { ...done, count: attached };
+}
+
+/** Remove a proof from a salesperson's open payout. Same three seats. */
+export async function removeCommissionProof(salespersonId: string, path: string): Promise<ActionResult> {
+  const viewer = await commissionViewer();
+  if (!viewer) return refuse("Please sign in again.");
+  if (!canAttachCommissionProof(viewer)) {
+    return refuse("Only Accounting, the Payment Approver or an admin can remove proof of payment.");
+  }
+  if (salespersonIdFromProofPath(path) !== salespersonId) return refuse("That file doesn't belong to this salesperson's payout.");
+
+  const rows = await prisma.commission.findMany({
+    where: { salespersonId, receivedAt: null },
+    select: { id: true, paymentProof: true },
+  });
+  let removed = 0;
+  for (const r of rows) {
+    const docs = coerceProofDocs(r.paymentProof);
+    const kept = docs.filter((d) => d.path !== path);
+    if (kept.length === docs.length) continue;
+    await prisma.commission.update({
+      where: { id: r.id },
+      data: { paymentProof: kept as unknown as Prisma.InputJsonValue },
+    });
+    removed++;
+  }
+  if (removed === 0) return refuse("That proof is no longer attached — the payee may have confirmed receipt already.");
+
+  await logActivity(viewer.user, {
+    action: "commission.proof.removed",
+    category: "commission",
+    summary: `Proof of payment removed from a payout (${removed} ${removed === 1 ? "row" : "rows"})`,
+    entity: "commission",
+    entityId: rows[0]?.id ?? salespersonId,
+    href: "/commissions",
+  });
+  revalidatePath("/commissions");
+  return done;
 }

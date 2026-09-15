@@ -28,10 +28,14 @@ import {
 } from "@/lib/sales-commission";
 import { MarkPaid } from "./mark-paid";
 import { ReceiptLink, ReceivedStamp } from "./receipt-link";
-import { awaitingReceipt } from "@/lib/commission-receipt";
+import { ProofList } from "./proof-of-payment";
+import { readOutstandingReceipt, readAwaitingConfirmation } from "@/lib/commission-receipt";
+import { AwaitingConfirmationPanel } from "./awaiting-confirmation";
+import { coerceProofDocs, type CommissionProofDoc } from "@/lib/commission-proof";
 import { VoucherSelection, DealTick, CardTick, type SelectableDeal } from "./voucher-selection";
 import { PayoutPanel, type PayoutRow } from "./payout-panel";
 import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
+import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +59,7 @@ export default async function CommissionsPage() {
   // One rule, in `lib/commission-access`: Accounting/admin manage, the Payment
   // Approver sees all, and anyone who can EARN a commission — a SALES user, an
   // Engineer credited as a salesperson, or the Sales Head — sees their own.
-  const { canView, canSeeAll, canManage } = commissionAccess({
+  const { canView, canSeeAll, canManage, canAttachProof } = commissionAccess({
     admin: isAdmin(viewer),
     baseRole: viewer?.role ?? "",
     workflowRoles: WORKFLOW_ROLE_KEYS.filter((k) => viewer != null && userHasWorkflowRole(assignments, viewer.id, k as WorkflowRoleKey)),
@@ -95,7 +99,19 @@ export default async function CommissionsPage() {
   // What the VIEWER is owed a confirmation for: released to them, not yet
   // acknowledged. Computed from their own id, so a manager viewing everybody's
   // commissions is offered nothing to sign.
-  const mine = awaitingReceipt(viewer?.id ?? "", deals);
+  // Read from the payout RECORD, not from the recomputed entitlement — see
+  // `readOutstandingReceipt`. The question is "has this reached you?", and its
+  // answer must not change because a month was recalculated.
+  const awaiting = canSeeAll
+    ? await readAwaitingConfirmation({
+        findMany: (args) => prisma.commission.findMany(args as never) as never,
+        coerceProof: coerceProofDocs,
+      })
+    : [];
+  const mine = await readOutstandingReceipt(viewer?.id ?? "", {
+    findMany: (args) => prisma.commission.findMany(args as never) as never,
+    coerceProof: coerceProofDocs,
+  });
   const payableNow = deals.filter((d) => isPayable(d, todayYMD));
   const pendingRelease = deals.filter((d) => isPending(d, todayYMD));
   const pendingReleaseTotal = pendingRelease.reduce((a, d) => a + d.amount, 0);
@@ -143,6 +159,7 @@ export default async function CommissionsPage() {
         salespersonId: d.salespersonId, salespersonName: d.salespersonName,
         count: 0, total: 0, nextReleaseYMD: null as string | null, voucherNo: null as string | null,
         keys: [] as string[],
+        proof: [] as CommissionProofDoc[],
       };
       r.count += 1;
       r.keys.push(dealKey(d));
@@ -151,6 +168,9 @@ export default async function CommissionsPage() {
       // Only show a number when the printed voucher covers this row — a voucher
       // printed before another client paid no longer describes what is owed.
       r.voucherNo = r.voucherNo ?? voucherByDeal.get(dealKey(d)) ?? null;
+      // One payout, one set of slips — every row of it carries the same files,
+      // so the first that has any speaks for the voucher.
+      if (r.proof.length === 0 && d.paymentProof.length > 0) r.proof = d.paymentProof;
       return m.set(d.salespersonId, r);
     }, new Map<string, PayoutRow>())
     .values()]
@@ -219,9 +239,24 @@ export default async function CommissionsPage() {
           for their own money and nobody else's — which is what makes clicking it
           proof rather than paperwork. A manager viewing this page sees the stamp
           it leaves on each paid row, never the button. */}
-      {mine.rows.length > 0 && <ReceiptLink total={mine.total} count={mine.rows.length} currency={currency} />}
+      {mine.count > 0 && (
+        <ReceiptLink
+          total={mine.total}
+          count={mine.count}
+          currency={currency}
+          // The owner: *"Proof of payment must be viewable by sales account
+          // holder."* It belongs right here — beside the question "did you
+          // receive this?", which is exactly when someone wants to see the slip.
+          proof={mine.proof}
+          salespersonId={viewer?.id ?? ""}
+        />
+      )}
 
-      {canSeeAll && payoutRows.length > 0 && <PayoutPanel rows={payoutRows} canManage={canManage} currency={currency} />}
+      {canSeeAll && payoutRows.length > 0 && <PayoutPanel rows={payoutRows} canManage={canManage} canAttachProof={canAttachProof} currency={currency} />}
+
+      {/* Released, unsigned-for, and where the slip goes — see
+          `readAwaitingConfirmation` for why it cannot go one panel higher. */}
+      {canSeeAll && <AwaitingConfirmationPanel rows={awaiting} canAttachProof={canAttachProof} currency={currency} />}
 
       {failed ? (
         <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">
@@ -254,6 +289,8 @@ export default async function CommissionsPage() {
                     month={m}
                     currency={currency}
                     canManage={canManage}
+                    canAttachProof={canAttachProof}
+                    viewerId={viewer?.id ?? ""}
                     todayYMD={todayYMD}
                   />
                 ))}
@@ -270,11 +307,17 @@ function MonthCard({
   month: m,
   currency,
   canManage,
+  canAttachProof,
+  viewerId,
   todayYMD,
 }: {
   month: CommissionMonth;
   currency: string;
   canManage: boolean;
+  /** Accounting / Payment Approver / admin — may open any payout's slip. */
+  canAttachProof: boolean;
+  /** The viewer, so the payee can open their own. */
+  viewerId: string;
   todayYMD: string;
 }) {
   const isOverride = m.kind === "override";
@@ -358,7 +401,17 @@ function MonthCard({
                   <TableCell className="text-right font-medium tabular-nums">
                     {d.approved ? formatCurrency(d.amount, currency) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell><DealStatus deal={d} qualifies={m.qualifies} currency={currency} /></TableCell>
+                  <TableCell>
+                    <DealStatus
+                      deal={d}
+                      qualifies={m.qualifies}
+                      currency={currency}
+                      // Who may open the slip: the three seats that attach it,
+                      // and the person it pays. Same rule the route enforces —
+                      // this only decides whether to draw the link.
+                      showProof={canAttachProof || d.salespersonId === viewerId}
+                    />
+                  </TableCell>
                   {canManage && (
                     <TableCell className="text-right">
                       {/* The tick box sits in the row beside "Mark paid" — one
@@ -403,7 +456,17 @@ function MonthCard({
   );
 }
 
-function DealStatus({ deal: d, qualifies, currency }: { deal: CommissionDeal; qualifies: boolean; currency: string }) {
+function DealStatus({
+  deal: d,
+  qualifies,
+  currency,
+  showProof = false,
+}: {
+  deal: CommissionDeal;
+  qualifies: boolean;
+  currency: string;
+  showProof?: boolean;
+}) {
   // Paid says what ACCOUNTING did; the stamp underneath says what the PAYEE
   // said. Two different people, so two different lines — see
   // `lib/commission-receipt`.
@@ -412,6 +475,9 @@ function DealStatus({ deal: d, qualifies, currency }: { deal: CommissionDeal; qu
       <span className="inline-flex flex-col gap-0.5">
         <Badge variant="success" className="w-fit">Paid{d.paidByName ? ` · ${d.paidByName}` : ""}</Badge>
         <ReceivedStamp receivedAt={d.receivedAt} receivedByName={d.receivedByName} />
+        {showProof && d.paymentProof.length > 0 && (
+          <ProofList docs={d.paymentProof} salespersonId={d.salespersonId} />
+        )}
       </span>
     );
   }

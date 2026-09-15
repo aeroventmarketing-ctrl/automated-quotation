@@ -514,6 +514,10 @@ model Commission {
   receivedAt      DateTime?
   receivedById    String?
   receivedByName  String?
+  /// The deposit slip / transfer screenshot behind the payout. Attached by
+  /// Accounting, the Payment Approver or an admin; readable by them and by the
+  /// salesperson it pays. See migration 0056 and `lib/commission-proof`.
+  paymentProof    Json      @default("[]")
 
   quotation   Quotation?   @relation(fields: [quotationId], references: [id], onDelete: Cascade)
   counterSale CounterSale? @relation(fields: [counterSaleId], references: [id], onDelete: Cascade)

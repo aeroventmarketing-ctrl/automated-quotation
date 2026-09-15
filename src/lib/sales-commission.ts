@@ -46,6 +46,7 @@ import { saleFromClassification, isSaleConfirmed, collectedTotal, type SaleRecor
 import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getWorkflowRoles, usersWithWorkflowRole } from "@/lib/workflow-roles";
 import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
+import { coerceProofDocs, type CommissionProofDoc } from "@/lib/commission-proof";
 
 /** Rule 6 — the rate. */
 export const COMMISSION_RATE_PCT = 1.5;
@@ -291,6 +292,8 @@ export interface CommissionDeal {
    */
   receivedAt: string | null;
   receivedByName: string | null;
+  /** The deposit slip(s) behind the payout — see `lib/commission-proof`. */
+  paymentProof: CommissionProofDoc[];
   commissionId: string | null;
 }
 
@@ -566,7 +569,7 @@ export function withOverrides(
           ratePct: OVERRIDE_RATE_PCT,
           amount: overrideOn(d.net),
           // The payout record is this row's own — never the rep's.
-          paid: false, paidAt: null, paidByName: null, receivedAt: null, receivedByName: null, commissionId: null,
+          paid: false, paidAt: null, paidByName: null, receivedAt: null, receivedByName: null, paymentProof: [], commissionId: null,
         });
       }
     }
@@ -702,8 +705,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       .catch(() => [] as never[]),
     // The payout record. Missing table (pre-migration) must not blank the page.
     prisma.commission
-      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true, receivedAt: true, receivedByName: true } })
-      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null; receivedAt: Date | null; receivedByName: string | null }[]),
+      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true, receivedAt: true, receivedByName: true, paymentProof: true } })
+      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null; receivedAt: Date | null; receivedByName: string | null; paymentProof: unknown }[]),
   ]);
 
   // Keyed by (sale, payee kind): one order can carry both the rep's 1.5% payout
@@ -755,6 +758,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       paidByName: record?.paidByName ?? null,
       receivedAt: record?.receivedAt ? record.receivedAt.toISOString() : null,
       receivedByName: record?.receivedByName ?? null,
+      paymentProof: coerceProofDocs(record?.paymentProof),
       commissionId: record?.id ?? null,
     });
   }
@@ -803,6 +807,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       paidByName: record?.paidByName ?? null,
       receivedAt: record?.receivedAt ? record.receivedAt.toISOString() : null,
       receivedByName: record?.receivedByName ?? null,
+      paymentProof: coerceProofDocs(record?.paymentProof),
       commissionId: record?.id ?? null,
     });
   }
@@ -826,6 +831,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     d.paidByName = mine?.paidByName ?? null;
     d.receivedAt = mine?.receivedAt ? mine.receivedAt.toISOString() : null;
     d.receivedByName = mine?.receivedByName ?? null;
+    d.paymentProof = coerceProofDocs(mine?.paymentProof);
     d.commissionId = mine?.id ?? null;
   }
 
