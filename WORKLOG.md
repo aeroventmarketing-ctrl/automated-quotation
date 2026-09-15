@@ -1,55 +1,73 @@
 ## 2026-09-16 · "Where do I measure these?" — a diagram on the Air Heat tool
 
 The owner, looking at the live tool on a phone: *"How do I measure leaving air and entering air. Make
-a graphical representation for proper understanding."*
+a graphical representation for proper understanding."* The two boxes on the form assume you already
+know which side of the coil each reading comes from, and that assumption is exactly the thing a field
+label cannot state. So the answer went **on the page the question was asked from** — a **Where do I
+measure these?** button above the two air-state blocks, opening an inline SVG figure and six notes on
+instrument technique. Closed by default, so the calculator stays short on a phone.
 
-The two boxes on the form assume you already know which side of the coil each reading comes from, and
-that assumption is exactly the thing a field label cannot state. So the answer went **on the page the
-question was asked from**, not into a reply — a **Where do I measure these?** button sitting directly
-above the two air-state blocks, opening an inline SVG air path and six practical notes.
+### The first drawing was the wrong drawing
 
-### What the drawing has to show
+It showed a ducted air handler: room → mixing box → coil → fan → supply grille, with the coil as the
+boundary and a cross on the grille where the fan's own heat contaminates the reading. Technically
+sound, and the owner's reply was: *"this one is better to be added into the tool, not the previous
+image"*, pointing at the non-ducted version they had asked for separately.
 
-Three things, and everything else on it exists to support them:
+They were right, and the reason is the business. **Aerovent makes fans and blowers, not air
+handlers.** The customer standing in front of one of their machines is almost always looking at a
+wall exhaust fan or a propeller fan in an opening — no coil, and therefore no ΔT across the fan at
+all. A coil diagram answers a question their customers rarely ask, and quietly implies the tool is
+for somebody else's equipment. The coil version never reached `main`; it was replaced on the branch.
 
-- **The coil is the boundary.** Entering is whatever reaches its face; leaving is whatever comes off
-  it. The duct, the arrows and the labels are all there to say where that face is.
-- **Outside air changes the entering condition.** A system mixing fresh air has an on-coil state that
-  is neither the room nor the outdoors, and reading the room thermostat instead is the commonest way
-  to get entering air wrong. The mixing point is drawn upstream of point 1, with the reason written
-  beside it.
-- **The fan is downstream, and it heats.** Measuring at the supply grille reads 1–3 °F warmer than
-  off-coil, plus duct gain. It is marked with a **cross** rather than simply left off, because a
-  mistake that produces a plausible number is invisible unless someone tells you it exists.
+### What shipped, and why the first panel matters most
 
-### Drawn once, rendered twice
+Three cases, and the first is the point of the whole figure:
 
-`src/components/hvac/air-path-diagram.tsx` is plain SVG in `currentColor`, so it inherits the text
-colour of wherever it sits — the staff card and the storefront's very different palette share one
-drawing rather than keeping two in step. It scrolls sideways below ~640px, the same thing the wide
-tables in this app do, because shrinking the lettering to fit a phone would defeat the point of it.
+1. **A fan on its own moves air; it does not cool it.** ΔT ≈ 0. The only change across it is the
+   motor's own heat, which is a RISE — about **2.4 °F per HP per 1,000 cfm**, so 2 HP at 4,000 cfm is
+   1.2 °F. Feed that in and the answer is the motor's shaft power restated in BTU, not a cooling
+   load. Saying so plainly is the most useful thing on the page, because a calculator that accepts
+   two numbers and returns a plausible figure will otherwise be used to size something.
+2. **An exhaust or ventilation fan: the ROOM is the boundary, not the fan.** The two readings sit on
+   opposite sides of the building — outdoor make-up air in at the louvre, room air out at the fan
+   inlet — and that is the calculation worth doing. 4,000 cfm with a 95 °F room and 88 °F outside
+   removes 30,240 BTU/hr, 2.5 tons, which is a number you can put in front of a client.
+3. **A fan with a coil blowing into open air.** A real ΔT, but the discharge is a free jet that
+   entrains room air within a diameter or two, so the reading must be taken in the core, close in.
 
-Closed by default: the calculator stays short on the phone the question came from, and the help is
-one tap away at the moment the two boxes raise it.
+Plus the footer nobody thinks about until they are standing there: with no duct there is nothing to
+traverse, so the CFM itself is the harder measurement — flow hood, anemometer grid × free area, or
+the fan curve read at the static the fan is really working against.
 
-### Three things found by looking at it
+### Drawn as a plate, not as line art
 
-Rendering and reading the picture caught all three; none would have shown up in a test.
+Unlike the duct drawing, this figure brings its own surface — panels, borders and a fixed
+slate/emerald/amber palette — instead of inheriting `currentColor`. A dense infographic reads better
+as a self-contained plate, and it then looks identical on the staff card and on the storefront's very
+different palette rather than shifting between them. It scrolls sideways below 760px, the same thing
+the wide tables in this app do; shrinking this much lettering to 400px would defeat the point.
 
-1. **The ΔT bracket sat on top of the COIL label.** Moved below it, with its legs landing on the two
-   probe points — the span it measures *is* 1 to 2.
-2. **The fan came out looking like a keyhole.** The first attempt drew the blades as loose curves. A
-   wedge repeated at 120° reads as an impeller at any size.
-3. **White numerals on a filled emerald disc.** Fine on emerald-600, weak on the lighter emerald-400.
-   Outlined badges with the numeral in `currentColor` survive any background.
+### Found by rendering it and looking, on both versions
 
-### And a claim of mine that was wrong
+Neither of these would have shown up in a test. On the coil drawing: the ΔT bracket sat on the COIL
+label, and the fan read as a keyhole until its blades became wedges repeated at 120°. On this one:
+text ran off the right edge in two places, panel 3's captions sat on the jet lines, and its probe
+badges collided with its own subtitle. All fixed by screenshotting each pass rather than by reading
+the diff.
 
-The component's comment said the drawing stays legible "in light and dark". Checking rather than
-asserting: **this app has no dark theme at all.** `globals.css` defines its tokens in a single
-`:root` block with no `.dark` override, and nothing anywhere sets the class — so every `dark:` class
-in the codebase, including ones written earlier this week, is inert. The comment now says so, and
-notes that `currentColor` line work means the diagram would follow a dark theme the day one arrives.
+### Two corrections while here
+
+**This app has no dark theme.** `globals.css` defines its tokens in a single `:root` block with no
+`.dark` override and nothing anywhere sets the class, so every `dark:` class in the codebase —
+including ones written earlier this week — is inert. An earlier comment claimed the drawing stayed
+legible "in light and dark"; it does not say that now.
+
+**A pre-existing warning on the public tools page**, noted but not fixed here: every tab logs *"The
+result of getServerSnapshot should be cached to avoid an infinite loop."* It is on `fan-law` and
+`ductulator` as much as on `air-heat`, so it predates this work and belongs to whatever storefront
+store uses `useSyncExternalStore`.
+
 ## 2026-09-16 · Air heat, backwards: the airflow a load needs
 
 The owner, straight after using the forward one: *"Add the reverse solve for required CFM."* It is the
