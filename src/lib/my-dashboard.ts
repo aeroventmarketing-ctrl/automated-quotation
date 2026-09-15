@@ -64,7 +64,10 @@ export interface MaterialNote {
   label: string; // current MRF status, in plain words
   variant: "success" | "warning" | "secondary" | "destructive";
   client: string | null; // masked for client-restricted viewers
-  when: string; // ISO
+  when: string; // ISO — the note's latest stamp
+  /** ISO — when the ORDER was raised. The go-live gate reads this as well as
+   *  `when`: a test order's MRF released after launch is still test data. */
+  createdAt?: string;
   href: string;
 }
 
@@ -78,6 +81,8 @@ export interface ReturnNote {
   yourStep: boolean; // the next step is one the viewer owns
   variant: "success" | "warning" | "secondary";
   when: string; // ISO — latest stamp
+  /** ISO — when the purchase request was raised; see `MaterialNote.createdAt`. */
+  createdAt?: string;
   href: string;
 }
 
@@ -319,6 +324,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             variant: note.variant,
             client: maskClient(q.inquiry.customer.company),
             when: m.confirmedAt || m.releasedAt || m.handledAt || m.raisedAt || "",
+            createdAt: orderCreatedAt,
             href: `/orders/${q.id}`,
           });
         }
@@ -421,6 +427,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           // Purchaser acts in the Purchasing workspace — deep-link to this request.
           href: `/purchasing?req=${pr.id}`,
           since: pr.createdAt.toISOString(),
+          createdAt: pr.createdAt.toISOString(),
         });
         continue;
       }
@@ -435,6 +442,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         href: `/purchasing?req=${pr.id}`,
         ref: coercePurchaseOrder(pr.po)?.poNumber || undefined, // PO number for easy reference
         since: pr.createdAt.toISOString(),
+        createdAt: pr.createdAt.toISOString(),
       });
     }
   } catch { /* ignore */ }
@@ -466,6 +474,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           const when = stamps.map((s) => s.at).sort().at(-1) ?? r.raisedAt ?? new Date(0).toISOString();
           returnsFeed.push({
             key: `ret:${pr.id}:${r.id}`,
+            createdAt: pr.createdAt.toISOString(),
             orderRef,
             items: r.items,
             stageLabel: returnStageDef(r.stage).label,
@@ -480,7 +489,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
               key: `ret-task:${pr.id}:${r.id}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
               title: orderRef, action: `Supplier return — ${next.advanceLabel}`,
               client: pr.quotationId ? maskClient(company) : null, amount: null, currency: "PHP",
-              href, since: when,
+              href, since: when, createdAt: pr.createdAt.toISOString(),
             });
           }
         }
@@ -538,6 +547,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
             href: `/purchasing?req=${pr.id}`,
             ref: po.poNumber || undefined,
             since: (pr.voucherAt ?? pr.createdAt).toISOString(),
+            createdAt: pr.createdAt.toISOString(),
           });
         }
       }
@@ -558,8 +568,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     try {
       const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
       const checkPrs = await prisma.purchaseRequest.findMany({
-        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true },
+        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true, createdAt: true },
       });
+      const prCreatedAt = new Map(checkPrs.map((pr) => [pr.id, pr.createdAt.toISOString()] as const));
       const watch = buildCheckWatch(checkPrs, todayYMD, {
         coerceDocs: coerceCheckDocs,
         poOf: (v) => {
@@ -579,6 +590,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           href: "/checks",
           ref: row.poNumber || undefined,
           since: row.clearingYMD ?? undefined,
+          createdAt: prCreatedAt.get(row.prId),
         });
       }
     } catch { /* ignore */ }
@@ -601,6 +613,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         client: cr.purpose ?? null, amount: Number(cr.amount), currency: "PHP",
         href: `/cash-requests?id=${cr.id}`,
         since: cr.createdAt.toISOString(),
+        createdAt: cr.createdAt.toISOString(),
       });
     }
   } catch { /* ignore */ }
@@ -635,6 +648,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           // "Mark paid" is done on the Commissions page — deep-link (anchor) to the row.
           href: `/commissions#commission-${c.kind}-${c.refId}-${c.payeeKind}`,
           since: c.payoutYMD ?? c.recognisedYMD,
+          createdAt: c.recognisedYMD,
         });
       }
     } catch { /* ignore */ }
@@ -704,6 +718,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           client: null, amount: null, currency: "PHP",
           href: "/inventory#inv-items",
           since: a.proposedAt.toISOString(),
+          createdAt: a.proposedAt.toISOString(),
         });
       }
     } catch { /* StockAction table not migrated — ignore */ }
@@ -719,7 +734,12 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // AND (for order-derived tasks) when the underlying order was created before the
   // launch moment — so a legacy order advanced during testing stays quiet.
   const visibleTasks = tasks.filter((t) => shows(t.since) && alertPasses(t.createdAt, golive));
-  const visibleFeed = materialsFeed.filter((m) => shows(m.when || undefined));
+  // The feeds are judged the same way as the tasks: the note's own stamp AND the
+  // date of the thing it is about. The owner, 15 September 2026: *"Transactions
+  // before August 1, 2026 should not give any alarm or notifications. Date before
+  // the said day is a testing stage."* An MRF raised on a July order and released
+  // in September is a September stamp on a July transaction.
+  const visibleFeed = materialsFeed.filter((m) => shows(m.when || undefined) && alertPasses(m.createdAt, golive));
 
   const byArea = (Object.keys(AREA_LABEL) as TaskArea[])
     .map((area) => ({ area, label: AREA_LABEL[area], count: visibleTasks.filter((t) => t.area === area).length }))
@@ -773,7 +793,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   }
 
   visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
-  const visibleReturns = returnsFeed.filter((r) => shows(r.when || undefined));
+  const visibleReturns = returnsFeed.filter((r) => shows(r.when || undefined) && alertPasses(r.createdAt, golive));
   // Open returns first (your step, then other awaiting), completed last; newest within each.
   visibleReturns.sort((a, b) => {
     const rank = (n: ReturnNote) => (n.variant === "warning" ? 0 : n.variant === "secondary" ? 1 : 2);

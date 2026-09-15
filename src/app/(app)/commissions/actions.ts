@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
+import { refuse, done, type ActionResult } from "@/lib/action-result";
+import { round2 } from "@/lib/quote";
 import { buildCommissionsFresh, allDeals, canMarkPaid, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -173,4 +175,57 @@ export async function payAllForSalesperson(salespersonId: string): Promise<{ pai
   revalidatePath("/management");
   revalidatePath("/my-dashboard");
   return { paid: due.length, total };
+}
+
+/**
+ * The salesperson's own confirmation that the money reached them.
+ *
+ * The owner: *"show a link in every sales personnel. Link can be clickable by
+ * sales personnel when receiving commissions. Once clicked it will be the proof
+ * that the sales personnel received the amount."*
+ *
+ * **There is no role check here, and that is the point.** Every other action in
+ * this file asks "may you do this job?"; this one asks "is this your money?".
+ * Accounting released it and an admin can do anything else — neither may sign
+ * for it. A receipt the payer can write on the payee's behalf proves nothing.
+ *
+ * One click covers everything currently released and unconfirmed, because one
+ * cash voucher is what the person is handed. Each row still gets its own stamp,
+ * so a single line can be checked later on its own.
+ *
+ * The set is recomputed here from the payee's id — never posted from the
+ * browser — so this cannot be pointed at somebody else's row.
+ */
+export async function confirmCommissionReceipt(): Promise<ActionResult & { count?: number; total?: number }> {
+  const user = await getCurrentUser();
+  if (!user) return refuse("Please sign in again.");
+
+  const rows = await prisma.commission
+    .findMany({ where: { salespersonId: user.id, paid: true, receivedAt: null }, select: { id: true, amount: true } })
+    .catch(() => null);
+  if (rows == null) return refuse("The commissions table isn't set up yet — run migration 0055 in Supabase.");
+  if (rows.length === 0) return refuse("There's nothing waiting for your confirmation.");
+
+  const total = round2(rows.reduce((a, r) => a + Number(r.amount), 0));
+  const at = new Date();
+  // `receivedAt: null` in the filter as well as the read: two taps on a slow
+  // connection must not restamp a receipt with a later time. The first write
+  // wins and the second matches nothing.
+  const stamped = await prisma.commission.updateMany({
+    where: { id: { in: rows.map((r) => r.id) }, salespersonId: user.id, paid: true, receivedAt: null },
+    data: { receivedAt: at, receivedById: user.id, receivedByName: user.name },
+  });
+  if (stamped.count === 0) return refuse("Those commissions were already confirmed.");
+
+  await logActivity(user, {
+    action: "commission.received",
+    category: "commission",
+    summary: `${user.name} confirmed receiving ${peso(total)} in commissions (${stamped.count} ${stamped.count === 1 ? "payout" : "payouts"})`,
+    entity: "commission",
+    entityId: rows[0].id,
+    href: "/commissions",
+  });
+  revalidatePath("/commissions");
+  revalidatePath("/my-dashboard");
+  return { ...done, count: stamped.count, total };
 }

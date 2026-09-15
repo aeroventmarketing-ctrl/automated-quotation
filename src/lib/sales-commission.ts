@@ -285,6 +285,12 @@ export interface CommissionDeal {
   paid: boolean;
   paidAt: string | null;
   paidByName: string | null;
+  /**
+   * The PAYEE's own acknowledgement that the money reached them — written only
+   * by the person the row pays. See `lib/commission-receipt`.
+   */
+  receivedAt: string | null;
+  receivedByName: string | null;
   commissionId: string | null;
 }
 
@@ -560,7 +566,7 @@ export function withOverrides(
           ratePct: OVERRIDE_RATE_PCT,
           amount: overrideOn(d.net),
           // The payout record is this row's own — never the rep's.
-          paid: false, paidAt: null, paidByName: null, commissionId: null,
+          paid: false, paidAt: null, paidByName: null, receivedAt: null, receivedByName: null, commissionId: null,
         });
       }
     }
@@ -696,8 +702,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       .catch(() => [] as never[]),
     // The payout record. Missing table (pre-migration) must not blank the page.
     prisma.commission
-      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true } })
-      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null }[]),
+      .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true, receivedAt: true, receivedByName: true } })
+      .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null; receivedAt: Date | null; receivedByName: string | null }[]),
   ]);
 
   // Keyed by (sale, payee kind): one order can carry both the rep's 1.5% payout
@@ -747,6 +753,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       paid: record?.paid ?? false,
       paidAt: record?.paidAt ? record.paidAt.toISOString() : null,
       paidByName: record?.paidByName ?? null,
+      receivedAt: record?.receivedAt ? record.receivedAt.toISOString() : null,
+      receivedByName: record?.receivedByName ?? null,
       commissionId: record?.id ?? null,
     });
   }
@@ -793,6 +801,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       paid: record?.paid ?? false,
       paidAt: record?.paidAt ? record.paidAt.toISOString() : null,
       paidByName: record?.paidByName ?? null,
+      receivedAt: record?.receivedAt ? record.receivedAt.toISOString() : null,
+      receivedByName: record?.receivedByName ?? null,
       commissionId: record?.id ?? null,
     });
   }
@@ -814,6 +824,8 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     d.paid = mine?.paid ?? false;
     d.paidAt = mine?.paidAt ? mine.paidAt.toISOString() : null;
     d.paidByName = mine?.paidByName ?? null;
+    d.receivedAt = mine?.receivedAt ? mine.receivedAt.toISOString() : null;
+    d.receivedByName = mine?.receivedByName ?? null;
     d.commissionId = mine?.id ?? null;
   }
 
