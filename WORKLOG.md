@@ -1,3 +1,49 @@
+## 2026-09-16 · The storefront's React warning, on every page of the shop
+
+Noticed while screenshotting the HVAC tools page, reported to the owner as pre-existing, and then:
+*"Fix the getServerSnapshot warning."*
+
+```
+The result of getServerSnapshot should be cached to avoid an infinite loop
+```
+
+### One line, and the file already knew
+
+`useSyncExternalStore` compares snapshots with `Object.is`. A snapshot function that returns a fresh
+value never compares equal to its own previous result, so React cannot tell "unchanged" from
+"changed" — hence the warning, and the infinite loop it is named after.
+
+`cart-store.ts` passed `() => []` as its server snapshot. A new array, every call.
+
+The striking part is that **the file already contains the fix, two lines above, for the other
+snapshot**: `read()` caches `cache` and reuses it whenever the stored JSON is unchanged, with a
+comment saying *"so useSyncExternalStore sees a stable reference and doesn't loop."* Somebody
+understood the hazard exactly, applied it to the client snapshot, and wrote `() => []` for the server
+one in the same breath. Both now share a module-level `EMPTY`, and the snapshot function is hoisted
+rather than written inline at the call site — an arrow there is a new function on every render, which
+is the same mistake wearing a different hat.
+
+`ui-store.ts` was checked too and was already correct: its `SERVER_STATE` is a module constant.
+
+### Why it showed up on a fan calculator
+
+Nothing on the HVAC tools page has a cart. The storefront **header** does — the `Cart 0` badge runs
+`useCartCount` → `useCart` — so the warning fired on every page of the shop, tools included. That is
+also why it was visible in three different tabs' console output and looked like it belonged to the
+page being worked on.
+
+### Verified by watching the console, then by using the cart
+
+Gone from `/store`, `/store/cart`, and the tools page on both the `air-heat` and `fan-law` tabs —
+which matters, because a fix that only cleared the tab being worked on would have proved nothing.
+
+Then the cart itself, since the change touched both the snapshot and the seed for `cache`: the header
+badge reads 0 → 3 → 5 → 0 as lines are added and cleared, and a deliberately corrupt localStorage
+payload falls back to an empty cart without throwing. That last one exercises the `cache = EMPTY`
+path specifically.
+
+(The storefront home also logs four 502s for product images. Those are Supabase Storage reads and the
+harness has no bucket — an artefact of the test environment, not of the shop.)
 ## 2026-09-16 · "Where do I measure these?" — a diagram on the Air Heat tool
 
 The owner, looking at the live tool on a phone: *"How do I measure leaving air and entering air. Make
