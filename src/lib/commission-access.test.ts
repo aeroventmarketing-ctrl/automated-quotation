@@ -20,22 +20,24 @@ type Person = {
   canView: boolean;
   canSeeAll: boolean;
   canManage: boolean;
+  /** May attach the proof that the payout was sent. One seat wider than canManage. */
+  canAttachProof: boolean;
 };
 
 const PEOPLE: Person[] = [
-  { who: "Admin", admin: true, baseRole: "ADMIN", earns: false, canView: true, canSeeAll: true, canManage: true },
-  { who: "Accounting", baseRole: "OTHER", workflowRoles: ["accounting"], earns: false, canView: true, canSeeAll: true, canManage: true },
-  { who: "Payment Approver", baseRole: "OTHER", workflowRoles: ["payment_approver"], earns: false, canView: true, canSeeAll: true, canManage: false },
-  { who: "Sales rep", baseRole: "SALES", earns: true, canView: true, canSeeAll: false, canManage: false },
+  { who: "Admin", admin: true, baseRole: "ADMIN", earns: false, canView: true, canSeeAll: true, canManage: true, canAttachProof: true },
+  { who: "Accounting", baseRole: "OTHER", workflowRoles: ["accounting"], earns: false, canView: true, canSeeAll: true, canManage: true, canAttachProof: true },
+  { who: "Payment Approver", baseRole: "OTHER", workflowRoles: ["payment_approver"], earns: false, canView: true, canSeeAll: true, canManage: false, canAttachProof: true },
+  { who: "Sales rep", baseRole: "SALES", earns: true, canView: true, canSeeAll: false, canManage: false, canAttachProof: false },
   // The bug, pinned:
-  { who: "JayR — Engineer, Sales Head, 2nd QC, credited", baseRole: "ENGINEER", workflowRoles: ["sales_head", "quality_inspector_2"], salesPersonnel: true, earns: true, canView: true, canSeeAll: false, canManage: false },
-  { who: "Sales Head who sells nothing and isn't credited", baseRole: "ENGINEER", workflowRoles: ["sales_head"], earns: true, canView: true, canSeeAll: false, canManage: false },
-  { who: "Engineer credited as salesperson only", baseRole: "ENGINEER", salesPersonnel: true, earns: true, canView: true, canSeeAll: false, canManage: false },
+  { who: "JayR — Engineer, Sales Head, 2nd QC, credited", baseRole: "ENGINEER", workflowRoles: ["sales_head", "quality_inspector_2"], salesPersonnel: true, earns: true, canView: true, canSeeAll: false, canManage: false, canAttachProof: false },
+  { who: "Sales Head who sells nothing and isn't credited", baseRole: "ENGINEER", workflowRoles: ["sales_head"], earns: true, canView: true, canSeeAll: false, canManage: false, canAttachProof: false },
+  { who: "Engineer credited as salesperson only", baseRole: "ENGINEER", salesPersonnel: true, earns: true, canView: true, canSeeAll: false, canManage: false, canAttachProof: false },
   // …and the people who must still be kept out.
-  { who: "Plain Engineer", baseRole: "ENGINEER", earns: false, canView: false, canSeeAll: false, canManage: false },
-  { who: "Warehouse", baseRole: "OTHER", workflowRoles: ["warehouse"], earns: false, canView: false, canSeeAll: false, canManage: false },
-  { who: "2nd Quality Inspector alone", baseRole: "OTHER", workflowRoles: ["quality_inspector_2"], earns: false, canView: false, canSeeAll: false, canManage: false },
-  { who: "Purchaser", baseRole: "OTHER", workflowRoles: ["purchaser"], earns: false, canView: false, canSeeAll: false, canManage: false },
+  { who: "Plain Engineer", baseRole: "ENGINEER", earns: false, canView: false, canSeeAll: false, canManage: false, canAttachProof: false },
+  { who: "Warehouse", baseRole: "OTHER", workflowRoles: ["warehouse"], earns: false, canView: false, canSeeAll: false, canManage: false, canAttachProof: false },
+  { who: "2nd Quality Inspector alone", baseRole: "OTHER", workflowRoles: ["quality_inspector_2"], earns: false, canView: false, canSeeAll: false, canManage: false, canAttachProof: false },
+  { who: "Purchaser", baseRole: "OTHER", workflowRoles: ["purchaser"], earns: false, canView: false, canSeeAll: false, canManage: false, canAttachProof: false },
 ];
 
 describe("who may see commissions", () => {
@@ -52,6 +54,7 @@ describe("who may see commissions", () => {
         canView: p.canView,
         canSeeAll: p.canSeeAll,
         canManage: p.canManage,
+        canAttachProof: p.canAttachProof,
       });
     });
   }

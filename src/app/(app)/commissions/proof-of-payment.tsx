@@ -1,0 +1,141 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Paperclip, FileCheck2, X } from "lucide-react";
+import { attachCommissionProof, removeCommissionProof } from "./actions";
+import { actionError } from "@/lib/action-result";
+import type { CommissionProofDoc } from "@/lib/commission-proof";
+
+const viewHref = (d: CommissionProofDoc) =>
+  `/api/commission-uploads?path=${encodeURIComponent(d.path)}&name=${encodeURIComponent(d.name)}`;
+
+/**
+ * The attached slips, as links.
+ *
+ * Shown to whoever may open them, which is the three finance seats **and the
+ * salesperson the payout pays** — the owner's requirement, and the reason the
+ * route behind these links checks the payee's id rather than a role. A payee with
+ * nothing attached sees the sentence saying so, because "no proof yet" is the
+ * thing they would otherwise have to ask about.
+ */
+export function ProofList({
+  docs,
+  salespersonId,
+  canAttach = false,
+  emptyNote,
+}: {
+  docs: CommissionProofDoc[];
+  salespersonId: string;
+  canAttach?: boolean;
+  emptyNote?: string;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function remove(path: string) {
+    setBusy(path);
+    setErr(null);
+    const refusal = actionError(await removeCommissionProof(salespersonId, path).catch(() => null));
+    if (refusal) setErr(refusal);
+    else router.refresh();
+    setBusy(null);
+  }
+
+  if (docs.length === 0) {
+    return emptyNote ? <span className="text-[10px] text-muted-foreground">{emptyNote}</span> : null;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {docs.map((d) => (
+        <span key={d.path} className="inline-flex items-center gap-1">
+          <a
+            href={viewHref(d)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={d.uploadedByName ? `Attached by ${d.uploadedByName}` : undefined}
+            className="inline-flex items-center gap-1 rounded border border-emerald-600/40 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-600/10 dark:text-emerald-400"
+          >
+            <FileCheck2 className="h-3 w-3" />
+            {d.name}
+          </a>
+          {canAttach && (
+            <button
+              type="button"
+              disabled={busy === d.path}
+              onClick={() => remove(d.path)}
+              title="Remove this proof"
+              className="text-muted-foreground hover:text-destructive disabled:opacity-50"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </span>
+      ))}
+      {err && <span className="text-[10px] text-destructive">{err}</span>}
+    </span>
+  );
+}
+
+/**
+ * Attach a slip to one salesperson's payout. Accounting, the Payment Approver or
+ * an admin — the same three the server checks, twice: once on the upload route
+ * that stores the file and once on the action that records it.
+ */
+export function AttachProof({ salespersonId, salespersonName }: { salespersonId: string; salespersonName: string }) {
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function pick(file: File) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("salespersonId", salespersonId);
+      const res = await fetch("/api/commission-uploads", { method: "POST", body: form });
+      const data = (await res.json()) as { error?: string; path?: string; name?: string; uploadedAt?: string; uploadedById?: string; uploadedByName?: string };
+      if (!res.ok || !data.path) { setErr(data.error ?? "Upload failed."); return; }
+      const refusal = actionError(await attachCommissionProof(salespersonId, {
+        path: data.path,
+        name: data.name ?? file.name,
+        uploadedAt: data.uploadedAt ?? new Date().toISOString(),
+        uploadedById: data.uploadedById ?? "",
+        uploadedByName: data.uploadedByName ?? "",
+      }));
+      if (refusal) { setErr(refusal); return; }
+      router.refresh();
+    } catch {
+      setErr("Couldn't attach the proof. Try again.");
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <input
+        ref={input}
+        type="file"
+        accept="image/*,application/pdf"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) void pick(f); }}
+      />
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => input.current?.click()}
+        title={`Attach the deposit slip or transfer screenshot for ${salespersonName}`}
+        className="inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium hover:bg-accent disabled:opacity-50"
+      >
+        <Paperclip className="h-3.5 w-3.5" />
+        {busy ? "Attaching…" : "Proof of payment"}
+      </button>
+      {err && <span className="max-w-[18rem] text-right text-[10px] leading-tight text-destructive">{err}</span>}
+    </span>
+  );
+}

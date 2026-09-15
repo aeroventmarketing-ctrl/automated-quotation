@@ -1,3 +1,83 @@
+## 2026-09-15 · Proof of payment, and the chase list it lives on
+
+The owner: *"add an option to attach proof of payment to sales personnel for accounting, payment
+approver and admin. Proof of payment must be viewable by sales account holder."*
+
+Two sentences, and the difference between them is the whole rule. **Attaching is a job** — three
+seats hold it. **Viewing is a relationship** — the salesperson sees the proof of their own payment,
+because the point of it is that the person owed the money can check it.
+
+### Three pairs of hands on one row
+
+```
+paid / paidByName          Accounting: we released it
+paymentProof               Accounting / Approver / admin: here is the slip
+receivedAt / receivedById  the salesperson: it reached me
+```
+
+The middle one closes the gap between the other two. Before it, a payee who had not been paid could
+only say so; now they can see what was sent, and the argument is about a document rather than a
+memory.
+
+### The permission is read out of the PATH
+
+A proof lives at `commissions/<salespersonId>/…`, which is not decoration. The route that serves the
+file answers *"is this the payee?"* from where the file actually is, not from the record that points
+at it — so a wrong record cannot serve a file to the wrong person. Checked end to end against the
+running app:
+
+| GET the slip | |
+| --- | --- |
+| Elena, the payee | allowed |
+| Sam, another salesperson | **404** — not "forbidden": whether it exists is none of his business |
+| Accounting | allowed |
+| Warehouse | **404** |
+
+### The button was in the wrong place, and the fixture said so
+
+It went first into the "Ready for payout" row — where the owner would naturally reach for it, and
+where it can only ever refuse. The `Commission` row is written when the voucher is marked **paid**,
+so before that there is nothing to attach a proof to. A proof of payment cannot precede the payment.
+
+So there is a second panel: **Paid — awaiting the payee's confirmation**. It is Accounting's chase
+list (who has been paid and has not signed for it), and it is where the slip is attached. The order
+on the page is now the order the work happens in: release the voucher → evidence it → wait for the
+payee.
+
+### The payee's panel now reads the payout record, not the entitlement
+
+Found while testing, and worth more than the feature that exposed it. The receipt link was built from
+`buildCommissions`, which RECOMPUTES who has earned what from the confirmed sales. A deal can stop
+computing — a revised order, a month that no longer clears the quota, a cutoff moved — and the payee
+would silently lose the ability to confirm a payout that had genuinely reached them. It now reads the
+`Commission` table, like the action always did, so the link can never offer a confirmation the action
+would refuse.
+
+### Verified across five people
+
+| | sees the slip | may attach | own confirm link |
+| --- | --- | --- | --- |
+| Elena (the payee) | ✓ | — | ✓ |
+| Sam (another rep) | — | — | — |
+| Accounting | ✓ | ✓ | — |
+| Payment Approver | ✓ | ✓ | ✓ (she is also a payee) |
+| Warehouse | — | — | — |
+
+`commission-access.test.ts` — the capability grid — gained a `canAttachProof` column in the same
+commit, per CLAUDE.md. It is one seat wider than `canManage`: the Payment Approver does not record
+the payout but does hold the evidence of it.
+
+**Not verified locally:** the upload round-trip itself. The harness runs without a Supabase Storage
+bucket, so a real file cannot be stored there; the route is the same shape as `cash-uploads` and the
+permission on it is tested, but the first real attach will be in production.
+
+### Migration 0056 — apply by hand in Supabase
+
+```sql
+alter table "Commission"
+  add column if not exists "paymentProof" jsonb not null default '[]'::jsonb;
+```
+
 ## 2026-09-15 · Every salesperson signs for their own commission
 
 The owner: *"show a link in every sales personnel. Link can be clickable by sales personnel when

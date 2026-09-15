@@ -56,6 +56,7 @@ function deal(over: Partial<CommissionDeal> = {}): CommissionDeal {
     paidByName: null,
     receivedAt: null,
     receivedByName: null,
+    paymentProof: [],
     commissionId: null,
     ...over,
   };
