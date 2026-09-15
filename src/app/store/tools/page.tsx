@@ -10,9 +10,9 @@ import { toolKeyFrom } from "./tools";
 
 export const dynamic = "force-dynamic";
 
-const TITLE = "HVAC Tools — Fan Selector, Ductulator, Pulley & Fan Law";
+const TITLE = "HVAC Tools — Fan Selector, Ductulator, Pulley, Fan Law & Air Heat";
 const DESCRIPTION =
-  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, and apply the fan affinity laws.";
+  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, apply the fan affinity laws, and work out the sensible, latent and total heat an airflow carries.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -24,11 +24,11 @@ export const metadata: Metadata = {
 /**
  * Public HVAC Tools page.
  *
- * The four calculators an engineer actually reaches for while specifying a job.
+ * The five calculators an engineer actually reaches for while specifying a job.
  * The Fan Selector runs the same selection engine as the staff quotation
  * builder through `/api/public/fan-select`, which is performance-only — no
  * price, no cost, no internal id ever crosses to the public side. The other
- * three are pure maths shared with the staff tools via `lib/hvac/*`.
+ * rest are pure maths shared with the staff tools via `lib/hvac/*`.
  *
  * Deliberately excluded from the public set: Duct Material (a sheet-metal
  * costing aid) and Job Order (a production document) — both internal.
@@ -79,7 +79,7 @@ export default async function StoreToolsPage({
           <div className={`${KICKER} mt-4`}>Free engineering tools</div>
           <h1 className={`${DISPLAY} mt-2 text-[clamp(40px,5vw,60px)] leading-none tracking-[-0.02em]`}>HVAC Tools</h1>
           <p className="mt-3 max-w-[640px] text-[15px] leading-[1.7] text-[var(--store-on-dark-muted)]">
-            Size a fan, a duct or a drive in the browser. Built on the same selection engine we use to prepare
+            Size a fan, a duct or a drive, or work out the heat an airflow carries — in the browser. Built on the same selection engine we use to prepare
             quotations — so what you work out here is what our engineers see.
           </p>
         </div>

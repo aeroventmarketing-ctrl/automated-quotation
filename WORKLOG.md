@@ -1,3 +1,77 @@
+## 2026-09-16 · Air heat: sensible, latent, total and SHR
+
+The owner: *"I would like to add sensible heat computation. Before adding it in the system. Show to me
+the calculation then ask me before adding."* So the maths went to them first, derived rather than
+quoted, and every scope choice below is theirs.
+
+### One constant, not four
+
+Everything on this screen is the same number wearing different clothes — the mass of dry air an
+airflow carries per hour:
+
+```
+ṁ = ρ × 60 × CFM = 4.5 × CFM      lb(dry air)/hr   at ρ = 0.075 lb/ft³
+```
+
+Multiply by a property of air and the familiar constants fall out: `4.5 × cp` is the 1.08, `4.5 × hfg
+/ 7000` is the 0.68, and 4.5 itself is the total-heat constant because enthalpy is already per pound.
+They are **derived in the library, not typed in**, because the relationship between them is the thing
+that has to stay true — and a test asserts `4.5 × 0.240 = 1.08` for exactly that reason.
+
+### The switch picks a BASIS, not a number
+
+The owner wanted 1.08 and 1.10 both available: 1.08 is what Philippine worksheets use, 1.10 is
+current ASHRAE. But pairing 1.08 with 0.69 would take the specific heat from Carrier and the latent
+heat from ASHRAE, and the total would then match neither. So the switch moves every constant
+together — Carrier is (0.240, 1060) → 1.08 / 0.68, ASHRAE is (0.244, 1076) → 1.10 / 0.69 — and the
+constants actually applied are printed under the answer, so a figure can be checked against a
+worksheet without anyone having to guess which was used.
+
+### Qs + Ql ≠ Qt, and what to do about it
+
+Worked the classic way the three heats do not close: on the example screen they are out by **2.14%**
+on the Carrier basis. Neither figure is wrong. The 0.68 constant assumes one latent heat while the
+entering and leaving air sit at different temperatures, so the exact latent term carries a cross
+product the simplification drops — 22,541 BTU/hr against 20,947.
+
+Textbook behaviour, and a calculator printing 6.24 TR in one box and 6.38 TR in another would have
+been reported as a bug within the day. Shown the three options, the owner chose: **total is sensible
+plus latent**, so the figures always add up, and enthalpy is optional — when both are given, the
+enthalpy-based total appears beside them as a cross-check with the gap named. Over 3% it turns amber
+and says to check the chart, which is how a misread psychrometric point gets caught.
+
+### Two things the tests found
+
+**A wrong answer given for the right reason.** A relative humidity of 140% came back as *"give the
+humidity for both air states"* — true, but not the problem, and it sends the reader to the wrong box.
+The range check now runs before the pairing check.
+
+**Standard air is not standard.** The density factor divided by the nominal 0.075 lb/ft³, but the
+ideal gas law at sea level and 70 °F gives 0.07489 — 0.15% apart, a definitional artefact and not a
+fact about anybody's air. A user who touched nothing was being shown a total constant of **4.49**
+where they expect 4.5, and would rightly have asked why. The factor now ratios against the same
+formula at the standard point, so standard conditions come out at exactly 1.
+
+### Density is an ordinary field, not an advanced one
+
+The owner's call, and the right one: Baguio at ~1500 m runs a **0.835** factor, so a load worked at
+sea level is 17% out. Hot air is the same story — a dryer exhaust at 150 °F is 0.869. That is not a
+detail to discover after quoting, so altitude and the air temperature at the meter sit on the form
+with everything else.
+
+### Verified by using it
+
+Both screens, against the hand calculation: 2000 cfm, 80 °F/50% RH → 55 °F/95% RH gives **54,000 /
+20,903 / 74,903 BTU/hr and SHR 0.721**, footed *"Using 1.08 sensible · 0.68 latent · ΔT 25 °F ·
+moisture 76.5 → 61.1 gr/lb · density factor 1"*. Switching to ASHRAE moves it to 55,000 / 21,211 —
+the 1.85% expected. Baguio drops the constants to 0.90 / 0.57 and the sensible to 45,000, and raises
+the moisture to 91.9 gr/lb, because thinner air holds more water at the same RH. The cross-check
+reads *"76,545 BTU/hr from Δh — -2.1% from the total above."*
+
+One thing found by looking rather than measuring: the labels were not tied to their inputs, so
+"Altitude" was decoration — a screen reader would announce an unnamed spin button and clicking the
+word focused nothing. The other HVAC tools predate that; this one does not repeat it.
+
 ## 2026-09-15 · Three from one report: the walk-in that wasn't a sale, the sale that wasn't stock, and the PO that couldn't merge
 
 Three separate things, and each turned out to be a different kind of problem.
