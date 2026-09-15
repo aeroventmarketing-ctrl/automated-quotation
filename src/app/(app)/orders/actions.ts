@@ -78,6 +78,7 @@ import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { buildCommissionsFresh, allDeals } from "@/lib/sales-commission";
 import { applyStockChange } from "@/lib/inventory";
+import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
 import { coerceFansJobOrder, joTypeReady, joTypeLabel, type FansJobOrder } from "@/lib/job-order";
@@ -3454,35 +3455,43 @@ async function nextPoNo(): Promise<string> {
  * request: supplier details, priced lines, EWT % and remarks. The PO number is
  * assigned once, on first save, and never changes afterwards. Purchaser/admin only.
  */
+/**
+ * Every refusal here is RETURNED, not thrown, because production redacts a
+ * thrown message into "An error occurred in the Server Components render…" —
+ * see `lib/action-result`. The rules themselves are unchanged: the same
+ * conditions refuse the same saves, and nothing is written when one does.
+ */
 export async function savePurchaseOrder(
   purchaseRequestId: string,
   input: z.infer<typeof poInputSchema>,
-): Promise<void> {
+): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!user) throw new Error("Unauthorized");
+  if (!user) return refuse("Please sign in again.");
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "purchaser" as WorkflowRoleKey))) {
-    throw new Error("Only the Purchaser or an admin can issue a purchase order.");
+    return refuse("Only the Purchaser or an admin can issue a purchase order.");
   }
-  const d = poInputSchema.parse(input);
+  const parsed = poInputSchema.safeParse(input);
+  if (!parsed.success) return refuse(parsed.error.issues[0]?.message ?? "That purchase order isn't valid.");
+  const d = parsed.data;
 
   const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
-  if (!pr) throw new Error("Purchase request not found");
-  if (pr.status === "REJECTED") throw new Error("This purchase request was rejected.");
+  if (!pr) return refuse("Purchase request not found.");
+  if (pr.status === "REJECTED") return refuse("This purchase request was rejected.");
   // The purchase is approved first, then the Purchaser prepares the PO — so
   // creating the first PO is always allowed. Only EDITING an existing PO locks
   // once the purchase is approved (admin override aside).
   if (isPoApproved(pr.chainLog) && coercePurchaseOrder(pr.po) && !isAdmin(user)) {
-    throw new Error("This purchase order is approved — only an admin can edit it.");
+    return refuse("This purchase order is approved — only an admin can edit it.");
   }
   // A purchase order can't be prepared until the request has cleared approval and
   // left the pending bucket — PENDING_APPROVAL, or a material/department MRF the
   // Plant Manager approved but the Approver hasn't purchase-approved yet.
   if (statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending") {
-    throw new Error("This request must be approved before a purchase order can be created.");
+    return refuse("This request must be approved before a purchase order can be created.");
   }
 
   const submitted = d.lines.filter((l) => l.description.trim() !== "");
-  if (submitted.length === 0) throw new Error("Add at least one line to the purchase order.");
+  if (submitted.length === 0) return refuse("Add at least one line to the purchase order.");
 
   // A price off the catalogue needs a reason. Checked HERE, against the
   // catalogue as the server sees it: the form makes the box read-only until the
@@ -3496,6 +3505,10 @@ export async function savePurchaseOrder(
   const existingByKey = new Map(
     (coercePurchaseOrder(pr.po)?.lines ?? []).map((l) => [`${l.description}|${l.unitPrice}`, l.priceOverride]),
   );
+  // The price rule refuses the whole save, and it is found inside a map — so the
+  // sentence is collected here and returned below, rather than thrown out of the
+  // callback.
+  let priceRefusal: string | null = null;
   const lines: POLine[] = submitted.map((l) => {
     const listed = cataloguePriceForLine(l.description, d.supplier.company, catalogue);
     const typed = Number(String(l.unitPrice).replace(/[^0-9.-]/g, ""));
@@ -3506,9 +3519,7 @@ export async function savePurchaseOrder(
     const carried = existingByKey.get(`${l.description}|${l.unitPrice}`);
     const reason = (l.priceReason ?? "").trim() || carried?.reason || "";
     if (!reason) {
-      throw new Error(
-        `“${l.description}” is priced at ${typed.toLocaleString()} but the catalogue says ${listed.toLocaleString()}. Give a reason for the different price, or use the catalogue price.`,
-      );
+      priceRefusal ??= `“${l.description}” is priced at ${typed.toLocaleString()} but the catalogue says ${listed.toLocaleString()}. Give a reason for the different price, or use the catalogue price.`;
     }
     return {
       description: l.description,
@@ -3523,6 +3534,8 @@ export async function savePurchaseOrder(
       },
     };
   });
+
+  if (priceRefusal) return refuse(priceRefusal);
 
   const existing = coercePurchaseOrder(pr.po);
   const po: PurchaseOrder = {
@@ -3545,6 +3558,7 @@ export async function savePurchaseOrder(
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+  return done;
 }
 
 /**

@@ -124,7 +124,17 @@ export async function getAccountData(customerId: string): Promise<AccountData | 
   return accounts[customerId] ?? null;
 }
 
-/** Persist the whole registry, creating the hidden row if needed. */
+/**
+ * Persist the whole registry, creating the hidden row if needed.
+ *
+ * **This overwrites everything.** Whatever the caller read minutes ago is what
+ * the registry becomes, so anything another writer recorded in between is gone.
+ * That is only safe for a caller that read and wrote in one breath.
+ *
+ * A long-running caller — anything that reads, then sends emails, then
+ * writes — must use {@link mergeAccountsRegistry} or
+ * {@link updateAccountsRegistry} instead. See the note on those.
+ */
 export async function saveAccountsRegistry(accounts: Record<string, AccountData>): Promise<void> {
   await prisma.quotationTemplate.upsert({
     where: { layoutKey: ACCOUNT_REGISTRY_KEY },
@@ -135,5 +145,85 @@ export async function saveAccountsRegistry(accounts: Record<string, AccountData>
       active: false,
       config: { accounts } as unknown as Prisma.InputJsonObject,
     },
+  });
+}
+
+/**
+ * Read the registry, change it, and write it back — with the row LOCKED for the
+ * length of it, so a concurrent writer waits its turn instead of reading the
+ * same "before" and overwriting the result.
+ *
+ * ## Why this exists
+ *
+ * The whole registry is one JSON blob. Every writer used to read it, work for a
+ * while, and write the lot back, which makes a lost update not a race you might
+ * lose but the normal outcome: the slower writer's copy — read before the faster
+ * one's changes existed — lands last and erases them.
+ *
+ * On 14 September 2026 that sent a client the automatic check-in email **every
+ * hour for a day**. The cron runs the follow-up pass and the marketing pass in a
+ * `Promise.all`; both read this registry at the same instant; marketing sent its
+ * emails and recorded them; the follow-up pass, still working from the copy it
+ * read before any of that, wrote its own version over the top. The record of the
+ * send vanished, so an hour later every client was "never mailed", and the
+ * 30-day cadence and the 12-email cap — both of which read that record — never
+ * saw a thing.
+ *
+ * The mutator runs INSIDE the transaction. Keep it short and do no I/O in it:
+ * the lock is held until it returns, and everything else that writes a client's
+ * account waits behind it.
+ */
+export async function updateAccountsRegistry(
+  mutate: (accounts: Record<string, AccountData>) => void,
+): Promise<void> {
+  // The lock needs a row to hold on to. Creating it first (outside the
+  // transaction, idempotently) means the first-ever write is not the one case
+  // where two writers can both insert.
+  await prisma.quotationTemplate.upsert({
+    where: { layoutKey: ACCOUNT_REGISTRY_KEY },
+    update: {},
+    create: {
+      layoutKey: ACCOUNT_REGISTRY_KEY,
+      name: "Account Registry (internal)",
+      active: false,
+      config: { accounts: {} } as unknown as Prisma.InputJsonObject,
+    },
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`select 1 from "QuotationTemplate" where "layoutKey" = ${ACCOUNT_REGISTRY_KEY} for update`;
+    const row = await tx.quotationTemplate.findUnique({ where: { layoutKey: ACCOUNT_REGISTRY_KEY } });
+    const accounts = parseAccounts(row?.config);
+    mutate(accounts);
+    await tx.quotationTemplate.update({
+      where: { layoutKey: ACCOUNT_REGISTRY_KEY },
+      data: { config: { accounts } as unknown as Prisma.InputJsonObject },
+    });
+  });
+}
+
+/**
+ * Write back only the clients this caller actually touched, onto whatever the
+ * registry says right now.
+ *
+ * For the long-running passes — the follow-up runner works through emails and
+ * texts for minutes before it saves. Re-reading under the lock and copying just
+ * the touched entries across means two passes that worked on different clients
+ * both keep their changes, instead of the later one erasing the earlier.
+ *
+ * `touched` is the list of customer ids whose entry is to be taken from
+ * `accounts`; an id present in `touched` but absent from `accounts` is deleted,
+ * so a caller can remove an entry too.
+ */
+export async function mergeAccountsRegistry(
+  touched: Iterable<string>,
+  accounts: Record<string, AccountData>,
+): Promise<void> {
+  const ids = [...new Set(touched)];
+  if (ids.length === 0) return;
+  await updateAccountsRegistry((fresh) => {
+    for (const id of ids) {
+      if (accounts[id]) fresh[id] = accounts[id];
+      else delete fresh[id];
+    }
   });
 }

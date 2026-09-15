@@ -1,3 +1,119 @@
+## 2026-09-15 · The PO refused the save for a good reason and told nobody
+
+Reported from Purchasing: **Save Changes** on a purchase order answers with
+
+> An error occurred in the Server Components render. The specific message is omitted in production
+> builds to avoid leaking sensitive details. A digest property is included on this error instance…
+
+Nothing was broken. The save was refused, correctly, by a rule the app has always had — and the one
+sentence that says what to do about it never reached the screen.
+
+### What the rule actually said
+
+Reproduced against the harness, where the dev server does not redact:
+
+> **“GI SHEET 24GA” is priced at 850 but the catalogue says 100. Give a reason for the different
+> price, or use the catalogue price.**
+
+That is the price-deviation guard: a price off the catalogue is allowed — a supplier quoting
+something new on a Friday must not stop purchasing — but it has to carry a reason, recorded and
+reviewed afterwards. The purchaser needed to type a reason. Instead they got a paragraph about
+digests, five times in a row, with no way to tell which of the PO's lines was the problem.
+
+### Why the sentence vanished
+
+**Next.js redacts every error thrown by a server action in production.** That is the right default
+for a crash — a stack trace or a database message must never reach a browser — and exactly wrong for
+the refusals this app writes on purpose. `savePurchaseOrder` has five of them, every one a careful
+sentence, and production replaced all five with the same paragraph.
+
+A RETURNED value is not redacted. So the refusals are returned now (`lib/action-result`), and `throw`
+goes back to meaning what it should: something went wrong that the user can do nothing about.
+
+The rules themselves are untouched — the same conditions refuse the same saves, and nothing is
+written when one does. `save-po-price.test.ts`, which runs against a real Postgres, still asserts
+that the refusal happens, that the figures are in it, and that nothing was written; it now also
+asserts the refusal **resolves rather than rejects**, because a thrown one is the bug.
+
+### Not just this button
+
+`throw new Error("…")` appears **391 times in the order actions alone**, 657 across all the action
+files, and a good share of those are sentences meant for a person. Every one of them is currently a
+paragraph about digests when it fires in production. This entry fixes the one that was reported;
+the pattern is `lib/action-result`, and the ones worth converting next are the buttons that refuse
+in normal use rather than only when something is wrong — the approval steps, the cash-voucher
+guards, and the stock-issue checks.
+
+### A note on the harness
+
+`save-po-price.test.ts` truncates `PurchaseRequest` and `Product` in `beforeEach`. Pointing
+`TEST_DATABASE_URL` at the database the role harness was using emptied its fixture mid-session —
+harmless (a reboot reseeds) but worth knowing before running it anywhere that matters.
+
+## 2026-09-15 · A client got the check-in email every hour for a day
+
+Reported by the client, through Purchasing: the "Keeping in touch" email arriving hourly, through
+the night, against a setting that says **every 30 days, at most 12 times**.
+
+Neither number was wrong. Both read the same record — the list of stamps written when a check-in
+goes out — and that record was being deleted a fraction of a second after it was written.
+
+### One JSON blob, two writers, every hour
+
+The account registry is a single JSON row: `{ accounts: { [customerId]: … } }`. Every writer read the
+whole thing, worked, and wrote the whole thing back. The hourly cron ran two of them **concurrently**:
+
+```ts
+const [followUps, marketing] = await Promise.all([
+  runFollowUps({ live: true }),
+  runMarketingRecurring({ live: true }),
+]);
+```
+
+Both read the registry at the same instant. Marketing sent its emails and recorded them. The
+follow-up pass — slower, still holding the copy it read *before* any of that — wrote its version over
+the top. The stamps were gone. An hour later every client read as "never mailed", so every client was
+mailed again. The 12-email cap never bit for the same reason: it counts the same vanished stamps.
+
+Reproduced against a real Postgres before changing anything, because a theory about a race is worth
+nothing until it is one:
+
+```
+before: after three hourly ticks the cadence gate sees 0 recorded send(s)
+after : after three hourly ticks the cadence gate sees 3 recorded send(s)
+```
+
+### What changed
+
+- **`updateAccountsRegistry(mutate)`** — read, change, write, with the row `SELECT … FOR UPDATE`d for
+  the length of it. A concurrent writer waits instead of reading the same "before".
+- **`mergeAccountsRegistry(touched, accounts)`** for the long passes. The follow-up runner works for
+  minutes; it now writes back only the clients it touched, onto whatever the registry says at the
+  end, instead of its stale copy of all of them.
+- **The marketing pass claims before it sends.** One locked write stamps every client the run is about
+  to mail, re-checking each against the freshest record first. That also picks which way it fails:
+  if the function is killed half way through sending — a timeout, a deploy, a provider outage — the
+  clients it did not reach are recorded as done and wait for the next window. **A missed check-in is
+  a small thing; the other way round is what this entry is about.**
+- The cron runs the two passes **one at a time**, marketing first. No longer what correctness rests
+  on, but there was never anything to gain from overlapping them.
+- The same treatment for the public **unsubscribe** action and the TIN autofill: a client opting out
+  mid-send must not be erased by the run that just mailed them.
+
+### The rule has a name and a test now
+
+`isDueForCheckIn(sent, now, config)` — the cadence and the cap in one place, with the cases pinned:
+never-mailed, an hour later, 29 days, 30 days, the twelfth send, and an unreadable stamp (which means
+**do not send** — a record we cannot date is still evidence that something went out, and treating it
+as "never mailed" is how one bad row becomes an hourly email).
+
+### For the owner
+
+The switch is off, and off is genuinely off: the send gate reads
+`config.enabled && !config.dryRun`, and the config lives in its own row that none of this touches —
+nothing has gone out since it was turned off. Once this deploys it is safe to turn back on; the first
+run will find every client's last send recorded and leave them alone for 30 days.
+
 ## 2026-09-14 · The reminder poll stops reading three years of calendar to draw one card
 
 The item parked as "a `Schedule` index" turned out to be two findings, and the index was the smaller

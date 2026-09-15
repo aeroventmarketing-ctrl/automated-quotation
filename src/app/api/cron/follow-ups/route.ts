@@ -47,10 +47,23 @@ export async function GET(req: NextRequest) {
     if (!force && !gate.run) {
       return NextResponse.json({ skipped: true, reason: gate.reason, schedule: settings.scheduleMode, scheduled, abTests });
     }
-    const [followUps, marketing] = await Promise.all([
-      runFollowUps({ live: true }),
-      runMarketingRecurring({ live: true }),
-    ]);
+    // ONE AT A TIME, and marketing first.
+    //
+    // These two were run concurrently, and both read the whole account registry,
+    // work for a while, and write it back. Running them together made a lost
+    // update the normal outcome rather than a race: on 14 September the
+    // follow-up pass, finishing last from a copy read before any of it happened,
+    // erased the marketing pass's record of the emails it had just sent — so the
+    // 30-day cadence and the 12-email cap saw nothing, and a client got the same
+    // check-in every hour for a day.
+    //
+    // Each pass now writes back only the clients it touched (and marketing
+    // claims its sends under a row lock before sending any), so this ordering is
+    // no longer what correctness rests on. It stays because there is nothing to
+    // gain from overlapping two jobs that both talk to the same mail provider and
+    // the same registry row.
+    const marketing = await runMarketingRecurring({ live: true });
+    const followUps = await runFollowUps({ live: true });
     // Stamp the run so the schedule gate advances (merge to preserve other fields).
     //
     // EXCEPT when the run was cut short by its time budget (`deferred` > 0): the

@@ -17,7 +17,7 @@ import { config } from "@/lib/config";
 import { evaluateFollowUp, sentAtFrom, nudgesSentFrom, lastNudgeAtFrom, smsNudgesSentFrom, lastSmsAtFrom } from "@/lib/follow-up";
 import { getFollowUpSettings } from "@/lib/follow-up-settings";
 import { getFollowUpTemplates } from "@/lib/follow-up-templates";
-import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
+import { getAccountsRegistry, mergeAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { buildFollowUpEmail, buildInquiryFollowUpEmail, templateForNudge } from "@/lib/follow-up-email";
 import { buildFollowUpSms, smsTemplateForNudge } from "@/lib/follow-up-sms";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
@@ -152,7 +152,13 @@ export async function runFollowUps(opts: {
   });
 
   const accounts = await getAccountsRegistry();
-  let accountsDirty = false;
+  // Which clients this run changed. The run works for minutes — emails, then
+  // texts — so by the time it saves, its copy of the registry is stale, and
+  // writing the whole thing back erases whatever anyone else recorded in the
+  // meantime. That is what silently deleted the marketing pass's record of its
+  // own sends on 14 September, and put a check-in email in a client's inbox
+  // every hour for a day. Only the touched entries go back now.
+  const touched = new Set<string>();
 
   const items: RunItem[] = [];
   const errors: string[] = [];
@@ -287,7 +293,7 @@ export async function runFollowUps(opts: {
       const acct = accounts[customerId] ?? { history: [], conversations: [] };
       acct.conversations = [...(acct.conversations ?? []), entry];
       accounts[customerId] = acct;
-      accountsDirty = true;
+      touched.add(customerId);
 
       sent++;
       items.push({ ...base, action: "sent" });
@@ -372,7 +378,7 @@ export async function runFollowUps(opts: {
       };
       acct.conversations = [...(acct.conversations ?? []), entry];
       accounts[c.id] = acct;
-      accountsDirty = true;
+      touched.add(c.id);
 
       sent++;
       items.push({ ...base, action: "sent" });
@@ -493,7 +499,7 @@ export async function runFollowUps(opts: {
           const acct = accounts[c.id] ?? { history: [], conversations: [] };
           acct.conversations = [...(acct.conversations ?? []), entry];
           accounts[c.id] = acct;
-          accountsDirty = true;
+          touched.add(c.id);
 
           smsSent++;
           items.push({ ...base, action: "sent" });
@@ -506,7 +512,7 @@ export async function runFollowUps(opts: {
     deferred += sendQueue.length - smsAttempted;
   }
 
-  if (accountsDirty) await saveAccountsRegistry(accounts);
+  await mergeAccountsRegistry(touched, accounts);
 
   return {
     ranAt: now.toISOString(),

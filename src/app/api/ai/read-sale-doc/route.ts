@@ -10,7 +10,7 @@ import { saleDocReadSchema } from "@/lib/ai/schemas";
 import { AI_SALE_DOC_READ_LIMIT } from "@/lib/ai/limits";
 import { coerceReadCounts, readsUsed, readsLeft, canReadAgain, bumpReadCount, readLimitMessage } from "@/lib/ai/read-allowance";
 import { getWorkflowRoles, userHasWorkflowRole } from "@/lib/workflow-roles";
-import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
+import { updateAccountsRegistry } from "@/lib/account";
 import {
   isAiReadableSaleDocKey,
   normalizeDocNumber,
@@ -240,12 +240,10 @@ export async function POST(req: NextRequest) {
     const customerId = quote.inquiry?.customerId;
     if (customerTin && customerId) {
       try {
-        const accounts = await getAccountsRegistry();
-        const existing = accounts[customerId] ?? { history: [], conversations: [] };
-        if (!(existing.tin ?? "").trim()) {
-          accounts[customerId] = { ...existing, tin: customerTin };
-          await saveAccountsRegistry(accounts);
-        }
+        await updateAccountsRegistry((accounts) => {
+          const existing = accounts[customerId] ?? { history: [], conversations: [] };
+          if (!(existing.tin ?? "").trim()) accounts[customerId] = { ...existing, tin: customerTin };
+        });
       } catch (e) {
         console.error("read-sale-doc: TIN autofill failed", e);
       }

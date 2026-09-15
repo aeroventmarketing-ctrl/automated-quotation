@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
+import { updateAccountsRegistry } from "@/lib/account";
 import { verifyUnsubscribe } from "@/lib/marketing-unsubscribe";
 
 /**
@@ -14,10 +14,13 @@ export async function confirmUnsubscribe(formData: FormData): Promise<void> {
   const t = String(formData.get("t") ?? "");
   if (!verifyUnsubscribe(c, t)) redirect(`/unsubscribe?c=${encodeURIComponent(c)}&t=${encodeURIComponent(t)}&error=1`);
 
-  const accounts = await getAccountsRegistry();
-  const existing = accounts[c];
-  accounts[c] = { ...existing, history: existing?.history ?? [], optOutFollowUp: true };
-  await saveAccountsRegistry(accounts);
+  // One client's flag, onto whatever the registry says at this moment. A client
+  // clicking unsubscribe mid-send must not be erased by the run that mailed
+  // them, and must not erase its record either.
+  await updateAccountsRegistry((accounts) => {
+    const existing = accounts[c];
+    accounts[c] = { ...existing, history: existing?.history ?? [], optOutFollowUp: true };
+  });
 
   redirect(`/unsubscribe?c=${encodeURIComponent(c)}&t=${encodeURIComponent(t)}&done=1`);
 }

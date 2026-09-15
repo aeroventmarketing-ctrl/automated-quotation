@@ -16,7 +16,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { config } from "@/lib/config";
 import { firstNameOf, type BuiltEmail } from "@/lib/follow-up-email";
-import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
+import { getAccountsRegistry, mergeAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 import { sendSms, smsConfigured, normalizePhMobile } from "@/lib/sms/semaphore";
 
@@ -285,7 +285,10 @@ export async function sendThankYou(inquiryId: string, outcome: ThankYouOutcome):
     };
     acct.conversations = [...(acct.conversations ?? []), entry];
     accounts[c.id] = acct;
-    await saveAccountsRegistry(accounts);
+    // This one client only. The registry was read before the email went out, so
+    // writing the whole thing back would erase anything recorded in between —
+    // including another pass's record of ITS sends. See `mergeAccountsRegistry`.
+    await mergeAccountsRegistry([c.id], accounts);
 
     return res;
   } catch {
