@@ -363,3 +363,98 @@ export async function removeCommissionProof(salespersonId: string, path: string)
   revalidatePath("/commissions");
   return done;
 }
+
+/**
+ * Attach a proof to ONE commission row — the eye in the Action column.
+ *
+ * The owner: *"Put the proof of payment or signed voucher on the corresponding
+ * row or client where the commission is paid."*
+ *
+ * The payout-level attach (`attachCommissionProof`) covers a whole voucher and
+ * deliberately leaves alone anything the payee has already signed for: one click
+ * that swept a confirmed payout into a later payment's slip would be a mistake
+ * nobody asked for. Here the row is chosen by hand, one at a time, so that
+ * reasoning does not apply — an already-confirmed row can be evidenced too, which
+ * is exactly the case in the owner's screenshot: rows confirmed at 2:14 PM with
+ * no slip on them yet.
+ *
+ * Still the same three seats, and still only a row that has actually been paid:
+ * there is no `Commission` record before that, and no payment to prove.
+ */
+export async function attachDealProof(
+  kind: CommissionDealKind,
+  refId: string,
+  payeeKind: CommissionPayeeKind,
+  doc: { path: string; name: string; uploadedAt: string; uploadedById: string; uploadedByName: string },
+): Promise<ActionResult> {
+  const viewer = await commissionViewer();
+  if (!viewer) return refuse("Please sign in again.");
+  if (!canAttachCommissionProof(viewer)) {
+    return refuse("Only Accounting, the Payment Approver or an admin can attach proof of payment.");
+  }
+
+  const where = kind === "order"
+    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
+    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
+  const row = await prisma.commission.findUnique({ where, select: { id: true, salespersonId: true, paid: true, paymentProof: true } });
+  if (!row) return refuse("Mark this commission paid first — a proof of payment needs a payment.");
+  if (!row.paid) return refuse("This commission hasn't been paid yet.");
+  // The path carries the payee's id, and it is where the file really is. A
+  // mismatch means the upload and the row disagree about whose money this is.
+  if (salespersonIdFromProofPath(doc.path) !== row.salespersonId) {
+    return refuse("That file doesn't belong to this salesperson's payout.");
+  }
+
+  const docs = coerceProofDocs(row.paymentProof);
+  if (docs.some((d) => d.path === doc.path)) return done; // already there
+  if (docs.length >= MAX_PROOF_DOCS) return refuse(`A commission can carry ${MAX_PROOF_DOCS} files — remove one first.`);
+  await prisma.commission.update({
+    where: { id: row.id },
+    data: { paymentProof: [...docs, doc] as unknown as Prisma.InputJsonValue },
+  });
+
+  await logActivity(viewer.user, {
+    action: "commission.proof.attached",
+    category: "commission",
+    summary: `Proof of payment attached to one commission — ${doc.name}`,
+    entity: "commission",
+    entityId: row.id,
+    href: `/commissions#commission-${kind}-${refId}-${payeeKind}`,
+  });
+  revalidatePath("/commissions");
+  return done;
+}
+
+/** Remove one file from one commission row. Same three seats. */
+export async function removeDealProof(
+  kind: CommissionDealKind,
+  refId: string,
+  payeeKind: CommissionPayeeKind,
+  path: string,
+): Promise<ActionResult> {
+  const viewer = await commissionViewer();
+  if (!viewer) return refuse("Please sign in again.");
+  if (!canAttachCommissionProof(viewer)) {
+    return refuse("Only Accounting, the Payment Approver or an admin can remove proof of payment.");
+  }
+  const where = kind === "order"
+    ? { quotationId_kind: { quotationId: refId, kind: payeeKind } }
+    : { counterSaleId_kind: { counterSaleId: refId, kind: payeeKind } };
+  const row = await prisma.commission.findUnique({ where, select: { id: true, paymentProof: true } });
+  if (!row) return refuse("That commission no longer has a payout record.");
+  const kept = coerceProofDocs(row.paymentProof).filter((d) => d.path !== path);
+  await prisma.commission.update({
+    where: { id: row.id },
+    data: { paymentProof: kept as unknown as Prisma.InputJsonValue },
+  });
+  await logActivity(viewer.user, {
+    action: "commission.proof.removed",
+    category: "commission",
+    summary: "Proof of payment removed from one commission",
+    entity: "commission",
+    entityId: row.id,
+    href: `/commissions#commission-${kind}-${refId}-${payeeKind}`,
+  });
+  revalidatePath("/commissions");
+  return done;
+}
