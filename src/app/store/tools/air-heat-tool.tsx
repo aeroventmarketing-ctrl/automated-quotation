@@ -19,6 +19,7 @@ import {
 } from "@/lib/hvac/psychrometrics";
 import { positive as num, signed, nonNegative, r1, r2, r3 } from "@/lib/hvac/parse";
 import { NumField, PickField, Stat, Stats, ToolCard, Hint, SubGroup } from "./tool-ui";
+import { AirPathDiagram, AIR_MEASUREMENT_NOTES } from "@/components/hvac/air-path-diagram";
 
 /**
  * Public air-side heat calculator. The maths is `lib/hvac/psychrometrics`,
@@ -48,6 +49,7 @@ export function AirHeatTool() {
   const [altitude, setAltitude] = useState("0");
   const [altitudeUnit, setAltitudeUnit] = useState<AltitudeUnit>("ft");
   const [flowTemp, setFlowTemp] = useState("70");
+  const [showHelp, setShowHelp] = useState(false);
 
   const result = useMemo(
     () =>
@@ -103,6 +105,29 @@ export function AirHeatTool() {
           options={[{ value: "f", label: "°F" }, { value: "c", label: "°C" }]} />
         <PickField label="Humidity as" value={humidityUnit} onChange={(v) => setHumidityUnit(v as HumidityUnit)}
           options={[{ value: "rh", label: "RH %" }, { value: "grains", label: "gr/lb" }, { value: "gkg", label: "g/kg" }]} />
+      </div>
+
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowHelp((v) => !v)}
+          aria-expanded={showHelp}
+          className="rounded-full border border-[var(--store-line,rgba(0,0,0,0.12))] px-3 py-1.5 text-[11px] font-extrabold uppercase tracking-wide text-[var(--store-steel)] hover:bg-black/5"
+        >
+          {showHelp ? "Hide the diagram" : "Where do I measure these?"}
+        </button>
+        {showHelp && (
+          <div className="mt-3 rounded-lg border border-[var(--store-line,rgba(0,0,0,0.12))] p-3 text-[var(--store-ink,#111)]">
+            <AirPathDiagram />
+            <div className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              {AIR_MEASUREMENT_NOTES.map((n) => (
+                <p key={n.title} className="text-[12px] leading-snug text-[var(--store-steel)]">
+                  <strong className="text-[var(--store-ink,#111)]">{n.title}.</strong> {n.body}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <SubGroup label="Entering air — the room, or on-coil">

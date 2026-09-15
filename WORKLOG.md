@@ -1,3 +1,55 @@
+## 2026-09-16 · "Where do I measure these?" — a diagram on the Air Heat tool
+
+The owner, looking at the live tool on a phone: *"How do I measure leaving air and entering air. Make
+a graphical representation for proper understanding."*
+
+The two boxes on the form assume you already know which side of the coil each reading comes from, and
+that assumption is exactly the thing a field label cannot state. So the answer went **on the page the
+question was asked from**, not into a reply — a **Where do I measure these?** button sitting directly
+above the two air-state blocks, opening an inline SVG air path and six practical notes.
+
+### What the drawing has to show
+
+Three things, and everything else on it exists to support them:
+
+- **The coil is the boundary.** Entering is whatever reaches its face; leaving is whatever comes off
+  it. The duct, the arrows and the labels are all there to say where that face is.
+- **Outside air changes the entering condition.** A system mixing fresh air has an on-coil state that
+  is neither the room nor the outdoors, and reading the room thermostat instead is the commonest way
+  to get entering air wrong. The mixing point is drawn upstream of point 1, with the reason written
+  beside it.
+- **The fan is downstream, and it heats.** Measuring at the supply grille reads 1–3 °F warmer than
+  off-coil, plus duct gain. It is marked with a **cross** rather than simply left off, because a
+  mistake that produces a plausible number is invisible unless someone tells you it exists.
+
+### Drawn once, rendered twice
+
+`src/components/hvac/air-path-diagram.tsx` is plain SVG in `currentColor`, so it inherits the text
+colour of wherever it sits — the staff card and the storefront's very different palette share one
+drawing rather than keeping two in step. It scrolls sideways below ~640px, the same thing the wide
+tables in this app do, because shrinking the lettering to fit a phone would defeat the point of it.
+
+Closed by default: the calculator stays short on the phone the question came from, and the help is
+one tap away at the moment the two boxes raise it.
+
+### Three things found by looking at it
+
+Rendering and reading the picture caught all three; none would have shown up in a test.
+
+1. **The ΔT bracket sat on top of the COIL label.** Moved below it, with its legs landing on the two
+   probe points — the span it measures *is* 1 to 2.
+2. **The fan came out looking like a keyhole.** The first attempt drew the blades as loose curves. A
+   wedge repeated at 120° reads as an impeller at any size.
+3. **White numerals on a filled emerald disc.** Fine on emerald-600, weak on the lighter emerald-400.
+   Outlined badges with the numeral in `currentColor` survive any background.
+
+### And a claim of mine that was wrong
+
+The component's comment said the drawing stays legible "in light and dark". Checking rather than
+asserting: **this app has no dark theme at all.** `globals.css` defines its tokens in a single
+`:root` block with no `.dark` override, and nothing anywhere sets the class — so every `dark:` class
+in the codebase, including ones written earlier this week, is inert. The comment now says so, and
+notes that `currentColor` line work means the diagram would follow a dark theme the day one arrives.
 ## 2026-09-16 · Air heat, backwards: the airflow a load needs
 
 The owner, straight after using the forward one: *"Add the reverse solve for required CFM."* It is the
