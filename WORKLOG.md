@@ -1,3 +1,55 @@
+## 2026-09-15 · An eye on every paid commission
+
+The owner: *"put an eye view at action column, when eye view is clicked, proof of payment can be
+viewed. Put the proof of payment or signed voucher on the corresponding row or client where the
+commission is paid."*
+
+### The row is now where the evidence lives
+
+An eye sits in the Action column of every **paid** commission — before payment there is nothing to
+evidence — and it opens what is attached to that exact row. It carries a small dot when there is
+something behind it, so a row with evidence can be told from one without at a glance.
+
+The same panel ATTACHES, for the three seats that may: Accounting, the Payment Approver, an admin.
+One row at a time, so a slip goes on the exact commission it belongs to — the client, the order, the
+amount, all on the line beside it.
+
+### Why a per-row attach as well as the payout one
+
+The payout-level attach (yesterday's) covers a whole voucher and deliberately skips anything the
+payee has already signed for: one click that swept a confirmed payout into a later payment's slip is
+a mistake nobody asked for. That rule is right for a sweep and wrong for a deliberate choice — and
+the owner's screenshot is exactly the case it blocked: Desiree's rows, confirmed at 2:14 PM, with no
+slip on them. Choosing a row by hand is a different act, so the per-row attach accepts a confirmed
+row.
+
+### The Action column exists for the salesperson now
+
+It used to be drawn only for Accounting. The eye belongs to the payee too — *"Proof of payment must
+be viewable by sales account holder"* — so the column appears for them, carrying just their eye. The
+tick box and "Mark paid" stay behind `canManage`, exactly as before.
+
+### Verified by opening every eye on the page
+
+| | eyes | what they open |
+| --- | --- | --- |
+| Sam, the payee | 2 — his own rows | `signed-voucher.pdf`, **no** attach control |
+| Accounting | 4 — everyone's | the same file on Sam's two, attach on all |
+| Payment Approver | 4 | same |
+| Another salesperson | only their own | — |
+| Warehouse | **no Action column at all** | — |
+
+### A limit worth writing down
+
+The rows on this page are the RECOMPUTED entitlement, so a payee whose deal has stopped computing —
+a revised order, a month that no longer clears quota — has no row, and therefore no eye. Their
+receipt panel still lists the slips while a payout is unconfirmed (that one reads the payout record),
+so the only uncovered case is a confirmed payout whose deal has since changed. Worth knowing before
+someone reports it as a missing file.
+
+This is also what the harness showed when the fixture's commissions were seeded against another
+person's orders — the payee had no rows at all. Not the feature; worth checking a real one.
+
 ## 2026-09-15 · Proof of payment, and the chase list it lives on
 
 The owner: *"add an option to attach proof of payment to sales personnel for accounting, payment

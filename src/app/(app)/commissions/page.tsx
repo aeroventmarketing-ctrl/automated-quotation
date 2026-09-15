@@ -28,7 +28,7 @@ import {
 } from "@/lib/sales-commission";
 import { MarkPaid } from "./mark-paid";
 import { ReceiptLink, ReceivedStamp } from "./receipt-link";
-import { ProofList } from "./proof-of-payment";
+import { RowProof } from "./proof-of-payment";
 import { readOutstandingReceipt, readAwaitingConfirmation } from "@/lib/commission-receipt";
 import { AwaitingConfirmationPanel } from "./awaiting-confirmation";
 import { coerceProofDocs, type CommissionProofDoc } from "@/lib/commission-proof";
@@ -322,6 +322,11 @@ function MonthCard({
 }) {
   const isOverride = m.kind === "override";
   const cardKeys = m.deals.filter(isVoucherable).map(dealKey);
+  // The Action column used to exist only for Accounting. The eye lives there now,
+  // and the salesperson the card belongs to may open their own — so the column
+  // appears for them as well, carrying just the eye.
+  const ownCard = m.salespersonId === viewerId;
+  const showAction = canManage || canAttachProof || ownCard;
   return (
     <Card className={isOverride ? "border-violet-600/30" : m.qualifies ? "border-emerald-600/30" : ""}>
       <CardHeader className="flex-row flex-wrap items-baseline justify-between gap-2 space-y-0 pb-3">
@@ -364,10 +369,10 @@ function MonthCard({
                 <TableHead className="text-right">Commission base</TableHead>
                 <TableHead className="text-right">{isOverride ? `${OVERRIDE_RATE_PCT}%` : `${COMMISSION_RATE_PCT}%`}</TableHead>
                 <TableHead>Status</TableHead>
-                {canManage && (
+                {showAction && (
                   <TableHead className="text-right">
                     <span className="inline-flex items-center gap-2">
-                      {cardKeys.length > 0 && <CardTick dealKeys={cardKeys} />}
+                      {canManage && cardKeys.length > 0 && <CardTick dealKeys={cardKeys} />}
                       Action
                     </span>
                   </TableHead>
@@ -402,17 +407,9 @@ function MonthCard({
                     {d.approved ? formatCurrency(d.amount, currency) : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell>
-                    <DealStatus
-                      deal={d}
-                      qualifies={m.qualifies}
-                      currency={currency}
-                      // Who may open the slip: the three seats that attach it,
-                      // and the person it pays. Same rule the route enforces —
-                      // this only decides whether to draw the link.
-                      showProof={canAttachProof || d.salespersonId === viewerId}
-                    />
+                    <DealStatus deal={d} qualifies={m.qualifies} currency={currency} />
                   </TableCell>
-                  {canManage && (
+                  {showAction && (
                     <TableCell className="text-right">
                       {/* The tick box sits in the row beside "Mark paid" — one
                           decision (this commission goes on a voucher) next to
@@ -424,10 +421,24 @@ function MonthCard({
                           and "Mark paid" opens five days before the release day
                           because that is when the cheque is actually cut. */}
                       <span className="inline-flex items-center justify-end gap-2">
-                        <DealTick dealKey={dealKey(d)} />
-                        {canMarkPaid(d, todayYMD) ? (
+                        {/* The eye: this row's proof of payment. Shown once the
+                            commission has actually been paid — before that there
+                            is no payment to evidence — to the three seats that
+                            attach it and to the salesperson it pays. */}
+                        {d.paid && (canAttachProof || d.salespersonId === viewerId) && (
+                          <RowProof
+                            kind={d.kind}
+                            refId={d.refId}
+                            payeeKind={d.payeeKind}
+                            salespersonId={d.salespersonId}
+                            docs={d.paymentProof}
+                            canAttach={canAttachProof}
+                          />
+                        )}
+                        {canManage && <DealTick dealKey={dealKey(d)} />}
+                        {canManage && canMarkPaid(d, todayYMD) ? (
                           <MarkPaid kind={d.kind} refId={d.refId} payeeKind={d.payeeKind} paid={d.paid} />
-                        ) : d.approved && !d.paid ? (
+                        ) : canManage && d.approved && !d.paid ? (
                           <span className="whitespace-nowrap text-[10px] text-muted-foreground">
                             Pay from {formatDate(markPaidOpensYMD(d.payoutYMD))}
                           </span>
@@ -456,17 +467,7 @@ function MonthCard({
   );
 }
 
-function DealStatus({
-  deal: d,
-  qualifies,
-  currency,
-  showProof = false,
-}: {
-  deal: CommissionDeal;
-  qualifies: boolean;
-  currency: string;
-  showProof?: boolean;
-}) {
+function DealStatus({ deal: d, qualifies, currency }: { deal: CommissionDeal; qualifies: boolean; currency: string }) {
   // Paid says what ACCOUNTING did; the stamp underneath says what the PAYEE
   // said. Two different people, so two different lines — see
   // `lib/commission-receipt`.
@@ -475,9 +476,6 @@ function DealStatus({
       <span className="inline-flex flex-col gap-0.5">
         <Badge variant="success" className="w-fit">Paid{d.paidByName ? ` · ${d.paidByName}` : ""}</Badge>
         <ReceivedStamp receivedAt={d.receivedAt} receivedByName={d.receivedByName} />
-        {showProof && d.paymentProof.length > 0 && (
-          <ProofList docs={d.paymentProof} salespersonId={d.salespersonId} />
-        )}
       </span>
     );
   }

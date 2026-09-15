@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Paperclip, FileCheck2, X } from "lucide-react";
-import { attachCommissionProof, removeCommissionProof } from "./actions";
+import { Paperclip, FileCheck2, X, Eye } from "lucide-react";
+import { attachCommissionProof, removeCommissionProof, attachDealProof, removeDealProof } from "./actions";
 import { actionError } from "@/lib/action-result";
 import type { CommissionProofDoc } from "@/lib/commission-proof";
 
@@ -136,6 +136,153 @@ export function AttachProof({ salespersonId, salespersonName }: { salespersonId:
         {busy ? "Attaching…" : "Proof of payment"}
       </button>
       {err && <span className="max-w-[18rem] text-right text-[10px] leading-tight text-destructive">{err}</span>}
+    </span>
+  );
+}
+
+/**
+ * The eye in the Action column: this row's proof of payment.
+ *
+ * The owner: *"put an eye view at action column, when eye view is clicked, proof
+ * of payment can be viewed. Put the proof of payment or signed voucher on the
+ * corresponding row or client where the commission is paid."*
+ *
+ * Both halves of that sentence live here. The eye OPENS what is attached — shown
+ * to the three finance seats and to the salesperson the row pays, which is the
+ * requirement from the day before. And for those three seats the same panel
+ * ATTACHES, one row at a time, so a slip can go on the exact commission it
+ * evidences — including one the payee has already signed for, which the
+ * payout-level attach deliberately leaves alone.
+ *
+ * The eye carries a dot when something is attached, so a row with evidence can be
+ * told from one without at a glance, without opening anything.
+ */
+export function RowProof({
+  kind,
+  refId,
+  payeeKind,
+  salespersonId,
+  docs,
+  canAttach = false,
+}: {
+  kind: "order" | "counter";
+  refId: string;
+  payeeKind: "base" | "override";
+  salespersonId: string;
+  docs: CommissionProofDoc[];
+  canAttach?: boolean;
+}) {
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function upload(file: File) {
+    setBusy(true);
+    setErr(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("salespersonId", salespersonId);
+      const res = await fetch("/api/commission-uploads", { method: "POST", body: form });
+      const data = (await res.json()) as { error?: string; path?: string; name?: string; uploadedAt?: string; uploadedById?: string; uploadedByName?: string };
+      if (!res.ok || !data.path) { setErr(data.error ?? "Upload failed."); return; }
+      const refusal = actionError(await attachDealProof(kind, refId, payeeKind, {
+        path: data.path,
+        name: data.name ?? file.name,
+        uploadedAt: data.uploadedAt ?? new Date().toISOString(),
+        uploadedById: data.uploadedById ?? "",
+        uploadedByName: data.uploadedByName ?? "",
+      }));
+      if (refusal) { setErr(refusal); return; }
+      router.refresh();
+    } catch {
+      setErr("Couldn't attach the proof. Try again.");
+    } finally {
+      setBusy(false);
+      if (input.current) input.current.value = "";
+    }
+  }
+
+  async function drop(path: string) {
+    setBusy(true);
+    setErr(null);
+    const refusal = actionError(await removeDealProof(kind, refId, payeeKind, path).catch(() => null));
+    if (refusal) setErr(refusal);
+    else router.refresh();
+    setBusy(false);
+  }
+
+  return (
+    <span className="relative inline-flex flex-col items-end">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title={docs.length > 0 ? `Proof of payment (${docs.length})` : "Proof of payment — none attached yet"}
+        aria-label="View proof of payment"
+        className="relative inline-flex h-7 w-7 items-center justify-center rounded-md border hover:bg-accent"
+      >
+        <Eye className={`h-3.5 w-3.5 ${docs.length > 0 ? "text-emerald-600" : "text-muted-foreground"}`} />
+        {docs.length > 0 && <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-8 z-20 w-64 rounded-md border bg-popover p-2 text-left shadow-lg">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Proof of payment</p>
+          {docs.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              {canAttach ? "Nothing attached yet. Add the slip or the signed voucher below." : "Nothing attached yet — ask Accounting for the slip."}
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {docs.map((d) => (
+                <li key={d.path} className="flex items-center justify-between gap-2">
+                  <a
+                    href={viewHref(d)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-w-0 items-center gap-1 text-[11px] font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                  >
+                    <FileCheck2 className="h-3 w-3 flex-none" />
+                    <span className="truncate">{d.name}</span>
+                  </a>
+                  {canAttach && (
+                    <button type="button" disabled={busy} onClick={() => drop(d.path)} title="Remove" className="flex-none text-muted-foreground hover:text-destructive disabled:opacity-50">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {docs.some((d) => d.uploadedByName) && (
+            <p className="mt-1 text-[10px] text-muted-foreground">Attached by {docs.find((d) => d.uploadedByName)!.uploadedByName}</p>
+          )}
+          {canAttach && (
+            <>
+              <input
+                ref={input}
+                type="file"
+                accept="image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => input.current?.click()}
+                className="mt-2 inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
+              >
+                <Paperclip className="h-3 w-3" />
+                {busy ? "Attaching…" : docs.length > 0 ? "Attach another" : "Attach proof / signed voucher"}
+              </button>
+            </>
+          )}
+          {err && <p className="mt-1 text-[10px] text-destructive">{err}</p>}
+          <button type="button" onClick={() => setOpen(false)} className="mt-1 w-full text-[10px] text-muted-foreground hover:underline">Close</button>
+        </div>
+      )}
     </span>
   );
 }
