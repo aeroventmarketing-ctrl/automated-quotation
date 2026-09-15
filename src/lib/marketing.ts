@@ -15,6 +15,7 @@ import { prisma } from "@/lib/db";
 import { COMPANY } from "@/lib/config";
 import { getAccountsRegistry } from "@/lib/account";
 import type { BuiltEmail } from "@/lib/follow-up-email";
+import { calendarDaysBetween } from "@/lib/follow-up";
 
 export const MARKETING_SETTINGS_KEY = "marketing_settings";
 
@@ -148,4 +149,25 @@ export function buildMarketingEmail(i: { subject: string; body: string; company:
 </div>`;
 
   return { subject: i.subject, text, html };
+}
+
+/**
+ * Is this client due an automatic check-in?
+ *
+ * The rule the owner set on the Marketing page: not more often than every
+ * `everyDays`, and never more than `maxNudges` times in total. Both read the
+ * same record — the list of stamps written when a check-in goes out — which is
+ * why losing that record loses BOTH gates at once, and why this is a named
+ * function with tests rather than four lines inside the runner's loop.
+ */
+export function isDueForCheckIn(
+  sent: { at: string }[],
+  now: Date,
+  config: { everyDays: number; maxNudges: number },
+): boolean {
+  if (sent.length >= config.maxNudges) return false; // reached the cap — done
+  const last = sent.length ? new Date(sent[sent.length - 1].at) : null;
+  if (!last) return true; // never mailed
+  if (Number.isNaN(last.getTime())) return false; // unreadable stamp: do not mail
+  return calendarDaysBetween(last, now) >= config.everyDays;
 }

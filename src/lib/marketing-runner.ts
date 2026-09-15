@@ -14,7 +14,7 @@ import { randomUUID } from "crypto";
 import { prisma } from "@/lib/db";
 import { config as appConfig } from "@/lib/config";
 import { calendarDaysBetween } from "@/lib/follow-up";
-import { getAccountsRegistry, saveAccountsRegistry, type ConversationEntry } from "@/lib/account";
+import { getAccountsRegistry, saveAccountsRegistry, updateAccountsRegistry, type ConversationEntry } from "@/lib/account";
 import { sendEmail, emailConfigured } from "@/lib/email/resend";
 import { marketingImageUrl } from "@/lib/marketing-image-link";
 import { unsubscribeUrl } from "@/lib/marketing-unsubscribe";
@@ -22,6 +22,7 @@ import { rfqToken } from "@/lib/rfq-link";
 import {
   getMarketingConfig,
   getMarketingRecipients,
+  isDueForCheckIn,
   buildMarketingEmail,
   type MarketingAudience,
   type MarketingRecipient,
@@ -111,8 +112,10 @@ export async function runMarketingRecurring(opts: { now?: Date; live: boolean })
   let sent = 0;
   let previewed = 0;
   let skipped = 0;
-  let dirty = false;
 
+  // Who is due this run, by the cadence and the cap. Nothing is sent in this
+  // pass — it only decides.
+  const due: { c: (typeof customers)[number]; email: string }[] = [];
   for (const c of customers) {
     const acct = accounts[c.id];
     if (!acct?.marketingList) continue; // recurring targets the marketing list only
@@ -121,32 +124,69 @@ export async function runMarketingRecurring(opts: { now?: Date; live: boolean })
     if (acct.optOutFollowUp) { skipped++; items.push({ company: c.company, to: email, action: "skipped", reason: "opted out" }); continue; }
     if (!email) { skipped++; items.push({ company: c.company, to: "", action: "skipped", reason: "no email on file" }); continue; }
 
-    const sentArr = acct.marketingFollowUp?.sent ?? [];
-    if (sentArr.length >= config.maxNudges) continue; // reached the cap — done
-    const lastSent = sentArr.length ? new Date(sentArr[sentArr.length - 1].at) : null;
-    const due = !lastSent || calendarDaysBetween(lastSent, now) >= config.everyDays;
-    if (!due) continue;
+    if (isDueForCheckIn(acct.marketingFollowUp?.sent ?? [], now, config)) due.push({ c, email });
+  }
 
+  if (!effectiveLive) {
+    for (const { c, email } of due) { previewed++; items.push({ company: c.company, to: email, action: "preview" }); }
+    return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients, sent, previewed, skipped, items, errors };
+  }
+
+  // Everything this run will attempt, capped. The ones past the cap are reported
+  // and left for the next run — they are still due, and nothing is claimed for
+  // them here.
+  const attempt = due.slice(0, MARKETING_CAP_PER_RUN);
+  for (const { c, email } of due.slice(MARKETING_CAP_PER_RUN)) {
+    skipped++;
+    items.push({ company: c.company, to: email, action: "skipped", reason: "per-run send cap reached" });
+  }
+
+  // **Claim them before sending a single one.** One locked read-modify-write
+  // stamps every client this run is about to mail, re-checking each against the
+  // registry as it is at this instant — so a run that overlaps this one finds
+  // them no longer due and leaves them alone.
+  //
+  // Claiming FIRST also decides which way this fails. If the function is killed
+  // half way through the sending below — a timeout, a deploy, a Resend outage —
+  // the clients it did not reach are recorded as done and simply wait for the
+  // next cadence window. A missed "keeping in touch" email is a small thing. The
+  // other way round is what happened on 14 September: sent, not recorded, sent
+  // again an hour later, and again, until someone noticed.
+  const claimed = new Set<string>();
+  if (attempt.length > 0) {
+    await updateAccountsRegistry((fresh) => {
+      for (const { c } of attempt) {
+        const a = fresh[c.id];
+        if (!a?.marketingList) continue;
+        // The cadence, re-asked against the freshest record rather than the one
+        // read at the top of this run.
+        if (!isDueForCheckIn(a.marketingFollowUp?.sent ?? [], now, config)) continue;
+        a.marketingFollowUp = { sent: [...(a.marketingFollowUp?.sent ?? []), { at: now.toISOString() }] };
+        a.conversations = [...(a.conversations ?? []), logEntry(now, c.company, c.contactName, "Automated marketing check-in sent.")];
+        claimed.add(c.id);
+      }
+    });
+  }
+
+  for (const { c, email } of attempt) {
+    if (!claimed.has(c.id)) {
+      skipped++;
+      items.push({ company: c.company, to: email, action: "skipped", reason: "already sent by a concurrent run" });
+      continue;
+    }
     const mail = buildMarketingEmail({ subject: config.subject, body: config.body, company: c.company, contactName: c.contactName });
-
-    if (!effectiveLive) { previewed++; items.push({ company: c.company, to: email, action: "preview" }); continue; }
-    if (sent >= MARKETING_CAP_PER_RUN) { skipped++; items.push({ company: c.company, to: email, action: "skipped", reason: "per-run send cap reached" }); continue; }
-
     try {
       await sendEmail({ from, to: email, subject: mail.subject, text: mail.text, html: mail.html });
-      const a = accounts[c.id]!;
-      a.marketingFollowUp = { sent: [...(a.marketingFollowUp?.sent ?? []), { at: now.toISOString() }] };
-      a.conversations = [...(a.conversations ?? []), logEntry(now, c.company, c.contactName, "Automated marketing check-in sent.")];
-      dirty = true;
       sent++;
       items.push({ company: c.company, to: email, action: "sent" });
     } catch (e) {
+      // The claim stands: this client waits for the next cadence window rather
+      // than being retried on the next hourly tick.
       errors.push(`${c.company}: ${e instanceof Error ? e.message : "send failed"}`);
       items.push({ company: c.company, to: email, action: "skipped", reason: "send failed" });
     }
   }
 
-  if (dirty) await saveAccountsRegistry(accounts);
   return { ranAt: now.toISOString(), live: effectiveLive, requestedLive: opts.live, reason, recipients, sent, previewed, skipped, items, errors };
 }
 

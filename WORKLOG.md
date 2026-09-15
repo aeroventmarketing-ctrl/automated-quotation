@@ -1,3 +1,67 @@
+## 2026-09-15 · A client got the check-in email every hour for a day
+
+Reported by the client, through Purchasing: the "Keeping in touch" email arriving hourly, through
+the night, against a setting that says **every 30 days, at most 12 times**.
+
+Neither number was wrong. Both read the same record — the list of stamps written when a check-in
+goes out — and that record was being deleted a fraction of a second after it was written.
+
+### One JSON blob, two writers, every hour
+
+The account registry is a single JSON row: `{ accounts: { [customerId]: … } }`. Every writer read the
+whole thing, worked, and wrote the whole thing back. The hourly cron ran two of them **concurrently**:
+
+```ts
+const [followUps, marketing] = await Promise.all([
+  runFollowUps({ live: true }),
+  runMarketingRecurring({ live: true }),
+]);
+```
+
+Both read the registry at the same instant. Marketing sent its emails and recorded them. The
+follow-up pass — slower, still holding the copy it read *before* any of that — wrote its version over
+the top. The stamps were gone. An hour later every client read as "never mailed", so every client was
+mailed again. The 12-email cap never bit for the same reason: it counts the same vanished stamps.
+
+Reproduced against a real Postgres before changing anything, because a theory about a race is worth
+nothing until it is one:
+
+```
+before: after three hourly ticks the cadence gate sees 0 recorded send(s)
+after : after three hourly ticks the cadence gate sees 3 recorded send(s)
+```
+
+### What changed
+
+- **`updateAccountsRegistry(mutate)`** — read, change, write, with the row `SELECT … FOR UPDATE`d for
+  the length of it. A concurrent writer waits instead of reading the same "before".
+- **`mergeAccountsRegistry(touched, accounts)`** for the long passes. The follow-up runner works for
+  minutes; it now writes back only the clients it touched, onto whatever the registry says at the
+  end, instead of its stale copy of all of them.
+- **The marketing pass claims before it sends.** One locked write stamps every client the run is about
+  to mail, re-checking each against the freshest record first. That also picks which way it fails:
+  if the function is killed half way through sending — a timeout, a deploy, a provider outage — the
+  clients it did not reach are recorded as done and wait for the next window. **A missed check-in is
+  a small thing; the other way round is what this entry is about.**
+- The cron runs the two passes **one at a time**, marketing first. No longer what correctness rests
+  on, but there was never anything to gain from overlapping them.
+- The same treatment for the public **unsubscribe** action and the TIN autofill: a client opting out
+  mid-send must not be erased by the run that just mailed them.
+
+### The rule has a name and a test now
+
+`isDueForCheckIn(sent, now, config)` — the cadence and the cap in one place, with the cases pinned:
+never-mailed, an hour later, 29 days, 30 days, the twelfth send, and an unreadable stamp (which means
+**do not send** — a record we cannot date is still evidence that something went out, and treating it
+as "never mailed" is how one bad row becomes an hourly email).
+
+### For the owner
+
+The switch is off, and off is genuinely off: the send gate reads
+`config.enabled && !config.dryRun`, and the config lives in its own row that none of this touches —
+nothing has gone out since it was turned off. Once this deploys it is safe to turn back on; the first
+run will find every client's last send recorded and leave them alone for 30 days.
+
 ## 2026-09-14 · The reminder poll stops reading three years of calendar to draw one card
 
 The item parked as "a `Schedule` index" turned out to be two findings, and the index was the smaller
