@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { HelpCircle } from "lucide-react";
 import {
   solveAirHeat,
   isAirHeatError,
@@ -22,6 +23,7 @@ import {
   type LoadUnit,
 } from "@/lib/hvac/psychrometrics";
 import { positive as num, signed, nonNegative, r1, r2, r3 } from "@/lib/hvac/parse";
+import { AirPathDiagram, AIR_MEASUREMENT_NOTES } from "@/components/hvac/air-path-diagram";
 
 /**
  * Air-side heat: sensible, latent, total and the sensible heat ratio.
@@ -69,6 +71,10 @@ export function AirHeatCalculator() {
   const [altitude, setAltitude] = useState("0");
   const [altitudeUnit, setAltitudeUnit] = useState<AltitudeUnit>("ft");
   const [flowTemp, setFlowTemp] = useState("70");
+  // Closed by default: the calculator stays short on a phone, which is where
+  // the question was asked from, and the answer is one tap away at the point
+  // the two boxes below raise it.
+  const [showHelp, setShowHelp] = useState(false);
 
   const result = useMemo(
     () =>
@@ -133,6 +139,32 @@ export function AirHeatCalculator() {
         <p className="-mt-2 text-[11px] text-muted-foreground">{basisDef(basis).note}</p>
 
         {/* The two air states */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-medium text-muted-foreground">The two air states</div>
+          <button
+            type="button"
+            onClick={() => setShowHelp((v) => !v)}
+            aria-expanded={showHelp}
+            className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-accent"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            {showHelp ? "Hide" : "Where do I measure these?"}
+          </button>
+        </div>
+
+        {showHelp && (
+          <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+            <AirPathDiagram />
+            <div className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+              {AIR_MEASUREMENT_NOTES.map((n) => (
+                <p key={n.title} className="text-[11px] leading-snug text-muted-foreground">
+                  <span className="font-semibold text-foreground">{n.title}.</span> {n.body}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <StateBlock title="Entering air" hint="the room, or on-coil"
             temp={t1} setTemp={setT1} hum={h1} setHum={setH1} ent={e1} setEnt={setE1}

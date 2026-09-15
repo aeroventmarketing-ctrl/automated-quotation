@@ -1,3 +1,73 @@
+## 2026-09-16 · "Where do I measure these?" — a diagram on the Air Heat tool
+
+The owner, looking at the live tool on a phone: *"How do I measure leaving air and entering air. Make
+a graphical representation for proper understanding."* The two boxes on the form assume you already
+know which side of the coil each reading comes from, and that assumption is exactly the thing a field
+label cannot state. So the answer went **on the page the question was asked from** — a **Where do I
+measure these?** button above the two air-state blocks, opening an inline SVG figure and six notes on
+instrument technique. Closed by default, so the calculator stays short on a phone.
+
+### The first drawing was the wrong drawing
+
+It showed a ducted air handler: room → mixing box → coil → fan → supply grille, with the coil as the
+boundary and a cross on the grille where the fan's own heat contaminates the reading. Technically
+sound, and the owner's reply was: *"this one is better to be added into the tool, not the previous
+image"*, pointing at the non-ducted version they had asked for separately.
+
+They were right, and the reason is the business. **Aerovent makes fans and blowers, not air
+handlers.** The customer standing in front of one of their machines is almost always looking at a
+wall exhaust fan or a propeller fan in an opening — no coil, and therefore no ΔT across the fan at
+all. A coil diagram answers a question their customers rarely ask, and quietly implies the tool is
+for somebody else's equipment. The coil version never reached `main`; it was replaced on the branch.
+
+### What shipped, and why the first panel matters most
+
+Three cases, and the first is the point of the whole figure:
+
+1. **A fan on its own moves air; it does not cool it.** ΔT ≈ 0. The only change across it is the
+   motor's own heat, which is a RISE — about **2.4 °F per HP per 1,000 cfm**, so 2 HP at 4,000 cfm is
+   1.2 °F. Feed that in and the answer is the motor's shaft power restated in BTU, not a cooling
+   load. Saying so plainly is the most useful thing on the page, because a calculator that accepts
+   two numbers and returns a plausible figure will otherwise be used to size something.
+2. **An exhaust or ventilation fan: the ROOM is the boundary, not the fan.** The two readings sit on
+   opposite sides of the building — outdoor make-up air in at the louvre, room air out at the fan
+   inlet — and that is the calculation worth doing. 4,000 cfm with a 95 °F room and 88 °F outside
+   removes 30,240 BTU/hr, 2.5 tons, which is a number you can put in front of a client.
+3. **A fan with a coil blowing into open air.** A real ΔT, but the discharge is a free jet that
+   entrains room air within a diameter or two, so the reading must be taken in the core, close in.
+
+Plus the footer nobody thinks about until they are standing there: with no duct there is nothing to
+traverse, so the CFM itself is the harder measurement — flow hood, anemometer grid × free area, or
+the fan curve read at the static the fan is really working against.
+
+### Drawn as a plate, not as line art
+
+Unlike the duct drawing, this figure brings its own surface — panels, borders and a fixed
+slate/emerald/amber palette — instead of inheriting `currentColor`. A dense infographic reads better
+as a self-contained plate, and it then looks identical on the staff card and on the storefront's very
+different palette rather than shifting between them. It scrolls sideways below 760px, the same thing
+the wide tables in this app do; shrinking this much lettering to 400px would defeat the point.
+
+### Found by rendering it and looking, on both versions
+
+Neither of these would have shown up in a test. On the coil drawing: the ΔT bracket sat on the COIL
+label, and the fan read as a keyhole until its blades became wedges repeated at 120°. On this one:
+text ran off the right edge in two places, panel 3's captions sat on the jet lines, and its probe
+badges collided with its own subtitle. All fixed by screenshotting each pass rather than by reading
+the diff.
+
+### Two corrections while here
+
+**This app has no dark theme.** `globals.css` defines its tokens in a single `:root` block with no
+`.dark` override and nothing anywhere sets the class, so every `dark:` class in the codebase —
+including ones written earlier this week — is inert. An earlier comment claimed the drawing stayed
+legible "in light and dark"; it does not say that now.
+
+**A pre-existing warning on the public tools page**, noted but not fixed here: every tab logs *"The
+result of getServerSnapshot should be cached to avoid an infinite loop."* It is on `fan-law` and
+`ductulator` as much as on `air-heat`, so it predates this work and belongs to whatever storefront
+store uses `useSyncExternalStore`.
+
 ## 2026-09-16 · Air heat, backwards: the airflow a load needs
 
 The owner, straight after using the forward one: *"Add the reverse solve for required CFM."* It is the
