@@ -3707,8 +3707,16 @@ export async function createCombinedPO(
     // (and PO-less) to be combined onto one purchase order.
     if (pr.status !== "APPROVED") throw new Error("Every request must be approved (awaiting its Purchase Order) to combine.");
     if (coercePurchaseOrder(pr.po)) throw new Error("One of the requests already has a purchase order.");
-    // Material/department requisitions need the Plant Manager's approval first.
-    if (isDeptRequisition(pr)) throw new Error("A material requisition must be approved by the Plant Manager before its purchase order can be prepared.");
+    // A material / department requisition may now join a combined PO — the
+    // owner's 15 September ask, because one supplier should get one purchase
+    // order whoever asked for the items. But only once its own approval chain
+    // has finished with it: a department MRF sits at APPROVED while it is still
+    // merely Plant-Manager-approved, and `statusBucket` keeps it in the PENDING
+    // tab until the Approver clears it to purchase. Combining one then would put
+    // a purchase order in front of its own approval.
+    if (statusBucket("APPROVED", { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) !== "approved") {
+      throw new Error("A material requisition must be approved for purchase before it can go on a combined purchase order.");
+    }
   }
 
   const poNumber = await nextPoNo();

@@ -314,10 +314,25 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     const unbatched = allPrs.filter((pr) => !poBatchId(pr.po));
 
     // Combinable: approved, no PO yet — the PO is prepared after approval now, so
-    // several approved requests to the same supplier can share one PO. Material/
-    // department requisitions are excluded (they run their own approval chain).
+    // several approved requests to the same supplier can share one PO.
+    //
+    // Material / department requisitions used to be excluded here, "because they
+    // run their own approval chain". They do — but by the time one reaches the
+    // APPROVED tab that chain has finished with it, and what is left is the same
+    // job: write a purchase order. The owner, 15 September: *"If the products is
+    // of the same supplier, give the purchaser an option to merge the item
+    // request into a single PO"* — looking at the ORDER MATERIAL REQUESTS list,
+    // which was the one list this feature could not see.
+    //
+    // `statusBucket` rather than the raw status is what makes that safe: a
+    // department MRF sits at APPROVED while it is still only Plant-Manager-
+    // approved, and stays in the Pending tab until the Approver clears it to
+    // purchase. Combining one then would put a PO in front of its own approval.
     combinable = unbatched
-      .filter((pr) => pr.status === "APPROVED" && !coercePurchaseOrder(pr.po) && !isDeptRequisition(pr))
+      .filter((pr) =>
+        pr.status === "APPROVED" &&
+        !coercePurchaseOrder(pr.po) &&
+        statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "approved")
       .map((pr) => {
         const items = Array.isArray(pr.items) ? (pr.items as string[]) : [];
         // Candidate suppliers = union of the suppliers that stock this request's items.

@@ -25,8 +25,12 @@ import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getAccountsRegistry } from "@/lib/account";
 
 export interface SalesSummaryRow {
-  quotationId: string;
-  quoteNumber: string;
+  /** Quotation id, or counter-sale id — unique within the report either way. */
+  id: string;
+  /** Where this sale came from. A walk-in has no quotation behind it. */
+  kind: "order" | "counter";
+  /** Quote number, or the counter sale's number (CS-2026-00010). */
+  reference: string;
   dateISO: string; // payment / recognition date
   siNumber: string; // Sales Invoice No.
   crNumber: string; // Collection Receipt (OR / CR / AF) No.
@@ -83,8 +87,89 @@ function ewtFromReads(reads: Record<string, SaleDocReadStamp>): number | null {
 }
 
 /**
+ * The walk-in half of the register.
+ *
+ * The owner, 15 September: *"Counter sales not showing in Sales Summary
+ * vatable."* They never had: this report read `Quotation` and nothing else, and
+ * a counter sale lives in its own table with no quotation behind it. A VATable
+ * walk-in is output VAT the company owes exactly like any other sale, so its
+ * absence from a BIR register was a hole in the filing, not a display quirk.
+ *
+ * ## What counts, and when
+ *
+ * **Every COMPLETED sale** — not only the ones whose money has cleared. This is
+ * deliberately a looser test than the orders above use, because a counter sale
+ * is a different animal. An order is not a sale until it is confirmed and paid;
+ * a counter sale that reads COMPLETED has already handed the goods over the
+ * counter and recorded the full amount as paid. `paymentCleared` only tracks
+ * whether a cheque or a GCash transfer has landed since, and a cheque in the
+ * drawer does not un-sell the goods or un-owe the output VAT.
+ *
+ * It is also the safer way to be wrong. A sale that appears in a VAT register
+ * and shouldn't is a line Accounting can see and argue with; a sale that never
+ * appears is a hole in a filing nobody notices — which is exactly what was
+ * reported. VOID sales are excluded, because those really were un-sold.
+ *
+ * **Dated by the payment**, like the rest of the report: `clearedAt` when the
+ * money landed later, otherwise when the sale was completed.
+ *
+ * A counter sale carries no captured document numbers (there is no AI read on
+ * its attachments), so SI / CR / DR come through blank and the sale's own number
+ * identifies the row. A blank column on a row that exists beats a missing row.
+ */
+async function counterSaleRows(
+  lo: string,
+  hi: string,
+  accounts: Awaited<ReturnType<typeof getAccountsRegistry>>,
+): Promise<SalesSummaryRow[]> {
+  const sales = await prisma.counterSale
+    .findMany({
+      where: { status: "COMPLETED" },
+      select: {
+        id: true, saleNumber: true, vatMode: true, total: true,
+        clearedAt: true, completedAt: true, createdAt: true,
+        customerId: true,
+        customer: { select: { company: true, address: true } },
+      },
+    })
+    .catch(() => [] as never[]);
+
+  const rows: SalesSummaryRow[] = [];
+  for (const cs of sales) {
+    // Vatable only, on the same test the orders use. A counter sale's
+    // "EXCLUSIVE" charges no VAT at all (`counterTotals` returns vat: 0), so it
+    // is correctly out.
+    if (!vatModeChargesOutputVat(cs.vatMode)) continue;
+    const gross = round2(Number(cs.total));
+    const paidAt = cs.clearedAt ?? cs.completedAt ?? cs.createdAt;
+    if (!paidAt) continue;
+    const dateISO = paidAt.toISOString();
+    const ymd = manilaYMD(dateISO);
+    if (ymd < lo || ymd > hi) continue;
+
+    rows.push({
+      id: cs.id,
+      kind: "counter",
+      reference: cs.saleNumber ?? "Counter sale",
+      dateISO,
+      siNumber: "",
+      crNumber: "",
+      drNumber: "",
+      company: cs.customer?.company ?? "—",
+      tin: (cs.customerId && accounts[cs.customerId]?.tin) || "",
+      poAmount: gross,
+      // No EWT at the counter: a walk-in pays the full price in cash or its
+      // equivalent, and withholding is a thing corporate clients do on terms.
+      ewt: 0,
+      address: cs.customer?.address ?? "",
+    });
+  }
+  return rows;
+}
+
+/**
  * Build the Sales Summary (Vatable) for [from, to] (YYYY-MM-DD, Manila) — always
- * on the PAYMENT-date basis.
+ * on the PAYMENT-date basis. Orders AND counter sales: both are output VAT.
  */
 export async function buildSalesSummary(from: string, to: string): Promise<SalesSummary> {
   if (!isYmd(from) || !isYmd(to)) throw new Error("Invalid date range.");
@@ -127,8 +212,9 @@ export async function buildSalesSummary(from: string, to: string): Promise<Sales
     const reads = saleDocReadsFromClassification(q.classification);
     const customerId = q.inquiry?.customerId ?? "";
     rows.push({
-      quotationId: q.id,
-      quoteNumber: q.quoteNumber,
+      id: q.id,
+      kind: "order",
+      reference: q.quoteNumber,
       dateISO,
       siNumber: docNumberFor(reads, "sales_invoice"),
       crNumber: docNumberFor(reads, "or_cr_af"),
@@ -145,7 +231,8 @@ export async function buildSalesSummary(from: string, to: string): Promise<Sales
     });
   }
 
-  rows.sort((a, b) => a.dateISO.localeCompare(b.dateISO) || a.quoteNumber.localeCompare(b.quoteNumber));
+  rows.push(...(await counterSaleRows(lo, hi, accounts)));
+  rows.sort((a, b) => a.dateISO.localeCompare(b.dateISO) || a.reference.localeCompare(b.reference));
 
   const totals = {
     count: rows.length,

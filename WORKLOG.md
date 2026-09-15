@@ -1,3 +1,81 @@
+## 2026-09-15 · Three from one report: the walk-in that wasn't a sale, the sale that wasn't stock, and the PO that couldn't merge
+
+Three separate things, and each turned out to be a different kind of problem.
+
+### 1 · Counter sales were never in the Sales Summary (Vatable)
+
+Not a display quirk — `buildSalesSummary` queried `Quotation` and nothing else, and a counter sale
+lives in its own table with no quotation behind it. A VATable walk-in is output VAT the company owes
+exactly like any other sale, so its absence from a BIR register was **a hole in a filing**.
+
+The row identity had to change to say so honestly: `quotationId` / `quoteNumber` are now `id` /
+`reference` with a `kind: "order" | "counter"`, because a walk-in has no quote number to give.
+
+**The gate is looser than the orders', deliberately.** An order is not a sale until it is confirmed
+and paid; a counter sale that reads COMPLETED has handed the goods over the counter and booked the
+full amount. `paymentCleared` only tracks whether a cheque has landed since, and a cheque in the
+drawer does not un-sell the goods.
+
+This was not the first rule I wrote. The first one required `paymentCleared` — mirroring
+`sales-commission`, which felt like the house rule. Then the harness said 11 sales, not 12: the one
+completed counter sale in it has `paymentCleared = false`, so the "fix" would have left the owner
+looking at the same empty report and reporting it again. **The safer way to be wrong is the row
+appearing:** a line Accounting can argue with beats a line nobody can see. VOID sales stay out.
+
+A counter sale carries no captured document numbers (no AI read on its attachments), so SI / CR / DR
+come through blank. A blank column on a row that exists beats a missing row.
+
+### 2 · "Not deducting quantity in inventory" — the deduction was never broken
+
+`completeCounterSale` issues stock for every line carrying a `stockItemId`, and always has. What was
+broken is that a line did not have to carry one: **the item picker's default was "Ad-hoc / Not In
+Inventory"**, so a sale rung up without touching that dropdown moved nothing — on a page whose own
+subtitle promises *"stock is deducted after you complete the sale."*
+
+Offered three ways to close it, the owner chose the strictest: **a counter sale can only sell things
+that exist in inventory.** So ad-hoc is gone — not warned about, not auto-matched, gone.
+
+`unlinkedCounterLines` in `lib/counter-sale` is the rule, enforced in `cleanItems` on the server,
+because a dropdown is a courtesy and not a control. Both forms now ask for the item:
+
+- the new-sale picker opens on *"— Choose an inventory item —"* and refuses to submit without one;
+- the **admin edit** had no picker at all — just a free-text description and an "Add Ad-hoc Line"
+  button, a second door to the same problem. It has one now, and a legacy line whose item has since
+  left inventory still shows what it was, so an old sale can be read before it is re-picked.
+
+The warning banner on a sale with unlinked lines stays. It is now about the sales recorded BEFORE
+this rule, which still need someone to look at them.
+
+### 3 · Merging same-supplier requests already existed — and could not see material requests
+
+The Purchasing page has said *"Combine requests to the same supplier into a single PO"* for months,
+with tick boxes and auto-suggested combines. The list it works on was built with
+`!isDeptRequisition(pr)`: **material and department requisitions were explicitly excluded**, "because
+they run their own approval chain". That is the ORDER MATERIAL REQUESTS list in the owner's
+screenshot — the one list the feature could not see.
+
+They do run their own chain, but by the time one reaches the **Approved** tab that chain has finished
+with it and what is left is the same job: write a purchase order. One supplier should get one
+purchase order, whoever asked for the items.
+
+`statusBucket` rather than the raw status is what makes it safe, and it is the trap here: a
+department MRF sits at APPROVED while it is still only *Plant-Manager*-approved, and stays in the
+**Pending** tab until the Approver clears it to purchase. Combining one then would put a purchase
+order in front of its own approval. The server's `createCombinedPO` was refusing every department
+request outright with a misleading message about the Plant Manager; it now applies that same bucket
+test.
+
+### Verified by using it
+
+- **Sales Summary, August 2026**: 11 sales / ₱5,462,358.40 → **12 sales / ₱5,472,358.40**, the new
+  row being `Aug 31 · Walk-in Client Co. · ₱10,000.00`. Exactly the counter sale, exactly its amount.
+- **Counter sale form**: first option is *"— Choose an inventory item —"*, no Ad-hoc anywhere, and
+  typing an item name without picking one is refused with *"must come from inventory"*.
+- **Purchasing, as Allan Ramos (purchaser)**: the four approved department requests now appear in the
+  combine picker, the chip reads **"HARNESS STEEL CORP · 2 requests"**, and pressing it through to
+  *Create Combined PO* wrote a real combined PO — `memberPrIds: 2`, kind `department`. The path the
+  owner asked for, taken end to end.
+
 ## 2026-09-15 · The Purchaser can call off a purchase they haven't written a PO for
 
 The owner: *"Add an option to cancel PO in approved Purchasing tab for purchaser role."*
