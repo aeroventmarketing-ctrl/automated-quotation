@@ -3,13 +3,14 @@
  * alarm: whenever an order reaches a stage whose pending step needs a workflow
  * role the viewer holds (or a Sales step they own), it shows up here.
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, phaseAnchor } from "@/lib/order-workflow";
 import { isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
-import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
+import { getAlertGoLive, alertPasses, type AlertGoLive } from "@/lib/alert-golive";
 // The alarm reads exactly two parts of `classification` — `sale`, to confirm the
 // order, and `workflow`, to find the pending step. The keys it never opens are
 // subtracted in Postgres so they never cross the wire; the list, and why it is a
@@ -77,8 +78,31 @@ interface AlarmOrder {
  * `items` still carries only the three fields `isStockOnlyOrder` /
  * `isDuctHardwareStockOnly` read; add a field to the loop and it must be added
  * here too.
+ *
+ * ## The fourth thing: orders that cannot ring
+ *
+ * The loop below ends with `if (!alertPasses(q.createdAt, golive)) continue` —
+ * the owner's *"Transactions before August 1, 2026 should not give any alarm or
+ * notifications. Date before the said day is a testing stage."*
+ *
+ * That test was being applied AFTER fetching the order and all of its line
+ * items. Every order from the practice weeks — and they are the oldest and most
+ * numerous, since the system was being exercised then — was read out of Postgres
+ * in full, on every poll, by every user, to be discarded on the last line of the
+ * loop. So the gate comes into the SQL, where it can stop the read instead of
+ * the loop.
+ *
+ * It is the SAME comparison, not a narrower one: `alertPasses` passes everything
+ * when the gate is off (hence the empty fragment), and is `>` rather than `>=`.
+ * The loop still runs it on everything returned, so the two cannot drift apart
+ * without a test failing.
  */
-async function confirmedOrdersForAlarm(): Promise<AlarmOrder[]> {
+async function confirmedOrdersForAlarm(golive: AlertGoLive): Promise<AlarmOrder[]> {
+  // `alertPasses` lets everything through with the gate off, so an off gate must
+  // add no condition at all.
+  const goLiveGate = golive.on
+    ? Prisma.sql`and q."createdAt" > ${new Date(golive.at)}`
+    : Prisma.empty;
   const rows = await prisma.$queryRaw<Omit<AlarmOrder, "items">[]>`
     select q."id",
            q."quoteNumber",
@@ -90,6 +114,7 @@ async function confirmedOrdersForAlarm(): Promise<AlarmOrder[]> {
     join "Inquiry" i on i."id" = q."inquiryId"
     join "Customer" cu on cu."id" = i."customerId"
     where q."classification" #> '{sale,po}' is not null
+    ${goLiveGate}
     -- id breaks the tie. Orders can share a createdAt, and with only that to
     -- sort by Postgres may return tied rows in any order, so the alarm list
     -- could reshuffle between polls. Prisma had the same instability; comparing
@@ -114,16 +139,20 @@ async function confirmedOrdersForAlarm(): Promise<AlarmOrder[]> {
 
 /** Confirmed orders awaiting `user`'s approval (empty for users who owe nothing). */
 export async function pendingApprovalsForUser(user: Viewer): Promise<PendingApproval[]> {
-  const [quotes, assignments, baseline, golive] = await Promise.all([
+  // The go-live moment is read FIRST rather than alongside the rest, because the
+  // big read is now bounded by it — see `confirmedOrdersForAlarm`. It is one row
+  // of a key/value table fetched by primary key, so the round trip it costs is
+  // worth many times its weight in orders not fetched.
+  const golive = await getAlertGoLive();
+  const [quotes, assignments, baseline] = await Promise.all([
     // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
     // revision reopens the inquiry (status leaves WON), so a WON filter would
     // drop confirmed orders that still owe this user an approval.
     // `isSaleConfirmed` below is the real gate, exactly as the departmental P&L
     // does it. See `confirmedOrdersForAlarm` for how the read is shaped and why.
-    confirmedOrdersForAlarm(),
+    confirmedOrdersForAlarm(golive),
     getWorkflowRoles(),
     getNotificationBaseline(),
-    getAlertGoLive(),
   ]);
 
   const out: PendingApproval[] = [];

@@ -29,6 +29,31 @@ const POLL_MS = 30_000; // re-check for new approvals every 30s while the tab is
 const HIDDEN_POLL_MS = 120_000;
 const ALARM_MS = 20_000; // sound + flashing window last 20s
 
+/**
+ * Ask before you fetch — the same bargain `AutoRefresh` already strikes, and for
+ * the same reason.
+ *
+ * Asking "are there approvals for me?" is not a cheap question. It reads every
+ * confirmed order and every line item of every confirmed order; the function's
+ * own comment records it as the top query by bytes in the database. This alarm
+ * is in the app-wide layout, so it asked it ~120 times an hour per open tab, per
+ * user, from every page — and almost every answer was identical to the one
+ * before it.
+ *
+ * So the tick polls a TOKEN first (`/api/changes?scope=approvals`, about a
+ * hundred bytes) and only asks the real question when the token moves. Nothing
+ * about the alarm's behaviour changes: the token covers `Quotation` and
+ * `AppSetting`, which between them are everything the answer depends on, so an
+ * unchanged token means an unchanged answer.
+ *
+ * It fails OPEN. A token that cannot be read means fetch anyway, exactly as
+ * before — a siren that quietly stopped ringing because a poll 404'd would be
+ * far worse than one that rings a little too often.
+ */
+const CHANGES_URL = "/api/changes?scope=approvals";
+/** The token the server could not compute — see `lib/change-token`. */
+const UNKNOWN = "?";
+
 // One shared AudioContext, unlocked (resumed) on any user interaction so alarms
 // can play — browsers block audio until the page has a user gesture.
 let sharedCtx: AudioContext | null = null;
@@ -148,11 +173,48 @@ export function ApproverAlarm() {
   // Poll for orders awaiting this viewer; ring when a new one appears.
   useEffect(() => {
     let active = true;
+    /**
+     * The last token seen. `undefined` = nothing asked yet, so the FIRST tick
+     * always fetches: the alarm has to learn what is already pending before it
+     * can tell a new approval from a standing one.
+     */
+    let seen: string | undefined;
+
+    /**
+     * Has anything the answer depends on moved, and what is the token now?
+     *
+     * `token` is deliberately NOT recorded here. It is handed back and committed
+     * to `seen` only once the fetch it authorised has actually succeeded —
+     * otherwise a token poll that works followed by a fetch that fails (a dropped
+     * connection, a 500) would leave the alarm believing it had already seen that
+     * change, and it would sit silent until the NEXT one. Which is precisely the
+     * failure a siren may not have.
+     *
+     * `null` means "ask anyway": anything unexpected, including a token the
+     * server could not compute.
+     */
+    async function changed(): Promise<{ moved: boolean; token: string | null }> {
+      try {
+        const res = await fetch(CHANGES_URL, { cache: "no-store" });
+        if (!res.ok) return { moved: true, token: null };
+        const { v } = (await res.json()) as { v?: string };
+        if (typeof v !== "string" || v === UNKNOWN) return { moved: true, token: null };
+        return { moved: seen === undefined || seen !== v, token: v };
+      } catch {
+        // Fail open: a siren must never go quiet over a failed poll.
+        return { moved: true, token: null };
+      }
+    }
+
     async function check() {
+      const { moved, token } = await changed();
+      if (!moved || !active) return;
       try {
         const res = await fetch("/api/pending-approvals", { cache: "no-store" });
         if (!res.ok || !active) return;
         const data = (await res.json()) as { orders: Pending[] };
+        // The answer is in hand, so this token is now genuinely "seen".
+        if (token !== null) seen = token;
         const orders = data.orders ?? [];
         const currentIds = new Set(orders.map((o) => o.id));
         // Drop remembered IDs that are no longer pending (so they can ring again

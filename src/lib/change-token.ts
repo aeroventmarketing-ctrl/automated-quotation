@@ -28,7 +28,7 @@
 import { prisma } from "@/lib/db";
 
 /** What a page watches. Each is one or more tables it is built from. */
-export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management";
+export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management" | "approvals";
 
 /**
  * The token could not be read, so the caller should behave as it did before —
@@ -70,6 +70,23 @@ const schedules: Counter = async () => {
  */
 const stockItems: Counter = async () => {
   const r = await prisma.stockItem.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
+  return { n: r._count._all, at: r._max.updatedAt };
+};
+/**
+ * The key/value settings table — watched only by the approver alarm.
+ *
+ * Four of its rows decide whether the alarm rings at all: the notifications
+ * on/off switch, the workflow role assignments, the notification baseline and
+ * the alerts go-live moment. None of them is a table of its own, and an admin
+ * turning notifications off must not leave sirens going for everyone still
+ * holding the old token.
+ *
+ * It is a small table read by key everywhere else, so one aggregate over it is
+ * cheap — and it is the difference between "the alarm asks before it fetches"
+ * being an optimisation and being a bug.
+ */
+const appSettings: Counter = async () => {
+  const r = await prisma.appSetting.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
   return { n: r._count._all, at: r._max.updatedAt };
 };
 
@@ -119,6 +136,24 @@ const SCOPES: Record<ChangeScope, Counter[]> = {
    * aggregate on every poll.
    */
   management: [quotations, purchaseRequests, cashRequests, stockActions, stockItems, schedules],
+  /**
+   * The approver alarm — mounted in the app-wide layout, so it polls from every
+   * page, for every signed-in user, all day.
+   *
+   * It was the last surface in the app still fetching on a plain timer, and by
+   * far the most expensive one to fetch: `pendingApprovalsForUser` reads EVERY
+   * confirmed order and EVERY line item of every confirmed order, and its own
+   * comment records it as the top query by bytes in the database. At 30 seconds
+   * that is ~120 of those an hour per open tab, of which almost all return the
+   * same answer as the one before.
+   *
+   * Two tables, and the second is not optional: `AppSetting` holds the
+   * notifications switch, the role assignments, the notification baseline and
+   * the go-live moment, all four of which change whether the alarm rings.
+   * Watching only `Quotation` would leave an admin's "turn notifications off"
+   * ignored until somebody happened to touch an order.
+   */
+  approvals: [quotations, appSettings],
 };
 
 export function isChangeScope(v: string | null | undefined): v is ChangeScope {

@@ -72,3 +72,33 @@ describe("the change token", () => {
     }
   });
 });
+
+/**
+ * The approver alarm's scope — the last surface in the app still fetching on a
+ * plain timer, and much the most expensive one to fetch.
+ *
+ * Its answer depends on two tables, and leaving out the second is the bug worth
+ * guarding: `AppSetting` holds the notifications on/off switch, the workflow
+ * role assignments, the notification baseline and the alerts go-live moment. An
+ * admin turning notifications off writes only there, so a scope watching
+ * `Quotation` alone would go on ringing sirens at everyone until somebody
+ * happened to touch an order.
+ */
+describe("the approver alarm's scope", () => {
+  it("is a scope the server will answer for", () => {
+    expect(isChangeScope("approvals")).toBe(true);
+  });
+
+  it("moves when an admin changes a setting and no order has been touched", () => {
+    const orders = { n: 1142, at: new Date("2026-09-16T10:00:00Z") };
+    const before = tokenFrom([orders, { n: 12, at: new Date("2026-09-16T09:00:00Z") }]);
+    const after = tokenFrom([orders, { n: 12, at: new Date("2026-09-16T09:30:00Z") }]);
+    expect(after).not.toBe(before);
+  });
+
+  /** …and an unknown scope still answers UNKNOWN, so the client falls back. */
+  it("does not make every string a scope", () => {
+    expect(isChangeScope("approval")).toBe(false);
+    expect(UNKNOWN_TOKEN).toBe("?");
+  });
+});
