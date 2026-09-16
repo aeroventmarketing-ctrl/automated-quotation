@@ -36,7 +36,25 @@ import { UNKNOWN_TOKEN, type ChangeScope } from "@/lib/change-token";
  * stopped refreshing would leave someone staring at a stale screen believing it
  * live, which is worse than refreshing too often.
  */
-export function AutoRefresh({ seconds = 8, watch }: { seconds?: number; watch?: ChangeScope }) {
+export function AutoRefresh({ seconds = 8, watch, watchKey }: {
+  seconds?: number;
+  watch?: ChangeScope;
+  /**
+   * The ONE record this page is showing, for a scope built around one — the
+   * order page passes its order id.
+   *
+   * Without it `order-detail` watched `max(updatedAt)` across every order, so a
+   * stage stamped on ANY order re-rendered EVERY open order page, and each of
+   * those re-reads the whole stock and product catalogues. Sending the id makes
+   * the question "has THIS order changed", which is the question the page was
+   * always asking.
+   *
+   * Optional, and the server falls back to the old whole-table answer without
+   * it, so a browser still running the previous bundle during a deploy keeps
+   * refreshing rather than freezing on a token that never moves.
+   */
+  watchKey?: string;
+}) {
   const router = useRouter();
   // The last token seen. `undefined` = nothing seen yet, so the first poll
   // records the current state rather than treating it as a change.
@@ -56,7 +74,10 @@ export function AutoRefresh({ seconds = 8, watch }: { seconds?: number; watch?: 
     const tickWatched = async () => {
       if (hidden()) return;
       try {
-        const res = await fetch(`/api/changes?scope=${watch}`, { cache: "no-store" });
+        const res = await fetch(
+          `/api/changes?scope=${watch}${watchKey ? `&id=${encodeURIComponent(watchKey)}` : ""}`,
+          { cache: "no-store" },
+        );
         if (!res.ok) throw new Error(String(res.status));
         const { v } = (await res.json()) as { v?: string };
         // No token to compare — the server said so. Behave as an unwatched page.
@@ -88,6 +109,6 @@ export function AutoRefresh({ seconds = 8, watch }: { seconds?: number; watch?: 
       document.removeEventListener("visibilitychange", onFocus);
       window.removeEventListener("focus", onFocus);
     };
-  }, [router, seconds, watch]);
+  }, [router, seconds, watch, watchKey]);
   return null;
 }

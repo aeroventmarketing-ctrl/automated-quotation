@@ -22,9 +22,19 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const scope = req.nextUrl.searchParams.get("scope");
+  /**
+   * The one record the page is showing, for a scope built around one — the order
+   * page sends its order id, so it watches that row instead of every order.
+   *
+   * Length-capped rather than validated: it reaches Prisma only as a `where`
+   * value, never as SQL, and a scope that does not want a key ignores it. The cap
+   * is there so a long query string cannot be used to make the server do work.
+   */
+  const raw = req.nextUrl.searchParams.get("id");
+  const key = raw && raw.length <= 64 ? raw : undefined;
   // An unknown scope answers UNKNOWN rather than erroring: a client asking for a
   // scope this deployment has not got should fall back to its timer, not break.
-  const v = isChangeScope(scope) ? await changeToken(scope) : UNKNOWN_TOKEN;
+  const v = isChangeScope(scope) ? await changeToken(scope, key) : UNKNOWN_TOKEN;
 
   return NextResponse.json({ v }, { headers: { "Cache-Control": "no-store" } });
 }

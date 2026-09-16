@@ -1,3 +1,147 @@
+## 2026-09-16 · An open order watches its own row
+
+The owner ran `pg_stat_statements` on the live database, which settled an argument I had been having
+with a fixture. Grouped by cause:
+
+```
+                                      rows  % rows    calls   db time  % time
+Approver alarm (+ its line items)  18.6 M     31%   60,092      745s     60%
+StockItem catalogue, whole table   14.8 M     25%   14,174       20s      2%
+Product catalogue, whole table     11.0 M     19%   10,559       30s      2%
+Other confirmed-order reads         3.4 M      6%   17,283      388s     31%
+```
+
+The alarm is the biggest by database TIME, and `efc7f86` is aimed at it. But **44% of every row
+leaving the database is two reference tables being read whole, over and over** — 1,046 stock items
+and 1,041 products, ~25,000 times. They are *fast* (4% of time between them), which is exactly why
+nobody had looked: they cost bandwidth, not load, and bandwidth is the bill.
+
+### Where 25,000 catalogue reads come from
+
+The order page reads both catalogues on every render — the stock list for the MRF pickers, the
+product list for the autocomplete. That is fine. What was not fine is how often it rendered.
+
+`order-detail` watched **four whole tables**:
+
+```ts
+"order-detail": [quotations, purchaseRequests, stockActions, stockItems],
+```
+
+`quotations` is `max(updatedAt)` across EVERY order. In this ERP almost every action writes a
+`Quotation` — every stage stamp, job order, MRF and delivery batch lives in `classification`. So
+anybody stamping anything on ANY order re-rendered EVERY open order page, and each of those re-read
+both catalogues.
+
+### Narrower AND more correct
+
+This page shows one order. Its data is that row, its purchase requests, and stock. An unrelated order
+moving was never news here — so watching the row itself is not a trade against staleness, it is the
+question the page was always asking:
+
+```ts
+"order-detail": [oneQuotation, purchaseRequestsOfOrder, stockActions, stockItems],
+```
+
+Measured in a browser against the real app:
+
+```
+poll carries the order id                    : true
+wrote a DIFFERENT order  → re-renders: 0   (want 0)
+wrote THIS order         → re-renders: 1   (want ≥1)
+this order's own PR      → token moves     (want yes)
+an unrelated requisition → token holds     (want yes)
+```
+
+Stock stays global on purpose. A movement on any item changes what the pickers may offer, and that is
+a real dependency — unlike an unrelated order, which is not.
+
+### The two ways to get this wrong, both pinned
+
+**A deleted order must still refresh.** `oneQuotation` returns `n` as 1-or-0 rather than a row count,
+because a deletion moves no `updatedAt` anywhere. Without the flip, an order deleted underneath
+someone would sit on their screen for ever instead of re-rendering into its 404.
+
+**An old browser must not freeze.** During a deploy, a tab still running the previous bundle asks
+without an id. The keyed counters fall back to the whole table in that case, so it behaves exactly as
+it did before rather than holding a token that never moves. Verified both ways: after writing an
+unrelated order the un-keyed token moved and the keyed one did not.
+
+
+## 2026-09-16 · The siren that read the whole order book, twice a minute
+
+The owner, with the Supabase egress chart: **25.6 GB** of Shared Pooler egress on 15 September, 16 GB
+on the 14th, 55 GB on the 11th. 97% of all egress, and 13 September — a Sunday — near zero.
+
+That last fact is the diagnosis. Egress that tracks *working days* is not a background job. It is
+people having the app open.
+
+### What was open
+
+`AutoRefresh` was fixed months ago: every page polls a ~100-byte token and only re-renders when it
+moves. Every page — but not the **approver alarm**, which is mounted in the app-wide layout and so
+polls from every page, for every signed-in user, all day, on a plain 30-second timer.
+
+And it is by far the most expensive thing in the app to ask. Its own comment says so:
+
+> *Postgres recorded it as the single biggest consumer in the database: 531 million rows across
+> 585,000 calls. Three rounds of work later it is still the top query by bytes, at ~6,953 calls a day.*
+
+Three rounds of work had gone into making the query cheaper — a necessary condition pushed into SQL,
+nine dead `classification` keys subtracted, the customer joined rather than `include`d. All of it
+real, all of it aimed at the wrong number. **The query was not too expensive. It was being asked too
+often.** At 30 seconds that is ~120 identical questions an hour per open tab, of which perhaps two
+have a different answer.
+
+### Ask before you fetch
+
+The same bargain `AutoRefresh` already strikes, now struck by the alarm: poll
+`/api/changes?scope=approvals` first, and only ask the real question when the token moves.
+
+Measured on the harness, watching one tab:
+
+```
+after load          → 1 fetch      (it must learn what is already pending)
+after a quiet tick  → 1 fetch      (before: 2)
+after an order was written → 2     (it wakes within one poll)
+```
+
+Two things the new scope had to get right:
+
+**`AppSetting` is in the token, not just `Quotation`.** Four of its rows decide whether the alarm
+rings at all — the notifications switch, the role assignments, the notification baseline, the go-live
+moment. Watching orders alone would leave an admin's *"turn notifications off"* ignored until somebody
+happened to touch an order.
+
+**The token is committed only after the fetch it authorised succeeds.** Recording it at poll time
+looked equivalent and is not: a token poll that works followed by a fetch that fails would leave the
+alarm believing it had already seen that change, and it would sit silent until the next one. A siren
+may not have that failure. It fails open everywhere else too — an unreadable token means fetch anyway.
+
+### …and the orders that could never ring
+
+The loop ended with `if (!alertPasses(q.createdAt, golive)) continue` — the owner's *"Transactions
+before August 1, 2026 should not give any alarm or notifications. Date before the said day is a
+testing stage."*
+
+That test ran **after** fetching the order and every one of its line items. So every order from the
+practice weeks — the oldest and the most numerous, since the system was being exercised then — was
+read out of Postgres in full, on every poll, by every user, and discarded on the last line of the
+loop.
+
+The gate is now in the SQL. On the harness fixture that is 50 confirmed orders down to 16.
+
+It is the same comparison, not a narrower one, and the loop still runs it on everything returned.
+`pending-approvals.test.ts` pins the equivalence case by case — including the boundary, where `>=`
+instead of `>` would ring the last test order ever raised.
+
+### What this does not claim
+
+The saving is in the call count, and the call count depends on how often orders are actually written.
+A busy hour will still fetch; a quiet night will not fetch at all, where before it asked 120 times an
+hour per open tab until morning. The egress chart is the measurement that matters, and it will take a
+day to read.
+
+
 ## 2026-09-16 · One check number, one purchase order
 
 The owner, with a screenshot of Check Monitoring searched for `486718`: *"disallow duplicate input.

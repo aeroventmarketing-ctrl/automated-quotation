@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { isSaleConfirmed, saleFromClassification } from "./sale";
 import { saleRecognitionDate } from "./department-pnl";
+import { alertPasses, type AlertGoLive } from "./alert-golive";
 
 /**
  * The approver alarm polls `pendingApprovalsForUser` every 30 seconds, on every
@@ -88,5 +89,54 @@ describe("the SQL pre-filter shared by the confirmed-order queries is safe", () 
       saleRecognitionDate({ ...saleFromClassification({ sale })!, soldAt: "2026-09-01T00:00:00Z" }),
     );
     expect(dated.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The go-live gate moved into SQL, and what makes that safe.
+ *
+ * `confirmedOrdersForAlarm` now carries `and q."createdAt" > $goLiveAt` when the
+ * gate is on. The loop that follows still runs `alertPasses(q.createdAt, golive)`
+ * on everything returned, so the two must agree exactly — a SQL gate even one
+ * boundary case narrower than the loop's would silently stop an order ringing,
+ * and nothing would look broken.
+ *
+ * This pins the equivalence rather than the query, the same way the `sale.po`
+ * pre-filter above is pinned: if `alertPasses` ever stops being "strictly after
+ * the go-live moment, and everything when the gate is off", this fails next to
+ * the reason why.
+ */
+describe("pushing the alerts go-live gate into SQL is equivalent", () => {
+  const AT = "2026-07-31T21:00:00.000Z"; // 1 Aug 2026, 5am Manila — the default
+  const on: AlertGoLive = { on: true, at: AT };
+  const off: AlertGoLive = { on: false, at: AT };
+  /** What the SQL fragment does: `createdAt > $at`, or nothing at all. */
+  const sqlKeeps = (d: Date, g: AlertGoLive) => (g.on ? d.getTime() > Date.parse(g.at) : true);
+
+  const CASES: [string, Date][] = [
+    ["a practice order from July", new Date("2026-07-15T02:00:00.000Z")],
+    ["one raised the hour before go-live", new Date("2026-07-31T20:00:00.000Z")],
+    ["one raised at the go-live instant exactly", new Date(AT)],
+    ["one a millisecond after it", new Date(Date.parse(AT) + 1)],
+    ["one raised the day after", new Date("2026-08-01T09:00:00.000Z")],
+    ["one raised today", new Date("2026-09-16T04:00:00.000Z")],
+  ];
+
+  for (const [what, createdAt] of CASES) {
+    it(`agrees with the loop on ${what}`, () => {
+      expect(sqlKeeps(createdAt, on)).toBe(alertPasses(createdAt, on));
+      expect(sqlKeeps(createdAt, off)).toBe(alertPasses(createdAt, off));
+    });
+  }
+
+  /** The boundary is the whole risk: `>=` here would ring the last test order. */
+  it("excludes the go-live instant itself, and keeps the millisecond after", () => {
+    expect(alertPasses(new Date(AT), on)).toBe(false);
+    expect(alertPasses(new Date(Date.parse(AT) + 1), on)).toBe(true);
+  });
+
+  /** Gate off means no condition at all — not a condition that happens to pass. */
+  it("adds nothing when the gate is off, however old the order", () => {
+    expect(alertPasses(new Date("2020-01-01T00:00:00.000Z"), off)).toBe(true);
   });
 });

@@ -879,7 +879,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           the stock availability and the commission — whether or not anything
           had moved. The tick is now a ~100-byte question; the rebuild happens
           when the order or its purchase requests actually change. */}
-      <AutoRefresh watch="order-detail" />
+      {/* …and `watchKey` makes the question "has THIS order changed" rather than
+          "has any order changed". Without it a stage stamped on somebody else's
+          order rebuilt this one — and a rebuild re-reads the entire stock and
+          product catalogues, which Postgres ranks as 44% of all rows leaving the
+          database. Narrower AND more correct: an unrelated order was never news
+          on this page. */}
+      <AutoRefresh watch="order-detail" watchKey={quote.id} />
       <Link href="/orders" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Orders
       </Link>
