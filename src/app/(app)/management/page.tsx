@@ -607,7 +607,12 @@ export default async function ManagementPage() {
       label: "Check monitoring",
       value: String(checks.open),
       caption:
-        checks.overdue > 0
+        // A check number on two POs outranks everything else the caption could
+        // say: an overdue check is money waiting, a duplicated one is a figure
+        // on this very dashboard that is wrong.
+        checks.duplicateNumbers > 0
+          ? `${checks.duplicateNumbers} check no.${checks.duplicateNumbers === 1 ? " is" : "s are"} on two POs — one of each pair is wrong`
+          : checks.overdue > 0
           ? `${checks.overdue} overdue · ${formatCurrency(checks.openAmount, CURRENCY)}`
           : checks.attention > 0
             ? `${checks.attention} clearing soon${checks.nextYMD ? ` · ${fmtDue(checks.nextYMD)}` : ""}`
@@ -616,7 +621,7 @@ export default async function ManagementPage() {
               : `${checks.cleared} cleared`,
       href: "/checks",
       icon: CalendarClock,
-      color: checks.overdue > 0 ? "#d03b3b" : checks.attention > 0 ? "#c2711a" : "#0f766e",
+      color: checks.duplicateNumbers > 0 || checks.overdue > 0 ? "#d03b3b" : checks.attention > 0 ? "#c2711a" : "#0f766e",
     },
   ];
 

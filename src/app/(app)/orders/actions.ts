@@ -55,6 +55,7 @@ import { purchaseStep, purchaseStepsFrom, isPoApproved, effectiveStepRole, isDep
 import { coercePurchaseReturns, canRaiseReturnAt, nextReturnStage, returnStageDef, isReturnComplete, type ReturnStage } from "@/lib/purchase-returns";
 import { coerceReconciliation, canReconcileAt, isReconciled } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, canAttachCheck, canApproveCheckDiscrepancy, checkAttachableAt, checkRemovableAt, effectiveClearingYMD, effectiveCheckAmount, effectiveCheckNo, printedClearingYMD, type CheckActor, type CheckDoc } from "@/lib/voucher-check";
+import { duplicateCheckNoError } from "@/lib/check-duplicate-guard";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { saveCashPosition, canEditCashPosition } from "@/lib/cash-position";
 import { getProducts } from "@/lib/product-catalog";
@@ -2712,6 +2713,7 @@ async function assertCheckApprover(): Promise<string | null> {
 /** YYYY-MM-DD, or null. Guards against a bad value reaching the monitoring sort. */
 const isYMD = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`));
 
+
 async function updateCheckDoc(
   purchaseRequestId: string,
   path: string,
@@ -2823,6 +2825,21 @@ export async function correctCheckRead(
     return { error: "Give the amount the check is written for." };
   }
   if (wantsDate && !isYMD(input.ymd)) return { error: "Give the date printed on the check, as YYYY-MM-DD." };
+
+  /**
+   * A number nobody else is already using. This is the *typed* half of the
+   * owner's *"disallow duplicate input"* — a person with the check in their
+   * hand, correcting what the AI misread, and the one path where a duplicate
+   * could be entered deliberately.
+   *
+   * Asked before anything is written, so a form carrying a good amount and a
+   * duplicate number changes nothing at all. Half-saving it would leave the
+   * person believing the number went in.
+   */
+  if (wantsNo) {
+    const dupe = await duplicateCheckNoError(purchaseRequestId, input.checkNo!.trim(), { ignorePaths: [path] });
+    if (dupe) return { error: dupe };
+  }
 
   const at = new Date().toISOString();
   const byName = user?.name ?? "";

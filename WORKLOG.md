@@ -1,3 +1,88 @@
+## 2026-09-16 · One check number, one purchase order
+
+The owner, with a screenshot of Check Monitoring searched for `486718`: *"disallow duplicate input.
+Put a message in every role and every tab when possible."*
+
+Two rows. Same supplier, same ₱2,695.71, same clearing date, same check no. **0000486718** — on
+PO-AFBM20260000609 and PO-AFBM20260000632, raised three weeks apart. One of them flagged
+"⚠ 1 unresolved". The other completely clean.
+
+### Why only one was flagged
+
+The duplicate test already existed. It ran when a check was **read**, and its answer was stored on
+that check for good:
+
+> *Stored rather than recomputed on every render: the duplicate-check-number test is a fact about the
+> moment of reading.*
+
+Which means it can only ever land on the PO recorded **second**. The PO recorded first was clean when
+it was read, and nothing ever went back to tell it otherwise. A fact about a PAIR was being kept on
+one half of the pair.
+
+So the register was not showing a warning and a mistake — it was showing the same mistake twice, once
+with a warning and once without, and the clean row is the one a person trusts.
+
+### Disallowed, at both places a number can enter
+
+A check number is pre-printed on one piece of paper and spent once. Two POs carrying one number is
+therefore always an error; the only open question is which of the two. Where one check legitimately
+covers several requests this system already has an answer — a **combined PO**, one PO number, one
+check, several member rows, which the duplicate test has always counted as a single purchase order.
+So there is no honest case left for a refusal to catch by mistake, and it refuses:
+
+- **Typed** (`correctCheckRead`, the Fix form on the PO card) — checked before anything is written,
+  so a form carrying a good amount and a duplicate number changes nothing at all.
+- **Read** (`/api/ai/read-check`) — the read is thrown away and the **photo is kept**. That is the
+  right way round: the paper is the evidence, and storing a number the system has just decided is
+  impossible would put it on the register, the cash position and the exports, where the only thing
+  distinguishing it from a real one is an amber line somebody has to notice. The refusal is recorded
+  on the check, so "not read" never has to mean both *the AI couldn't* and *the system wouldn't*, and
+  it does **not** cost a read try — that allowance is needed to re-read once the real mistake is put
+  right.
+
+Both say the same sentence, from `duplicateCheckRefusal`, and both name the other PO: *"already
+recorded somewhere"* is a claim nobody can go and check.
+
+It also catches the closer version — the same number on two photos of **one** PO, which the old test
+could not see, being asked only about OTHER purchase orders.
+
+### …and said, on every screen that can act
+
+`duplicateCheckIndex` asks the question of the **whole register at once**, symmetric by construction,
+so neither half of a pair can sit on screen looking clean:
+
+- **Check Monitoring** — a red banner above the tabs (so it is readable from either one), `also on PO-x`
+  under the check number on **both** rows, matched by the search box (including the word "duplicate"),
+  and a cross-tab hint on the search line, because one half clearing puts the pair on two tabs.
+- **My Dashboard** — a task per row, for Admin, Accounting *and* the Payment Approver. Deliberately
+  wider than the overdue-check task beside it, which stays admin-only: clearing a check is an admin
+  decision, but between those three are both ways out of a duplicate — Accounting removes the wrong
+  photo, the Payment Approver corrects the number. They already read the whole register at `/checks`,
+  so nothing is disclosed that they could not see anyway.
+- **Management dashboard** — the Check Monitoring tile leads with it, in red.
+- **The Excel and PDF exports** — first in the Remarks column, because a printed register gets quoted
+  at people away from the screen.
+
+The tile and the banner count **numbers, not rows**: two rows sharing one number is one problem, and
+a tile reading 4 beside a banner reading 2 about the same register is the kind of disagreement nobody
+can debug from the outside.
+
+### What it does not reach
+
+The check card inside the **Purchasing** workspace still renders the warning stored on the check. A
+live answer there would need the whole purchase-request table on every render of that page, and that
+read was deliberately removed from it (`b92dc35`). Going forward the card cannot be one-sided — no new
+duplicate can be recorded — and the one-sided pairs already in the data are named on both POs by the
+register, which links straight through to either.
+
+### Found by looking
+
+The harness seeded the owner's pair with the warning on one half only, the way the old code really
+left it. Rendering it turned up a second duplicate nobody had reported: check **0000486709** on two
+fixtures, flagged on neither. The register found it the moment the question was asked of the whole
+table instead of one row at a time.
+
+
 ## 2026-09-16 · Sizing an exhaust fan: a calculation of its own
 
 The owner: *"What is the proper computation for an exhaust fan or ventilation fan?"* — then, offered

@@ -128,10 +128,34 @@ export function CheckMonitor({
 
   const open = rows.filter((r) => r.state !== "cleared");
   const cleared = rows.filter((r) => r.state === "cleared");
+  /**
+   * Check numbers appearing on more than one purchase order, each with every PO
+   * carrying it.
+   *
+   * Built from ALL rows rather than the tab's, and shown above the tabs, because
+   * the two halves of a pair land wherever their clearing dates put them — one
+   * upcoming, one cleared, quite possibly with a search term between them. A
+   * warning a person has to be on the right tab to see is one they meet only
+   * after the money has gone.
+   */
+  const duplicates = (() => {
+    const by = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!r.duplicateOf.length || !r.checkNo) continue;
+      const no = formatCheckNo(r.checkNo) ?? r.checkNo;
+      const pos = by.get(no) ?? new Set<string>();
+      pos.add(r.poNumber);
+      for (const other of r.duplicateOf) pos.add(other);
+      by.set(no, pos);
+    }
+    return [...by].map(([checkNo, pos]) => ({ checkNo, pos: [...pos].sort() })).sort((a, b) => a.checkNo.localeCompare(b.checkNo));
+  })();
   const tabRows = tab === "open" ? open : cleared;
   // Search, then sort, then group — in that order, so a group's total counts only what
   // survived the search and groups follow whatever the sort decided.
   const shown = sortCheckRows(searchCheckRows(tabRows, query), sort.key, sort.dir);
+  /** How many rows the same search finds on the tab that isn't showing. */
+  const otherTabMatches = query.trim() ? searchCheckRows(tab === "open" ? cleared : open, query).length : 0;
   /**
    * The arrangement on screen, as a query string the export routes rebuild from.
    * Everything the eye is filtering by has to travel, or the file that arrives
@@ -186,6 +210,45 @@ export function CheckMonitor({
         <Stat label="Still to clear" value={formatCurrency(summary.openAmount, "PHP")} />
         <Stat label="Cleared" value={String(summary.cleared)} />
       </div>
+
+      {/* Two purchase orders, one check number. Above the tabs and above the
+          search box, because both halves of a pair have to be findable from
+          wherever the reader happens to be standing — and in red rather than
+          amber: every other note on this screen is something to keep an eye on,
+          while this one is something that is definitely wrong. New ones can no
+          longer be recorded (both the AI reader and the correction form refuse
+          them), so what is listed here is history waiting to be put right. */}
+      {duplicates.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <div className="flex items-start gap-2 font-medium text-destructive">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {duplicates.length === 1 ? "A check number is" : `${duplicates.length} check numbers are`} recorded on more
+              than one purchase order.
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            A check number is printed once and spent once, so one record of each pair is wrong — the wrong photo on a PO,
+            or a misread number. Open the purchase order and remove the photo or correct the number there; until then the
+            register is counting one payment twice.
+          </p>
+          <ul className="mt-2 space-y-1">
+            {duplicates.map((d) => (
+              <li key={d.checkNo} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => { setQuery(d.checkNo); setForm(null); }}
+                  className="font-medium tabular-nums text-destructive underline-offset-2 hover:underline"
+                  title="Find every row carrying this number"
+                >
+                  Check No. {d.checkNo}
+                </button>
+                <span className="text-muted-foreground">on {d.pos.join(" · ")}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {([["open", `Upcoming (${open.length})`], ["cleared", `Cleared (${cleared.length})`]] as const).map(([k, label]) => (
@@ -255,6 +318,22 @@ export function CheckMonitor({
         <p className="text-xs text-muted-foreground">
           {shown.length} of {tabRows.length} {tabRows.length === 1 ? "row" : "rows"} match “{query.trim()}”
           {shown.length > 0 && <> · {formatCurrency(shown.reduce((t, r) => t + (r.amount ?? 0), 0), "PHP")}</>}
+          {/* The other tab's matches, which the search cannot show and the
+              reader has no reason to suspect. Searching a duplicated check
+              number is exactly the case: one half clears, the other does not,
+              and the two land on different tabs. */}
+          {otherTabMatches > 0 && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={() => { setTab(tab === "open" ? "cleared" : "open"); setForm(null); }}
+                className="font-medium text-primary underline-offset-2 hover:underline"
+              >
+                {otherTabMatches} more on {tab === "open" ? "Cleared" : "Upcoming"}
+              </button>
+            </>
+          )}
         </p>
       )}
 
@@ -377,6 +456,21 @@ export function CheckMonitor({
                       ) : (
                         // Nothing to open — no check has been written for this PO yet.
                         <span className="italic text-muted-foreground">none yet</span>
+                      )}
+                      {/* The same number on another purchase order. Printed on
+                          BOTH rows of the pair and on both tabs, because it is a
+                          fact about a pair: the warning that used to be stored
+                          on one check when it was read left the other looking
+                          clean, which is the screen the owner was sent here by.
+                          Named, so the reader can go and open the other one. */}
+                      {r.duplicateOf.length > 0 && (
+                        <div
+                          className="mt-0.5 flex items-start gap-1 text-xs font-medium text-destructive"
+                          title="A check number is printed once and spent once. One of these two records is wrong."
+                        >
+                          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                          <span className="break-words">also on {r.duplicateOf.join(" and ")}</span>
+                        </div>
                       )}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums">

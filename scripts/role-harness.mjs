@@ -665,6 +665,32 @@ async function seed() {
     createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
   } });
 
+  // The owner's screenshot, exactly: check no. 0000486718 recorded on TWO
+  // purchase orders — same supplier, same ₱2,695.71, same clearing date, POs
+  // three weeks apart — with the duplicate warning stored on only one of them.
+  //
+  // That asymmetry is the fixture's whole point. The warning used to be worked
+  // out when a check was READ and then kept on that check, so it lands on the PO
+  // recorded second and the first never learns. Seeded the way the old code
+  // really left it, so the register's live pairing has the broken shape to fix.
+  for (const [n, poDate, issues] of [
+    ["609", "2026-08-24", []],
+    ["632", "2026-09-01", [{ key: "duplicate", message: "Check No. 0000486718 is also recorded on PO-AFBM20260000609." }]],
+  ]) {
+    await p.purchaseRequest.create({ data: {
+      kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+      note: `HARNESS-CHK-DUPE-${n}`, status: "CASH_RELEASED",
+      po: { ...poFor(`PO-AFBM2026000${n}`), date: poDate, supplier: { company: "GOLDEN PACIFIC INC" } },
+      chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+      voucherCheckDocs: [{
+        ...checkDoc("0000486718", "2026-10-02", 2695.71),
+        path: `purchases/dupe-${n}/0000486718.jpg`,
+        read: { ...checkDoc("0000486718", "2026-10-02", 2695.71).read, issues },
+      }],
+      createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+    } });
+  }
+
   for (const [no, ymd, amt, company] of [
     ["0000486901", "2026-09-10", 28344.64, "HARNESS STEEL CORP"],
     ["0000486902", "2026-10-02", 2836.94, "WIDGET SUPPLY INC"],
