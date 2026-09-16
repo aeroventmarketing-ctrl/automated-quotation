@@ -52,6 +52,11 @@ function haystack(r: CheckWatchRow): string {
     r.supplier, r.poNumber, r.checkNo ?? "", r.checkNo ? normalizeCheckNo(r.checkNo) : "",
     r.statusLabel, r.form, r.remarks ?? "", r.poDate ?? "", r.clearingYMD ?? "", r.clearedOn ?? "",
     r.clearedByName ?? "", r.orderId ?? "",
+    // The OTHER purchase orders sharing this check number, and the word itself.
+    // Searching a duplicated number already finds both halves; searching
+    // "duplicate" finds every pair at once, which is the question a person
+    // actually arrives with.
+    ...(r.duplicateOf.length ? ["duplicate", ...r.duplicateOf] : []),
     // The amount both as stored and as printed, so "28,344.64" and "28344.64"
     // both land.
     r.amount != null ? String(r.amount) : "",

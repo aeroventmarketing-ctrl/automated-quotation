@@ -564,11 +564,18 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   //      Admin only, matching who may act on it: clearing a check and moving its
   //      date are admin-only decisions, so telling anyone else would be an alert
   //      they cannot answer.
-  if (isAdmin(user)) {
+  //
+  //      …and 2e) a check number recorded on two purchase orders, which goes to
+  //      the WIDER audience below because the people who can put it right are
+  //      not the people who clear checks — see the loop.
+  if (isAdmin(user) || has("accounting") || has("payment_approver")) {
     try {
       const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
       const checkPrs = await prisma.purchaseRequest.findMany({
-        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true, createdAt: true },
+        // `status` is read by the duplicate test only — a cancelled or rejected
+        // request is not a second record of a payment, and without it this feed
+        // would report duplicates the register itself does not show.
+        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true, status: true, createdAt: true },
       });
       const prCreatedAt = new Map(checkPrs.map((pr) => [pr.id, pr.createdAt.toISOString()] as const));
       const watch = buildCheckWatch(checkPrs, todayYMD, {
@@ -581,7 +588,36 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         },
       });
       for (const row of watch) {
-        if (!notifiesAdmin(row.state)) continue;
+        /**
+         * The same check number on two purchase orders — the owner's *"disallow
+         * duplicate input. Put a message in every role and every tab when
+         * possible."*
+         *
+         * Everyone who can open Check Monitoring gets this one, not just the
+         * admin: Accounting attaches and removes the photos, and the Payment
+         * Approver corrects a misread number, so between the three of them are
+         * both ways out. They already see the whole register at `/checks`, so
+         * nothing is disclosed here that they could not read there anyway.
+         *
+         * A task per ROW, deliberately. Both halves of a pair need answering,
+         * and both halves need to be reachable — one of them is usually the
+         * wrong one, and which is not knowable from here.
+         *
+         * No `since`: a duplicate has no date it fell due on, and dressing one
+         * up as overdue would put it in the wrong queue.
+         */
+        if (row.duplicateOf.length) {
+          tasks.push({
+            key: `check-duplicate:${row.prId}:${row.path}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+            title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${formatCheckNo(row.checkNo)}` : ""}`,
+            action: `Duplicate check no. — also on ${row.duplicateOf.join(" and ")}`,
+            client: null, amount: row.amount, currency: "PHP",
+            href: "/checks",
+            ref: row.poNumber || undefined,
+            createdAt: prCreatedAt.get(row.prId),
+          });
+        }
+        if (!notifiesAdmin(row.state) || !isAdmin(user)) continue;
         tasks.push({
           key: `check-clearing:${row.prId}:${row.path}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
           title: `${row.supplier || "Supplier"}${row.checkNo ? ` · Check No. ${formatCheckNo(row.checkNo)}` : ""}`,

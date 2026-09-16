@@ -11,12 +11,11 @@ import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import {
   canAttachCheck, checkReadableAt, clearingFromDateBoxes, coerceCheckDocs, checkIssues,
-  hasUnlimitedCheckReads, checkReadsUsed, canReadCheckAgain, nextCheckReadCount,
+  hasUnlimitedCheckReads, checkReadsUsed, canReadCheckAgain, nextCheckReadCount, formatCheckNo,
   type CheckDoc, type CheckRead,
 } from "@/lib/voucher-check";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
-import { poBatchId } from "@/lib/purchase-batch";
-import { otherPurchaseOrdersWithCheck, type CheckHolder } from "@/lib/check-duplicates";
+import { duplicateCheckNoError } from "@/lib/check-duplicate-guard";
 import { isDeptRequisition, isPoApproved, type PRStatus } from "@/lib/purchasing";
 import { pesoAmountInWords, pesoAmountFromWords } from "@/lib/amount-words";
 import { COMPANY } from "@/lib/config";
@@ -284,33 +283,42 @@ export async function POST(req: NextRequest) {
     // number recorded on ANY OTHER purchase order counts as used, so the same
     // check can't quietly pay two POs.
     const po = coercePurchaseOrder(pr.po);
+
     /**
-     * Which OTHER purchase orders carry this check number.
+     * A check number already recorded elsewhere is REFUSED, not stored with a
+     * warning beside it — the owner's *"disallow duplicate input"*.
      *
-     * Every row is fetched, including this one, because the question is asked per
-     * PURCHASE ORDER and a combined PO is several rows sharing one PO number —
-     * `otherPurchaseOrdersWithCheck` groups them and drops the ones that are
-     * really this same PO. It also drops cancelled and rejected requests: no
-     * money moved on those, so they are not a second record of this payment.
+     * The read is thrown away and the photo is kept. That is the right way round:
+     * the photo is the evidence, and whichever of the two POs is wrong, it is the
+     * paper that settles it. Storing the read instead would put a number the
+     * system has just decided is impossible onto the register, the cash position
+     * and the exports, where the only thing distinguishing it from a real one is
+     * an amber line somebody has to notice.
+     *
+     * The refusal is recorded ON the check (`recordFailure`), so the PO card says
+     * why the number is blank rather than leaving "not read" to mean both *the AI
+     * couldn't* and *the system wouldn't*.
+     *
+     * It does NOT cost a read try. The refusal is our rule rather than a bad
+     * photo, and charging for it would spend the allowance that is needed to
+     * re-read once the real mistake has been put right.
      */
-    const all = await prisma.purchaseRequest.findMany({
-      select: { id: true, po: true, status: true, voucherCheckDocs: true },
-    });
-    const holders: CheckHolder[] = all.map((o) => {
-      const otherPo = coercePurchaseOrder(o.po);
-      return {
-        id: o.id,
-        poNumber: otherPo?.poNumber ?? null,
-        batchId: poBatchId(o.po),
-        status: o.status,
-        checkNos: coerceCheckDocs(o.voucherCheckDocs).map((d) => d.read?.checkNo ?? "").filter(Boolean),
-      };
-    });
-    const duplicateOnPos = otherPurchaseOrdersWithCheck(
-      read.checkNo,
-      { id: pr.id, poNumber: po?.poNumber ?? null, batchId: poBatchId(pr.po) },
-      holders,
-    );
+    if (read.checkNo) {
+      const dupe = await duplicateCheckNoError(pr.id, read.checkNo, { ignorePaths: [body.path] });
+      if (dupe) {
+        const error = `This photo reads Check No. ${formatCheckNo(read.checkNo)}. ${dupe}`;
+        await recordFailure(error);
+        return NextResponse.json({ error, duplicate: true }, { status: 409 });
+      }
+    }
+
+    /**
+     * Past this point there is no duplicate to report — the read would have been
+     * refused. The list is kept in the call because `checkIssues` still owns the
+     * sentence, and a stored read that HAS a duplicate issue is now only ever a
+     * historical one, from before the refusal existed.
+     */
+    const duplicateOnPos: string[] = [];
 
     const issues = checkIssues({
       read,

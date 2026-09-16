@@ -18,7 +18,8 @@
  *    the Cleared tab on its due date — it waits to be told.
  */
 import type { CheckDoc } from "@/lib/voucher-check";
-import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD, effectiveCheckAmount, effectiveCheckNo, openCheckIssues } from "@/lib/voucher-check";
+import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD, effectiveCheckAmount, effectiveCheckNo, normalizeCheckNo, openCheckIssues } from "@/lib/voucher-check";
+import { duplicateCheckIndex, duplicateCheckKey, purchaseOrderKey } from "@/lib/check-duplicates";
 
 /**
  * How far ahead a check reads as *Clearing soon* on screen.
@@ -154,6 +155,18 @@ export interface CheckWatchRow {
   /** Who corrected a misread check number, if anyone did. */
   checkNoFixedBy: string | null;
   /**
+   * OTHER purchase orders on this register carrying the SAME check number,
+   * named. Empty for all but a handful of rows.
+   *
+   * Computed over the whole register every time it is built, rather than read
+   * off the warning stored when the check was read. The stored one is a snapshot
+   * of the moment of reading, so it appears on the PO read second and never on
+   * the PO read first — which is how the owner came to be looking at two rows
+   * sharing check no. 0000486718 with only one of them flagged. BOTH halves of a
+   * pair say so here, in both tabs, to everyone who can open the page.
+   */
+  duplicateOf: string[];
+  /**
    * How many of this check's issues are still unanswered.
    *
    * Zero on a check that never had any, and zero on one whose every issue an
@@ -222,6 +235,23 @@ export function buildCheckWatch(
   },
 ): CheckWatchRow[] {
   const rows: CheckWatchRow[] = [];
+  /**
+   * Which PO each row belongs to, and that PO's stage — kept alongside `rows`
+   * rather than on them, because they are the duplicate test's business and
+   * nothing on screen wants either.
+   *
+   * Pushed in lockstep with `rows`, and read back BEFORE the sort at the end
+   * reorders them.
+   */
+  const owners: { poKey: string; poLabel: string; status: string }[] = [];
+  const ownerOf = (pr: CheckWatchSource, poNumber: string | null) => ({
+    // No batch id here: a combined PO's member rows all carry the same `po`
+    // JSON, PO number included, so the number already groups them into one
+    // purchase order — which is the whole point of the key.
+    poKey: purchaseOrderKey({ id: pr.id, poNumber, batchId: null }),
+    poLabel: poNumber?.trim() || "a purchase order with no PO number yet",
+    status: pr.status ?? "",
+  });
   for (const pr of prs) {
     const po = helpers.poOf(pr.po);
     const docs = helpers.coerceDocs(pr.voucherCheckDocs);
@@ -240,6 +270,7 @@ export function buildCheckWatch(
           // Nothing has been read on a PO awaiting its photo, so there is nothing
           // to have corrected and nothing to disagree about.
           amountFixedBy: null, checkNoFixedBy: null,
+          duplicateOf: [],
           openIssues: 0, issuesApprovedBy: null, issuesApprovedAt: null,
           moves: 0, lastMoveReason: null, daysLeft: null,
           // No check, so no date to doubt.
@@ -249,6 +280,7 @@ export function buildCheckWatch(
           form: formOfPayment(poDate, null),
           remarks: null,
         });
+        owners.push(ownerOf(pr, po.poNumber));
       }
       continue;
     }
@@ -277,6 +309,8 @@ export function buildCheckWatch(
         amount: effectiveCheckAmount(doc),
         amountFixedBy: doc.amountFix?.byName || null,
         checkNoFixedBy: doc.checkNoFix?.byName || null,
+        duplicateOf: [], // filled in below, once every row is known
+
         // What still disagrees and nobody has accepted, and who accepted the rest.
         openIssues: openCheckIssues(doc).length,
         issuesApprovedBy: doc.issueApproval?.byName || null,
@@ -299,8 +333,29 @@ export function buildCheckWatch(
         // knows: why a date moved, or the note left when it cleared.
         remarks: doc.cleared?.note ?? (moves ? doc.reschedules![moves - 1].reason || null : null),
       });
+      owners.push(ownerOf(pr, po?.poNumber ?? null));
     }
   }
+
+  /**
+   * The same check number on two different purchase orders — asked of the whole
+   * register at once, so BOTH rows say so. See `CheckWatchRow.duplicateOf`.
+   *
+   * Cleared checks are included deliberately: a check that has already cleared
+   * is the strongest possible evidence that the number on the other PO is wrong,
+   * and hiding the pair once half of it clears would let the register look tidy
+   * at exactly the wrong moment.
+   */
+  const dupes = duplicateCheckIndex(
+    rows.map((r, i) => ({ poKey: owners[i].poKey, poLabel: owners[i].poLabel, checkNo: r.checkNo, status: owners[i].status })),
+  );
+  if (dupes.size) {
+    rows.forEach((r, i) => {
+      const key = duplicateCheckKey(owners[i].poKey, r.checkNo);
+      r.duplicateOf = (key && dupes.get(key)) || [];
+    });
+  }
+
   // Soonest first among the live ones; most recently cleared first among the rest.
   return rows.sort((a, b) => {
     if (a.state === "cleared" && b.state !== "cleared") return 1;
@@ -327,6 +382,19 @@ export interface CheckWatchSummary {
   overdue: number;
   cleared: number;
   undated: number;
+  /**
+   * How many check NUMBERS are recorded on more than one purchase order.
+   *
+   * Numbers, not rows: two rows sharing one number is ONE problem, and the
+   * register's own banner counts it that way. A tile saying "4" beside a banner
+   * saying "2" about the same register is the kind of disagreement nobody can
+   * debug from the outside.
+   *
+   * Counted across BOTH tabs, cleared checks included — half a pair on the
+   * Cleared tab is still half a pair, and a cleared check is the strongest
+   * evidence that the other record is the wrong one.
+   */
+  duplicateNumbers: number;
   /** Total peso value still to clear (checks with a readable amount). */
   openAmount: number;
   /**
@@ -353,6 +421,9 @@ export function checkWatchSummary(rows: CheckWatchRow[]): CheckWatchSummary {
     overdue: open.filter((r) => r.state === "overdue").length,
     cleared: rows.length - open.length,
     undated: open.filter((r) => r.state === "undated").length,
+    duplicateNumbers: new Set(
+      rows.filter((r) => r.duplicateOf.length > 0 && r.checkNo).map((r) => normalizeCheckNo(r.checkNo!)),
+    ).size,
     openAmount: open.reduce((s, r) => s + (r.amount ?? 0), 0),
     firstPriorityAmount: open
       .filter((r) => r.state === "due" || r.state === "overdue")

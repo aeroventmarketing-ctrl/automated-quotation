@@ -437,3 +437,102 @@ describe("correcting a date the AI read wrongly", () => {
     }
   });
 });
+
+/**
+ * Two purchase orders, one check number — the screen the owner sent: rows on
+ * PO-AFBM20260000609 and PO-AFBM20260000632 both carrying check no. 0000486718,
+ * both ₱2,695.71, both clearing 2 October, and only the first flagged.
+ *
+ * The flag was stored on a check when it was READ, so it can only ever land on
+ * the PO recorded second. Asked of the whole register instead, both halves say
+ * so — which is the only version a person can act on, since which of the two is
+ * wrong is not knowable from either one alone.
+ */
+describe("the same check number on two purchase orders", () => {
+  const helpers = {
+    coerceDocs: (v: unknown) => v as CheckDoc[],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+  };
+  const pr = (id: string, docs: CheckDoc[], status = "CASH_RELEASED") => ({
+    id, quotationId: null,
+    po: { poNumber: `PO-${id}`, supplierCompany: "GOLDEN PACIFIC INC", date: "2026-08-24", net: 2695.71 },
+    voucherCheckDocs: docs, status,
+  });
+  /** A check on a given PO, with a given number. */
+  const check = (path: string, checkNo: string | null, ymd: string | null = "2026-10-02") =>
+    doc({ path, read: { ...doc().read!, checkNo, clearingYMD: ymd } });
+
+  const find = (rows: ReturnType<typeof buildCheckWatch>, path: string) => rows.find((r) => r.path === path)!;
+
+  it("tells BOTH rows about each other, naming the other PO", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", "0000486718")]),
+      pr("632", [check("632a", "0000486718")]),
+    ], TODAY, helpers);
+    expect(find(rows, "609a").duplicateOf).toEqual(["PO-632"]);
+    expect(find(rows, "632a").duplicateOf).toEqual(["PO-609"]);
+  });
+
+  it("leaves every other row alone", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", "0000486718")]),
+      pr("632", [check("632a", "0000486718")]),
+      pr("640", [check("640a", "0000486719")]),
+    ], TODAY, helpers);
+    expect(find(rows, "640a").duplicateOf).toEqual([]);
+  });
+
+  /**
+   * A cleared check is the strongest evidence that the other record is wrong, so
+   * the pair survives one half of it moving to the Cleared tab. Hiding it then
+   * would tidy the register at exactly the wrong moment.
+   */
+  it("still says so once one of the two has cleared", () => {
+    const rows = buildCheckWatch([
+      pr("609", [doc({ path: "609a", read: { ...doc().read!, checkNo: "0000486718" }, cleared: { on: "2026-09-01", byName: "Ana", at: "" } })]),
+      pr("632", [check("632a", "0000486718")]),
+    ], TODAY, helpers);
+    expect(find(rows, "609a").state).toBe("cleared");
+    expect(find(rows, "609a").duplicateOf).toEqual(["PO-632"]);
+    expect(find(rows, "632a").duplicateOf).toEqual(["PO-609"]);
+  });
+
+  /** A person's correction beats the reading here, as everywhere else. */
+  it("follows a corrected number away from the collision", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", "0000486718")]),
+      pr("632", [doc({
+        path: "632a",
+        read: { ...doc().read!, checkNo: "0000486718" },
+        checkNoFix: { checkNo: "0000486719", was: "0000486718", byName: "Rey", at: "" },
+      })]),
+    ], TODAY, helpers);
+    expect(find(rows, "609a").duplicateOf).toEqual([]);
+    expect(find(rows, "632a").duplicateOf).toEqual([]);
+  });
+
+  it("does not report a cancelled PO's check as a second record", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", "0000486718")]),
+      pr("632", [check("632a", "0000486718")], "CANCELLED"),
+    ], TODAY, helpers);
+    expect(find(rows, "609a").duplicateOf).toEqual([]);
+  });
+
+  it("counts NUMBERS for the tile, not rows, so the tile and the banner agree", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", "0000486718")]),
+      pr("632", [check("632a", "0000486718")]),
+      pr("640", [check("640a", "0000486719")]),
+    ], TODAY, helpers);
+    expect(checkWatchSummary(rows).duplicateNumbers).toBe(1); // ONE number on two POs is one problem
+  });
+
+  it("has nothing to say about two POs whose checks are unread", () => {
+    const rows = buildCheckWatch([
+      pr("609", [check("609a", null, null)]),
+      pr("632", [check("632a", null, null)]),
+    ], TODAY, helpers);
+    expect(rows.every((r) => r.duplicateOf.length === 0)).toBe(true);
+  });
+});

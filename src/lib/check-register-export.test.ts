@@ -11,7 +11,7 @@ const row = (over: Partial<CheckWatchRow> = {}): CheckWatchRow => ({
   poDate: "2026-09-01", poNumber: "PO-AFBM20260000609", supplier: "GOLDEN PACIFIC INC",
   orderId: null, checkNo: "0000486718", amount: 2695.71,
   clearingYMD: "2026-10-02", originalYMD: null, dateFixedBy: null,
-  amountFixedBy: null, checkNoFixedBy: null, openIssues: 0, issuesApprovedBy: null, issuesApprovedAt: null,
+  amountFixedBy: null, checkNoFixedBy: null, duplicateOf: [], openIssues: 0, issuesApprovedBy: null, issuesApprovedAt: null,
   moves: 0, lastMoveReason: null,
   daysLeft: 24, dateVerified: true, state: "scheduled", clearedOn: null, clearedByName: null,
   statusLabel: "Check Clearing", form: "PDC", remarks: null,
@@ -136,5 +136,30 @@ describe("the cash position on a file", () => {
     // …and says plainly when nobody has set them.
     expect(cashPositionNote(computeCashPosition(EMPTY_CASH_POSITION, { firstPriority: 0, totalPayables: 0, receivables: 0 })))
       .toContain("have not been set yet");
+  });
+});
+
+/**
+ * A check number on two purchase orders, on paper.
+ *
+ * It leads the Remarks column rather than trailing it: a printed register is
+ * quoted at people away from the screen, and a row whose figure is one of a
+ * contradictory pair must not travel looking sound.
+ */
+describe("a duplicated check number, in the file", () => {
+  it("leads the remarks, and names the other PO", () => {
+    const cells = checkRegisterRow(row({ duplicateOf: ["PO-AFBM20260000632"] }));
+    const remarks = String(cells[cells.length - 1]);
+    expect(remarks.startsWith("DUPLICATE check no.")).toBe(true);
+    expect(remarks).toContain("PO-AFBM20260000632");
+  });
+
+  it("says both when a number is on three", () => {
+    const cells = checkRegisterRow(row({ duplicateOf: ["PO-A", "PO-B"] }));
+    expect(String(cells[cells.length - 1])).toContain("PO-A and PO-B");
+  });
+
+  it("and stays out of the way of a register with none", () => {
+    expect(String(checkRegisterRow(row())[8])).not.toMatch(/DUPLICATE/);
   });
 });

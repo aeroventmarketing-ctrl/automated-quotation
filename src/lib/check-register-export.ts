@@ -47,6 +47,10 @@ const ymd = (s: string | null): string => (isClearingYMD(s) ? s : "");
  */
 function remarksFor(r: CheckWatchRow): string {
   const notes: string[] = [];
+  // First, and named: a check number on two purchase orders means one of the
+  // rows on this page is wrong, and a printed register that kept that to itself
+  // would be quoted at somebody as though it were sound.
+  if (r.duplicateOf.length) notes.push(`DUPLICATE check no. — also on ${r.duplicateOf.join(" and ")}`);
   if (r.remarks) notes.push(r.remarks);
   if (r.originalYMD) notes.push(`moved from ${r.originalYMD}${r.moves > 1 ? ` · ${r.moves} times` : ""}`);
   if (r.dateFixedBy) notes.push(`date corrected by ${r.dateFixedBy}`);
