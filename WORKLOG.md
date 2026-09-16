@@ -1,3 +1,72 @@
+## 2026-09-16 · An open order watches its own row
+
+The owner ran `pg_stat_statements` on the live database, which settled an argument I had been having
+with a fixture. Grouped by cause:
+
+```
+                                      rows  % rows    calls   db time  % time
+Approver alarm (+ its line items)  18.6 M     31%   60,092      745s     60%
+StockItem catalogue, whole table   14.8 M     25%   14,174       20s      2%
+Product catalogue, whole table     11.0 M     19%   10,559       30s      2%
+Other confirmed-order reads         3.4 M      6%   17,283      388s     31%
+```
+
+The alarm is the biggest by database TIME, and `efc7f86` is aimed at it. But **44% of every row
+leaving the database is two reference tables being read whole, over and over** — 1,046 stock items
+and 1,041 products, ~25,000 times. They are *fast* (4% of time between them), which is exactly why
+nobody had looked: they cost bandwidth, not load, and bandwidth is the bill.
+
+### Where 25,000 catalogue reads come from
+
+The order page reads both catalogues on every render — the stock list for the MRF pickers, the
+product list for the autocomplete. That is fine. What was not fine is how often it rendered.
+
+`order-detail` watched **four whole tables**:
+
+```ts
+"order-detail": [quotations, purchaseRequests, stockActions, stockItems],
+```
+
+`quotations` is `max(updatedAt)` across EVERY order. In this ERP almost every action writes a
+`Quotation` — every stage stamp, job order, MRF and delivery batch lives in `classification`. So
+anybody stamping anything on ANY order re-rendered EVERY open order page, and each of those re-read
+both catalogues.
+
+### Narrower AND more correct
+
+This page shows one order. Its data is that row, its purchase requests, and stock. An unrelated order
+moving was never news here — so watching the row itself is not a trade against staleness, it is the
+question the page was always asking:
+
+```ts
+"order-detail": [oneQuotation, purchaseRequestsOfOrder, stockActions, stockItems],
+```
+
+Measured in a browser against the real app:
+
+```
+poll carries the order id                    : true
+wrote a DIFFERENT order  → re-renders: 0   (want 0)
+wrote THIS order         → re-renders: 1   (want ≥1)
+this order's own PR      → token moves     (want yes)
+an unrelated requisition → token holds     (want yes)
+```
+
+Stock stays global on purpose. A movement on any item changes what the pickers may offer, and that is
+a real dependency — unlike an unrelated order, which is not.
+
+### The two ways to get this wrong, both pinned
+
+**A deleted order must still refresh.** `oneQuotation` returns `n` as 1-or-0 rather than a row count,
+because a deletion moves no `updatedAt` anywhere. Without the flip, an order deleted underneath
+someone would sit on their screen for ever instead of re-rendering into its 404.
+
+**An old browser must not freeze.** During a deploy, a tab still running the previous bundle asks
+without an id. The keyed counters fall back to the whole table in that case, so it behaves exactly as
+it did before rather than holding a token that never moves. Verified both ways: after writing an
+unrelated order the un-keyed token moved and the keyed one did not.
+
+
 ## 2026-09-16 · The siren that read the whole order book, twice a minute
 
 The owner, with the Supabase egress chart: **25.6 GB** of Shared Pooler egress on 15 September, 16 GB

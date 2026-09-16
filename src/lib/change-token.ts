@@ -37,7 +37,11 @@ export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | 
  */
 export const UNKNOWN_TOKEN = "?";
 
-type Counter = () => Promise<{ n: number; at: Date | null }>;
+/**
+ * `key` narrows a counter to the ONE thing on screen, where a page has one — see
+ * `oneQuotation`. Counters that watch a whole table ignore it.
+ */
+type Counter = (key?: string) => Promise<{ n: number; at: Date | null }>;
 
 const quotations: Counter = async () => {
   const r = await prisma.quotation.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
@@ -45,6 +49,45 @@ const quotations: Counter = async () => {
 };
 const purchaseRequests: Counter = async () => {
   const r = await prisma.purchaseRequest.aggregate({ _count: { _all: true }, _max: { updatedAt: true } });
+  return { n: r._count._all, at: r._max.updatedAt };
+};
+
+/**
+ * ONE order's own row, rather than `max(updatedAt)` across every order.
+ *
+ * The order page shows a single order, but it was watching the whole `Quotation`
+ * table — so anybody stamping a stage on ANY order re-rendered EVERY open order
+ * page. And an order page is expensive to re-render: Postgres records it reading
+ * the entire stock catalogue 14,174 times and the entire product catalogue 10,559
+ * times, ~1,045 rows each, which together are 44% of all rows leaving the
+ * database.
+ *
+ * Watching the row itself is strictly MORE correct than watching the table, not
+ * a trade: this page's data is that row, its purchase requests and stock. An
+ * unrelated order moving was never news here.
+ *
+ * `n` is 1 or 0 rather than a count, so a DELETED order still moves the token and
+ * the page re-renders into its 404 instead of sitting there for good.
+ *
+ * With no key it falls back to the whole table — exactly what it did before. That
+ * matters during a deploy: a browser still running the previous bundle asks
+ * without an id, and must keep refreshing rather than freeze on a token that
+ * never moves.
+ */
+const oneQuotation: Counter = async (key) => {
+  if (!key) return quotations();
+  const r = await prisma.quotation.findUnique({ where: { id: key }, select: { updatedAt: true } });
+  return { n: r ? 1 : 0, at: r?.updatedAt ?? null };
+};
+
+/** …and the purchase requests raised against that one order — its Phase 4 chain. */
+const purchaseRequestsOfOrder: Counter = async (key) => {
+  if (!key) return purchaseRequests();
+  const r = await prisma.purchaseRequest.aggregate({
+    where: { quotationId: key },
+    _count: { _all: true },
+    _max: { updatedAt: true },
+  });
   return { n: r._count._all, at: r._max.updatedAt };
 };
 const cashRequests: Counter = async () => {
@@ -115,7 +158,7 @@ const SCOPES: Record<ChangeScope, Counter[]> = {
    * Leaving any of them out would freeze one panel of a page whose whole purpose
    * is showing several departments what the others have just done.
    */
-  "order-detail": [quotations, purchaseRequests, stockActions, stockItems],
+  "order-detail": [oneQuotation, purchaseRequestsOfOrder, stockActions, stockItems],
   purchasing: [purchaseRequests],
   checks: [purchaseRequests],
   requisitions: [purchaseRequests],
@@ -165,10 +208,18 @@ export function tokenFrom(parts: Array<{ n: number; at: Date | null }>): string 
   return parts.map((p) => `${p.n}:${p.at ? p.at.getTime() : 0}`).join("|");
 }
 
-/** The current token for a scope, or `UNKNOWN_TOKEN` if it cannot be read. */
-export async function changeToken(scope: ChangeScope): Promise<string> {
+/**
+ * The current token for a scope, or `UNKNOWN_TOKEN` if it cannot be read.
+ *
+ * `key` names the one record on screen, for a scope built around one — today
+ * only `order-detail`, which passes the order's id. Scopes that watch whole
+ * tables ignore it, and a scope that WANTS one falls back to the whole table
+ * without it (see `oneQuotation`), so an unkeyed request is never worse than
+ * the behaviour this replaced.
+ */
+export async function changeToken(scope: ChangeScope, key?: string): Promise<string> {
   try {
-    return tokenFrom(await Promise.all(SCOPES[scope].map((c) => c())));
+    return tokenFrom(await Promise.all(SCOPES[scope].map((c) => c(key))));
   } catch (e) {
     // Fail open: the caller refreshes on its timer, as it always did.
     console.error("change token unavailable", scope, e);
