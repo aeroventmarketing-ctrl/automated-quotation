@@ -1,3 +1,63 @@
+## 2026-09-18 · A combined PO is one purchase order, however many requests it covers
+
+The owner, with the check register showing PO-AFBM2026000762 three times at ₱5,834.44 and
+PO-AFBM2026000770 twice at ₱235,668.86: *"disallow uploading multiple same POs, check for all
+roles."*
+
+Nothing had been uploaded twice, and there was nothing to disallow.
+
+### What those rows actually were
+
+Two things, read together, say it:
+
+- `nextPoNo()` allocates the PO number inside a **transaction** over a counter, so two POs cannot be
+  issued the same number.
+- Only three places write the `po` JSON. One is `savePurchaseOrder` (one row). The other two are
+  `createCombinedPO` and `updateCombinedPO`, which write the **same** `po` JSON to **every member**
+  request — `purchase-batch.ts` says so outright: *"every member PurchaseRequest carries the SAME
+  `po` JSON (with the combined lines and one PO number)"*.
+
+So several requests sharing a PO number is not a duplicate. It is a combined PO, working as designed.
+The register was walking purchase REQUESTS, so a three-member combined PO became three rows — and
+since each member carries the whole PO's JSON, each row claimed the **whole PO's net**.
+
+### Why that is not cosmetic
+
+Those rows are Accounts Payable. They feed *Still to clear*, the cash position's Total Payables and
+the Funding Shortfall. Reproduced on the harness with the owner's two POs seeded the way
+`createCombinedPO` really writes them:
+
+```
+                  rows for …762   rows for …770   Still to clear
+before                  3               2         ₱653,141.94
+after                   1               1         ₱408,012.57
+```
+
+**₱245,129 of payables that did not exist**, from two POs. The Funding Shortfall was overstated by
+the same amount.
+
+It also mis-stated the checks. One check is written per PO and attaches to the **anchor** request, so
+the other members hold no photo — and each of them was being reported as its own purchase order still
+*"Check not attached"*, sitting beside the anchor that had one.
+
+### One row per PURCHASE ORDER
+
+`buildCheckWatch` now groups the requests first — batch id where the caller supplies one, else the PO
+number, which groups a combined PO anyway since every member carries it. The group's row speaks for
+the member holding the photo where there is one (that is the anchor, and it is the row every action
+has to address), else the lowest id, which is stable: the register must not reshuffle between polls
+because Postgres returned the members in a different order.
+
+Guarded against becoming a merge, which would be the worse bug: separate POs stay separate, and two
+requests with no PO number at all stay apart rather than collapsing into one.
+
+### What was NOT done, and why
+
+No refusal was added to PO creation. There is nothing to refuse — the numbers are unique, and the
+only thing that shares one is the combined PO the owner asked for. A guard there would have broken
+that feature while fixing nothing.
+
+
 ## 2026-09-16 · An open order watches its own row
 
 The owner ran `pg_stat_statements` on the live database, which settled an argument I had been having

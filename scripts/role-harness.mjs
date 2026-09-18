@@ -536,7 +536,14 @@ async function seed() {
   //
   // One LIVE (Budgeted) and one COMPLETED, because the whole question is which
   // of the two still offers the upload control, and to whom.
-  const suppliers = { list: [{ id: "s-harness", company: "HARNESS STEEL CORP", terms: true }] };
+  const suppliers = { list: [
+    { id: "s-harness", company: "HARNESS STEEL CORP", terms: true },
+    // Terms suppliers too, so the two COMBINED POs below reach the check
+    // register as "For Payment" rows — which is where they were being
+    // counted once per member request.
+    { id: "s-vis", company: "VIS INDUSTRIAL CORP.", terms: true },
+    { id: "s-trade", company: "TRADE ONE INC.", terms: true },
+  ] };
   await p.appSetting.upsert({ where: { key: "suppliers" }, update: { value: suppliers }, create: { key: "suppliers", value: suppliers } });
 
   await p.purchaseRequest.deleteMany({ where: { note: { startsWith: "HARNESS-" } } });
@@ -689,6 +696,32 @@ async function seed() {
       }],
       createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
     } });
+  }
+
+  // The owner's screenshot: PO-AFBM2026000762 listed THREE times at ₱5,834.44,
+  // PO-AFBM2026000770 twice at ₱235,668.86 — all "For Payment · Check not
+  // attached". Nothing was uploaded twice; those are the member requests of two
+  // COMBINED POs, each member carrying the same `po` JSON and so the same whole-PO
+  // net. The register was counting the money once per member.
+  //
+  // Seeded as `createCombinedPO` really writes it: one poNumber, one batchId and
+  // one memberPrIds list, copied onto every member.
+  for (const [poNo, net, company, members] of [
+    ["PO-AFBM2026000762", 5834.44, "VIS INDUSTRIAL CORP.", ["cmb-a", "cmb-b", "cmb-c"]],
+    ["PO-AFBM2026000770", 235668.86, "TRADE ONE INC.", ["cmb-d", "cmb-e"]],
+  ]) {
+    const batchId = `batch-${poNo.slice(-3)}`;
+    for (const id of members) {
+      await p.purchaseRequest.create({ data: {
+        id,
+        kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+        note: `HARNESS-COMBINED-${poNo}`, status: "CASH_RELEASED",
+        po: { ...poFor(poNo), supplier: { company }, batchId, memberPrIds: members,
+              lines: [{ description: "GI SHEET 24GA", qty: 10, unitPrice: net / 10 }] },
+        chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+        createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+      } });
+    }
   }
 
   for (const [no, ymd, amt, company] of [

@@ -536,3 +536,126 @@ describe("the same check number on two purchase orders", () => {
     expect(rows.every((r) => r.duplicateOf.length === 0)).toBe(true);
   });
 });
+
+/**
+ * A combined PO is ONE purchase order, however many requests it covers.
+ *
+ * The owner, on a register showing PO-AFBM2026000762 three times at ₱5,834.44 and
+ * PO-AFBM2026000770 twice at ₱235,668.86: *"disallow uploading multiple same POs."*
+ *
+ * Nothing had been uploaded twice. `purchase-batch.ts`: *"every member
+ * PurchaseRequest carries the SAME `po` JSON (with the combined lines and one PO
+ * number)"* — and that JSON holds the WHOLE PO's net. Walking requests therefore
+ * listed a three-member combined PO three times, each row claiming the full
+ * amount.
+ *
+ * Which is not a cosmetic repeat: these rows ARE Accounts Payable. They feed
+ * "Still to clear", the cash position's Total Payables and the Funding Shortfall.
+ */
+describe("a combined PO is one row, not one per member", () => {
+  const helpers = {
+    coerceDocs: (v: unknown) => (v as CheckDoc[]) ?? [],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+    expectsCheck: () => true,
+    batchIdOf: (v: unknown) => (v as { batchId?: string } | null)?.batchId ?? null,
+  };
+  /** One member of a combined PO — same `po` JSON as its siblings, by design. */
+  const member = (id: string, batchId: string | null, poNumber: string, net: number, docs: CheckDoc[] = []) => ({
+    id, quotationId: null, status: "CASH_RELEASED",
+    po: { poNumber, supplierCompany: "VIS INDUSTRIAL CORP.", date: "2026-09-16", net, batchId },
+    voucherCheckDocs: docs,
+  });
+  const NET = 5834.44;
+
+  it("lists a three-member combined PO ONCE, for its net ONCE", () => {
+    const rows = buildCheckWatch([
+      member("a", "batch-7", "PO-AFBM2026000762", NET),
+      member("b", "batch-7", "PO-AFBM2026000762", NET),
+      member("c", "batch-7", "PO-AFBM2026000762", NET),
+    ], TODAY, helpers);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(NET);
+    expect(rows[0].state).toBe("awaiting");
+    // The figure the cash position calls Total Payables.
+    expect(checkWatchSummary(rows).openAmount).toBe(NET);
+  });
+
+  /**
+   * One check is written per PO and attaches to the ANCHOR, so the other members
+   * hold no photo. Each of them used to be reported as its own PO still awaiting
+   * a check, right beside the anchor that had one.
+   */
+  it("does not report the members beside the anchor as awaiting a check", () => {
+    const check = doc({ path: "anchor.jpg", read: { ...doc().read!, checkNo: "0000486718", clearingYMD: "2026-09-20" } });
+    const rows = buildCheckWatch([
+      member("a", "batch-7", "PO-AFBM2026000762", NET),
+      member("b", "batch-7", "PO-AFBM2026000762", NET, [check]),
+      member("c", "batch-7", "PO-AFBM2026000762", NET),
+    ], TODAY, helpers);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].path).toBe("anchor.jpg");
+    expect(rows.some((r) => r.state === "awaiting")).toBe(false);
+    // …and the row names the member the photo actually lives on, so the register's
+    // link and the attach/remove actions address the row that owns the file.
+    expect(rows[0].prId).toBe("b");
+  });
+
+  it("still shows two checks when a PO really was paid by two", () => {
+    const rows = buildCheckWatch([
+      member("a", "batch-7", "PO-AFBM2026000762", NET, [
+        doc({ path: "one.jpg" }),
+        doc({ path: "two.jpg", read: { ...doc().read!, checkNo: "0000486719" } }),
+      ]),
+      member("b", "batch-7", "PO-AFBM2026000762", NET),
+    ], TODAY, helpers);
+    expect(rows.map((r) => r.path).sort()).toEqual(["one.jpg", "two.jpg"]);
+  });
+
+  /** The saving must not become a merge: separate POs stay separate. */
+  it("keeps genuinely separate purchase orders apart", () => {
+    const rows = buildCheckWatch([
+      member("a", "batch-7", "PO-AFBM2026000762", NET),
+      member("b", "batch-9", "PO-AFBM2026000770", 235668.86),
+    ], TODAY, helpers);
+    expect(rows).toHaveLength(2);
+    expect(checkWatchSummary(rows).openAmount).toBeCloseTo(NET + 235668.86, 2);
+  });
+
+  it("and keeps two requests that have no PO number apart", () => {
+    const bare = (id: string) => ({
+      id, quotationId: null, status: "CASH_RELEASED",
+      po: { poNumber: "", supplierCompany: "VIS INDUSTRIAL CORP.", date: null, net: 100, batchId: null },
+      voucherCheckDocs: [],
+    });
+    expect(buildCheckWatch([bare("a"), bare("b")], TODAY, helpers)).toHaveLength(2);
+  });
+
+  /**
+   * Without `batchIdOf` the grouping falls back to the PO NUMBER — which still
+   * collapses a combined PO, because every member carries the same number. The
+   * callers that supply the batch id get exactness; the ones that don't still get
+   * the fix.
+   */
+  it("collapses on the PO number alone when no batch id is supplied", () => {
+    const { batchIdOf: _drop, ...noBatch } = helpers;
+    const rows = buildCheckWatch([
+      member("a", "batch-7", "PO-AFBM2026000762", NET),
+      member("b", "batch-7", "PO-AFBM2026000762", NET),
+    ], TODAY, noBatch);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(NET);
+  });
+
+  /** Stable between polls: the register must not reshuffle on row order alone. */
+  it("picks the same member whichever order Postgres returns them in", () => {
+    const m = [
+      member("c", "batch-7", "PO-AFBM2026000762", NET),
+      member("a", "batch-7", "PO-AFBM2026000762", NET),
+      member("b", "batch-7", "PO-AFBM2026000762", NET),
+    ];
+    const one = buildCheckWatch(m, TODAY, helpers)[0].prId;
+    const two = buildCheckWatch([...m].reverse(), TODAY, helpers)[0].prId;
+    expect(one).toBe(two);
+    expect(one).toBe("a"); // lowest id, deterministically
+  });
+});
