@@ -698,6 +698,23 @@ async function seed() {
     } });
   }
 
+  // A row whose `voucherCheckDocs` is NOT an array — the shape that makes
+  // `jsonb_array_length` raise "cannot get array length of a non-array".
+  //
+  // My Dashboard's check feed filters on that column in SQL, and the obvious
+  // spelling of the filter LOOKS guarded by a `jsonb_typeof` test while not
+  // being one: SQL does not promise to evaluate an AND left to right. One row
+  // like this took the whole feed down for Admin, Accounting and the Payment
+  // Approver, and nothing but a real Postgres would have said so.
+  await p.purchaseRequest.create({ data: {
+    kind: "department", dept: "office", items: ["GI SHEET 24GA x 10"],
+    note: "HARNESS-CHK-BADJSON", status: "CASH_RELEASED",
+    po: { ...poFor("HARNESS-CHK-BADJSON"), supplier: { company: "HARNESS STEEL CORP" } },
+    chainLog: { approve_po: { byName: "Rey Gil", at: new Date().toISOString() } },
+    voucherCheckDocs: { oops: "not an array" },
+    createdById: ids["harness-acct@test"], createdByName: "Michelle Cotura",
+  } });
+
   // The owner's screenshot: PO-AFBM2026000762 listed THREE times at ₱5,834.44,
   // PO-AFBM2026000770 twice at ₱235,668.86 — all "For Payment · Check not
   // attached". Nothing was uploaded twice; those are the member requests of two

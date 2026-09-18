@@ -571,12 +571,40 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   if (isAdmin(user) || has("accounting") || has("payment_approver")) {
     try {
       const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-      const checkPrs = await prisma.purchaseRequest.findMany({
-        // `status` is read by the duplicate test only — a cancelled or rejected
-        // request is not a second record of a payment, and without it this feed
-        // would report duplicates the register itself does not show.
-        select: { id: true, quotationId: true, po: true, voucherCheckDocs: true, status: true, createdAt: true },
-      });
+      /**
+       * Only the purchase orders that actually carry a check photo.
+       *
+       * Both tasks below need one: `notifiesAdmin` fires on `overdue`, which
+       * needs a clearing date, and a duplicate needs a check NUMBER. And no
+       * `expectsCheck` is passed to `buildCheckWatch` here, so a request with no
+       * photo produces no row at all — it was being fetched and thrown away.
+       *
+       * That waste got three times worse when this feed was widened from the
+       * admin to Accounting and the Payment Approver: an unfiltered read of
+       * EVERY purchase request, carrying the two fattest columns in the table
+       * (`po`, and `voucherCheckDocs` with every AI read stored on it), on a page
+       * that is everyone's landing page and refreshes on almost any activity.
+       *
+       * Raw SQL because "this JSON array is not empty" is not expressible in
+       * Prisma's `where`.
+       *
+       * Neither test can throw, and that is deliberate rather than tidy. The
+       * obvious spelling — `jsonb_typeof(...) = 'array' and
+       * jsonb_array_length(...) > 0` — LOOKS guarded and is not: SQL does not
+       * promise to evaluate an `AND` left to right, and Postgres really does
+       * reach `jsonb_array_length` on a row holding an object, where it raises
+       * *"cannot get array length of a non-array"*. One malformed row would take
+       * My Dashboard down for all three roles. `<> '[]'::jsonb` compares any two
+       * jsonb values without caring what they are, so the order stops mattering.
+       */
+      const checkPrs = await prisma.$queryRaw<{
+        id: string; quotationId: string | null; po: unknown; voucherCheckDocs: unknown; status: string; createdAt: Date;
+      }[]>`
+        select "id", "quotationId", "po", "voucherCheckDocs", "status", "createdAt"
+        from "PurchaseRequest"
+        where jsonb_typeof("voucherCheckDocs") = 'array'
+          and "voucherCheckDocs" <> '[]'::jsonb
+      `;
       const prCreatedAt = new Map(checkPrs.map((pr) => [pr.id, pr.createdAt.toISOString()] as const));
       const watch = buildCheckWatch(checkPrs, todayYMD, {
         coerceDocs: coerceCheckDocs,
