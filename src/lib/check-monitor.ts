@@ -232,6 +232,16 @@ export function buildCheckWatch(
      * row per attached photo.
      */
     expectsCheck?: (pr: CheckWatchSource, supplierCompany: string) => boolean;
+    /**
+     * The combined-PO batch id on this request's `po` JSON, or null.
+     *
+     * Optional, and the grouping below falls back to the PO NUMBER without it —
+     * which groups a combined PO correctly anyway, since every member carries
+     * the same `po` JSON, number included. Supplying it makes the grouping
+     * exact rather than merely reliable: two unrelated requests could in
+     * principle be made to share a number, and those must not be merged.
+     */
+    batchIdOf?: (po: unknown) => string | null;
   },
 ): CheckWatchRow[] {
   const rows: CheckWatchRow[] = [];
@@ -252,15 +262,64 @@ export function buildCheckWatch(
     poLabel: poNumber?.trim() || "a purchase order with no PO number yet",
     status: pr.status ?? "",
   });
+
+  /**
+   * ONE PURCHASE ORDER per group, not one purchase request.
+   *
+   * A combined PO is several `PurchaseRequest` rows carrying the SAME `po` JSON
+   * — `purchase-batch.ts` says so outright — and that JSON holds the WHOLE PO's
+   * lines and the whole PO's net. Walking requests therefore listed a three-member
+   * combined PO three times, each row claiming the full amount, and the owner was
+   * looking at PO-AFBM2026000762 three times at ₱5,834.44 and
+   * PO-AFBM2026000770 twice at ₱235,668.86.
+   *
+   * That is not a cosmetic repeat. Those rows are Accounts Payable: they feed
+   * "Still to clear", the Cash Position's Total Payables and the Funding
+   * Shortfall. Two combined POs were inflating the payables by ₱247,000 between
+   * them.
+   *
+   * It also mis-stated the check. One check is written per PO and attaches to the
+   * ANCHOR request, so the other members hold no photo — and each of them was
+   * being reported as a separate PO still "Check not attached", beside the anchor
+   * that had it.
+   */
+  const groups = new Map<string, CheckWatchSource[]>();
   for (const pr of prs) {
+    const key = purchaseOrderKey({
+      id: pr.id,
+      poNumber: helpers.poOf(pr.po)?.poNumber ?? null,
+      batchId: helpers.batchIdOf?.(pr.po) ?? null,
+    });
+    const at = groups.get(key);
+    if (at) at.push(pr);
+    else groups.set(key, [pr]);
+  }
+
+  for (const members of groups.values()) {
+    /**
+     * The request this PO's row speaks for.
+     *
+     * The one holding the check photo where there is one — that is the anchor,
+     * and it is the row every action on this PO has to address. Otherwise the
+     * lowest id, which is stable: the register must not reshuffle between polls
+     * because Postgres returned the members in a different order.
+     */
+    const pr = members.find((m) => helpers.coerceDocs(m.voucherCheckDocs).length > 0)
+      ?? [...members].sort((a, b) => a.id.localeCompare(b.id))[0];
     const po = helpers.poOf(pr.po);
-    const docs = helpers.coerceDocs(pr.voucherCheckDocs);
+    // Every photo on the PO, whichever member holds it — and each keeps its own
+    // member's id, so "attach"/"remove" still address the row that owns the file.
+    const docs = members.flatMap((m) =>
+      helpers.coerceDocs(m.voucherCheckDocs).map((doc) => ({ doc, owner: m })),
+    );
 
     // A payable PO with no photo yet — the owner's *"For Payment"* row. It
     // carries the PO's NET, because that is what the check will be written for,
     // and nothing else: there is no number, no date and no photo to open.
     if (docs.length === 0) {
-      if (po && helpers.expectsCheck?.(pr, po.supplierCompany)) {
+      // "Expected" is asked of EVERY member, because a combined PO's stage is
+      // kept in step across them but its members can be of different kinds.
+      if (po && members.some((m) => helpers.expectsCheck?.(m, po.supplierCompany))) {
         const poDate = po.date ? po.date.slice(0, 10) : null;
         rows.push({
           prId: pr.id, path: "", fileName: "",
@@ -285,7 +344,7 @@ export function buildCheckWatch(
       continue;
     }
 
-    for (const doc of docs) {
+    for (const { doc, owner } of docs) {
       const due = effectiveClearingYMD(doc);
       // What the check says — a person's correction if there was one. Comparing
       // the DUE date against the AI's discarded answer is what left the register
@@ -296,13 +355,16 @@ export function buildCheckWatch(
       const state = checkWatchState(doc, todayYMD);
       const poDate = po?.date ? po.date.slice(0, 10) : null;
       rows.push({
-        prId: pr.id,
+        // The member that actually holds this photo — the anchor, in practice —
+        // so "attach", "remove" and the register's link all address the row the
+        // file lives on rather than whichever member spoke for the PO.
+        prId: owner.id,
         path: doc.path,
         fileName: doc.name,
         poDate,
         poNumber: po?.poNumber ?? "—",
         supplier: po?.supplierCompany ?? "",
-        orderId: pr.quotationId,
+        orderId: owner.quotationId,
         // A person's correction beats the reading, here as on the PO card — the
         // register and the card must never quote different figures for one check.
         checkNo: effectiveCheckNo(doc),
@@ -333,7 +395,7 @@ export function buildCheckWatch(
         // knows: why a date moved, or the note left when it cleared.
         remarks: doc.cleared?.note ?? (moves ? doc.reschedules![moves - 1].reason || null : null),
       });
-      owners.push(ownerOf(pr, po?.poNumber ?? null));
+      owners.push(ownerOf(owner, po?.poNumber ?? null));
     }
   }
 

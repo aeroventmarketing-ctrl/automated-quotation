@@ -16,6 +16,7 @@ import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceCheckDocs, checkExpected } from "@/lib/voucher-check";
 import type { PRStatus } from "@/lib/purchasing";
 import { getSuppliers } from "@/lib/suppliers";
+import { poBatchId } from "@/lib/purchase-batch";
 import { buildCheckWatch, type CheckWatchRow } from "@/lib/check-monitor";
 
 export async function loadCheckRegister(todayYMD: string): Promise<CheckWatchRow[]> {
@@ -35,6 +36,10 @@ export async function loadCheckRegister(todayYMD: string): Promise<CheckWatchRow
 
   return buildCheckWatch(prs, todayYMD, {
     coerceDocs: coerceCheckDocs,
+    // A combined PO is several requests sharing one `po` JSON — and one net.
+    // Grouping on the batch id makes the register count that PO once, where
+    // walking requests counted it once per member. See `buildCheckWatch`.
+    batchIdOf: poBatchId,
     /**
      * One unreadable PO must not take the register down with it.
      *

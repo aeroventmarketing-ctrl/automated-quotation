@@ -580,6 +580,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const prCreatedAt = new Map(checkPrs.map((pr) => [pr.id, pr.createdAt.toISOString()] as const));
       const watch = buildCheckWatch(checkPrs, todayYMD, {
         coerceDocs: coerceCheckDocs,
+        // One row per PURCHASE ORDER, so a combined PO does not push the same
+        // overdue check at everybody once per member request.
+        batchIdOf: poBatchId,
         poOf: (v) => {
           const po = coercePurchaseOrder(v);
           // `net` is unused here (this feed only pushes OVERDUE checks, which
