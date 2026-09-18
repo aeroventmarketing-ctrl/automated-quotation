@@ -1,3 +1,67 @@
+## 2026-09-18 · A read I made three times more frequent
+
+The owner's egress chart, two days after the alarm fix: **16.59 GB on 18 September**, higher than the
+17th and no better than the week before. 195.52 GB of the 250 GB allowance gone, with 23 days of the
+billing period left.
+
+So the alarm fix did not show. Part of the reason is mine.
+
+### Optimising the wrong metric
+
+`pg_stat_statements` ranked the alarm first — 60% of database **time**. It was 31% of **rows**. The
+two catalogue reads were 44% of rows and 4% of time. Egress bills BYTES, and I spent the work on the
+column that measures CPU.
+
+### …and a regression shipped alongside it
+
+`#541` widened My Dashboard's check feed from the admin to Accounting and the Payment Approver, which
+was right — they are the two who can fix a duplicate. What went with it was not: the feed reads
+
+```ts
+prisma.purchaseRequest.findMany({
+  select: { id, quotationId, po, voucherCheckDocs, status, createdAt },
+})
+```
+
+— every purchase request in the system, carrying the two fattest columns in the table, on everyone's
+landing page, under the broadest refresh scope in the app. Widening the audience tripled it.
+
+And every one of those rows without a check photo contributes **nothing**: this feed passes no
+`expectsCheck`, so a request with no photo produces no row, and neither task it pushes can fire
+without one — `notifiesAdmin` needs a clearing date, a duplicate needs a check number. On the harness
+fixture that is 23 rows fetched to use 9.
+
+### The filter, and the version of it that looked right
+
+```sql
+where jsonb_typeof("voucherCheckDocs") = 'array'
+  and "voucherCheckDocs" <> '[]'::jsonb
+```
+
+The obvious spelling uses `jsonb_array_length(...) > 0` for the second test, guarded by the first.
+It is not guarded. **SQL does not promise to evaluate an `AND` left to right**, and Postgres really
+does reach the length call on a row holding an object:
+
+```
+ERROR:  cannot get array length of a non-array
+```
+
+Caught by inserting such a row and running it, not by reading it. And the failure is worse than an
+error: the block is wrapped in `try { … } catch { /* ignore */ }`, so the page renders perfectly and
+**every check task silently disappears** — no overdue-check task for the admin, no duplicate warning
+for anyone. Measured on the harness, with one malformed row present:
+
+```
+                naive filter    safe filter
+duplicate tasks       0              4
+page crashed        false          false
+```
+
+`<>` compares any two jsonb values without caring what they are, so the order stops mattering.
+
+`HARNESS-CHK-BADJSON` now seeds that row permanently.
+
+
 ## 2026-09-18 · A combined PO is one purchase order, however many requests it covers
 
 The owner, with the check register showing PO-AFBM2026000762 three times at ₱5,834.44 and
