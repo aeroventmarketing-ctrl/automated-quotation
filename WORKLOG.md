@@ -1,3 +1,67 @@
+## 2026-09-21 · The Orders list read every quotation and every line item ever written
+
+Chasing the egress by ROWS had pointed at the catalogues three times. Asking for the untruncated
+query text pointed somewhere else entirely, and the answer was one page.
+
+### Reading the query text
+
+`pg_stat_statements` truncates at whatever the console shows, but two things in the visible prefix
+were enough:
+
+- `select q."id", q."quoteNumber", … q."classificatio` at **99 rows a call** — the approver alarm,
+  with the go-live gate halving it exactly as `pending-approvals.test.ts` says.
+- `SELECT "QuotationItem"."id", "QuotationItem"."qty", …` at **9,674 rows a call**. Prisma returns
+  columns in SCHEMA order and prepends the primary key to a NESTED relation select, so `id` then
+  `qty` means `items: { select: { qty, descriptionSnapshot, specsSnapshot } }` — the specs ARE in
+  there — and 9,674 of 9,711 is the whole table.
+
+Which named `app/(app)/orders/page.tsx`:
+
+```ts
+prisma.quotation.findMany({
+  select: { …, classification: true,
+            items: { select: { qty, descriptionSnapshot, specsSnapshot } } },
+  orderBy: { createdAt: "desc" },
+})            // ← no WHERE at all
+```
+
+…followed twelve lines later by:
+
+```ts
+if (!sale || !isSaleConfirmed(sale)) return null;
+```
+
+Every quotation ever written — drafts, rejected quotes, the lot — with the whole of `classification`
+and **every line item in the company**, to render about two hundred rows. On the owner's measured
+widths that is **10.18 MB per render**, and the page refreshes on every quotation write anywhere.
+
+### Two fixes, both patterns this codebase already had
+
+**The WHERE.** `isSaleConfirmed` returns false without a PO, so a quotation whose `sale.po` is absent
+can never survive that `return null`. The same NECESSARY condition the alarm, My Dashboard and
+`slimClassificationByOrder` already ask in SQL — and the invariant behind it is pinned for every
+caller at once by `pending-approvals.test.ts`. 1,339 quotations → 209, and because `items` rides
+along, 9,711 line items → ~1,500.
+
+**The slim classification.** The list opens only `sale` and `workflow`, which is exactly what
+`slimClassificationByOrder` keeps: 1,070 bytes a row measured, against ~440 slim.
+
+```
+/orders, one render
+  before : 1.43 MB classification + 8.75 MB line items = 10.18 MB
+  after  : 0.09 MB              + 1.37 MB             =  1.46 MB   (−86%)
+```
+
+`CONFIRMED_SALE` moved out of `pnl-actions` and into `lib/slim-classification`, beside the slim read
+it travels with. Being private to the P&L is how `/orders` came to have no filter at all.
+
+### Checked by looking
+
+The rendered Orders list is byte-identical before and after for Admin, Sales and the Purchaser — same
+orders, same order. The role harness is identical to baseline, run against the same fixtures both
+ways.
+
+
 ## 2026-09-21 · Rows are not bytes
 
 The owner ran `pg_stat_statements` again, on a clean window. Two things came out of it, and the
