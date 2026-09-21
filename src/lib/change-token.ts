@@ -28,7 +28,7 @@
 import { prisma } from "@/lib/db";
 
 /** What a page watches. Each is one or more tables it is built from. */
-export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management" | "approvals";
+export type ChangeScope = "orders" | "order-detail" | "purchasing" | "checks" | "requisitions" | "cash-requests" | "calendar" | "my-dashboard" | "management" | "approvals" | "quotation-detail";
 
 /**
  * The token could not be read, so the caller should behave as it did before —
@@ -197,6 +197,20 @@ const SCOPES: Record<ChangeScope, Counter[]> = {
    * ignored until somebody happened to touch an order.
    */
   approvals: [quotations, appSettings],
+  /**
+   * ONE quotation, open in the builder.
+   *
+   * It was watching the `orders` scope — `max(updatedAt)` across every
+   * quotation — so anybody's autosave, anywhere, rebuilt everybody's open
+   * builder. And a builder rebuild is not cheap: the whole quotation with its
+   * `classification`, every one of its line items with their `specsSnapshot`,
+   * plus the catalogue picker and the price list. Postgres measures a line item
+   * at ~900 bytes and a classification at ~1,070.
+   *
+   * Narrower AND more correct, exactly as `order-detail`: this page shows one
+   * quotation, and somebody else's was never news on it.
+   */
+  "quotation-detail": [oneQuotation],
 };
 
 export function isChangeScope(v: string | null | undefined): v is ChangeScope {

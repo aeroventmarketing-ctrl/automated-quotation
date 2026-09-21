@@ -4989,7 +4989,11 @@ export function QuotationBuilder({
           typing is one write, one token move, one refresh. Measured over 26
           seconds: reading cost 4 polls and 0 rebuilds, editing 3 polls and 1,
           where the plain timer cost 4 rebuilds either way. */}
-      <AutoRefresh watch="orders" />
+      {/* …and `watchKey`, so the question is "has THIS quote changed" rather
+          than "has any quote changed". Without it somebody else's autosave
+          rebuilt this page — and a rebuild re-reads the quotation, every line
+          item with its specs, the catalogue picker and the price list. */}
+      <AutoRefresh watch="quotation-detail" watchKey={quotation.id} />
       <SimilarQuotes matches={dupMatches} currentCompany={quotation.customer} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>

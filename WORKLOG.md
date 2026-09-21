@@ -1,3 +1,79 @@
+## 2026-09-21 · Rows are not bytes
+
+The owner ran `pg_stat_statements` again, on a clean window. Two things came out of it, and the
+second one nearly cost another wasted day.
+
+### The alarm fix worked
+
+Shares, which are window-independent (the two windows are different lengths, so raw call counts are
+not comparable and were not compared):
+
+```
+share of all rows                   before    after
+approver alarm (its own read)         8.5%     2.7%
+  …its rows per call                   201       99
+StockItem catalogue                  25.0%    25.2%
+Product catalogue                    18.5%    18.7%
+```
+
+The alarm's share fell by a factor of three, and the go-live gate halved its rows per call exactly as
+the tests said it would.
+
+### …and the catalogues were the wrong target
+
+The plan was to cache the two catalogues next: 44% of rows, unchanged. Before writing it, the owner
+measured the actual column widths:
+
+```
+                                        rows   bytes per full read
+Quotation: classification              1,339              1,399 kB   → 1,070 B/row
+QuotationItem: specs + description     9,711              8,549 kB   →   901 B/row
+Product: all columns                   1,045                331 kB   →   324 B/row
+PurchaseRequest: po + voucherCheckDocs 1,051                252 kB   →   246 B/row
+StockItem: all columns                 1,049                168 kB   →   164 B/row
+```
+
+Which inverts the ranking. **Egress bills bytes, and a StockItem row is a sixth of a line item.**
+Multiplying measured widths by the rows actually read:
+
+```
+Quotation — full rows with classification      21%
+QuotationItem — three FULL-TABLE reads         18%   ← 870 MB from 100 calls
+StockItem catalogue                            12%
+QuotationItem — the alarm's line items         12%
+Product catalogue                              10%
+```
+
+So the catalogues are ~22% of bytes, not 44%. Caching them — the work that was about to be done —
+would have fixed a fifth of the bill at best. **A prediction of 4,000 B/row for `PurchaseRequest` was
+out by a factor of sixteen.** Rows had been standing in for bytes for three rounds.
+
+### What this one does
+
+The quotation builder was watching the `orders` scope — `max(updatedAt)` across every quotation — so
+anybody's autosave rebuilt everybody's open builder. And a builder rebuild is one of the fattest
+reads in the app: the quotation with its `classification` (1,070 B), every line item with its
+`specsSnapshot` (901 B each), the catalogue picker and the price list.
+
+The same narrowing `order-detail` already has, with the same machinery, and the same two guards:
+
+```
+poll carries the quote id : true
+somebody else's autosave  → rebuilds: 0   (want 0)
+this quote's own autosave → rebuilds: 1   (want ≥1)
+keyed token  1:1789962731792
+no-key token 2:1789962731792   ← an old browser mid-deploy still sees the whole table
+```
+
+### Still open
+
+The two biggest lines are `Quotation` full rows and three queries reading the ENTIRE `QuotationItem`
+table — 9,674 rows a call, 8.5 MB a call, 100 calls. `pg_stat_statements` truncates the query text at
+120 characters, which names the table but not the caller, and the obvious suspect
+(`saleLinesByQuotation`, behind the P&L) filters to its date range first and is therefore innocent.
+Finding them needs the untruncated query text.
+
+
 ## 2026-09-18 · A read I made three times more frequent
 
 The owner's egress chart, two days after the alarm fix: **16.59 GB on 18 September**, higher than the
