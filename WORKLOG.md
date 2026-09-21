@@ -1,3 +1,132 @@
+## 2026-09-21 · The coil: apparatus dew point and bypass factor
+
+The first cut of the Moisture tool shipped with a note saying two things had been left out. One of
+them was coil bypass factor, on the grounds that it "needs coil geometry and is a different
+calculation". The owner's reply was two words: *"No its not"*.
+
+They were right, and the reason matters more than the correction.
+
+### Bypass factor is a psychrometric construction, not a coil property
+
+Take the on-coil state and the off-coil state. Draw the straight line between them. Carry it on down
+to the saturation curve. Where it lands is the **apparatus dew point** — the single saturated surface
+the whole coil behaves as if it were. The bypass factor is then just where the off-coil state sits
+along that line:
+
+```
+BF = (t_off − t_ADP) / (t_on − t_ADP)   =   (W_off − W_ADP) / (W_on − W_ADP)
+```
+
+Rows, fin spacing and face velocity are what you need to go the OTHER way — predicting an off-coil
+state for a coil you have not chosen yet. Here the designer has already chosen it. So this needed
+nothing that was not already in the file: the same `satPressurePsia` curve `dewPointF` inverts a few
+lines above it.
+
+The cost of the wrong reason was telling a client *"the coil has to get below 14.2 °C"* instead of
+*"a 12.0 °C apparatus dew point at a 0.08 bypass factor"* — one is a constraint, the other is a
+number a supplier can quote against.
+
+### Two on-coil cases, and deliberately not a third
+
+- **Room air**, recirculated. The coil sees room air and has to take out the WHOLE balance — internal
+  gains and the outdoor-air term both — through the room-to-off-coil difference. So
+  `removalLbHr / (W_room − W_off)` is exactly its mass flow, and the screen quotes the CFM.
+- **Outdoor air**, a dedicated fresh-air unit drying the air before it reaches the room.
+
+A **mixed** on-coil state is left out on purpose. Mixing needs the supply airflow, the supply airflow
+needs the sensible load, and the mixed state then feeds back into the supply humidity it helped set.
+That is a loop this screen has no business closing when it holds only the latent half of the job. Two
+exact cases beat three where one is a guess.
+
+### Null is an answer
+
+A line steep enough — a duty latent enough — passes UNDER the saturation curve without ever touching
+it. There is then no apparatus dew point, and returning a number would be inventing one. That is the
+textbook case where one coil cannot do it in a pass: overcooling with reheat, or a desiccant.
+
+### What rendering the range found
+
+Sweeping realistic duties turned up something no single test case would have. A dedicated outdoor-air
+coil taking 34 °C / 70% down to 13–19 °C refused at **every** off-coil humidity anyone would think to
+type. The duty is ordinary; it is the 95% that is wrong. Deep dehumidification leaves air all but
+saturated, and the construction says so sharply because the saturation curve is strongly convex
+through that range.
+
+So the refusal no longer stops at "no". It bisects for the lowest off-coil humidity that DOES have an
+apparatus dew point and says it: *"The shallowest one coil can leave it at 17 °C is about 99.2%"*.
+A test pins it as a threshold — an ADP exists 0.05% above it and does not 0.05% below.
+
+### Not touched
+
+The water balance is unchanged. The coil block is additive: leave the off-coil temperature blank and
+the screen is exactly what it was, and a coil refusal never takes the balance down with it. Both are
+tested.
+
+## 2026-09-21 · Moisture Removal Analysis — the latent half, counted as water
+
+The owner asked what a Moisture Removal Analysis is, read the answer, and said: *"Make it a new
+calculator."*
+
+### Why a new one rather than a mode on Air Heat
+
+Air Heat already reports a latent load in BTU/hr, and that is the same physics. It is the wrong UNIT
+for the three questions the business is actually asked:
+
+- *"How many litres a day does this dehumidifier have to pull?"*
+- *"Will a bigger exhaust fan fix the damp?"*
+- *"How cold does the coil have to get before anything condenses at all?"*
+
+A dehumidifier is sold in litres, a condensate drain is sized in litres, and the fan question has an
+answer that is not a number at all.
+
+### The balance, which is the whole tool
+
+```
+generated inside  +  ṁ·W_outdoor  =  ṁ·W_indoor  +  REMOVED
+REMOVED = generated + ṁ·(W_outdoor − W_indoor)
+```
+
+Everything goes through the HUMIDITY RATIO. A test pins the reason: the same air merely heated reads
+a LOWER relative humidity while carrying exactly the same water, so an analysis built on RH would be
+reporting the thermometer.
+
+### The sign, which is the commercial point
+
+`ṁ·(W_out − W_in)` is signed, and both signs are real:
+
+- Outdoor wetter than the target — the tropical norm — and ventilation ADDS. The screen says so in
+  those words: *"A bigger fan will not fix this."*
+- Outdoor drier than the room — a laundry, a drying room, a pool hall — and ventilation REMOVES for
+  nothing. The screen sizes it: *"A fan can do this one… 355 CFM… worth pricing against the machine."*
+
+Same honesty the ventilation tool owes about cooling. A fan cannot beat ambient, and it cannot dry
+below it either.
+
+### What the tests found
+
+**The first refusal was too aggressive.** It fired whenever nothing was ADDING moisture — which threw
+away a real answer: outdoor air drier than the target, no process running, and the room dries itself.
+That is the reason somebody opens this screen before buying a dehumidifier they do not need. Narrowed
+to "nothing is MOVING": no air, and no source.
+
+**An altitude assertion was simply wrong.** The draft asserted that thin air must lower the load,
+because there is less mass per cfm. The load went UP. Both effects are real and pull opposite ways —
+`W = 0.622·pw/(p − pw)` rises as `p` falls, so the same temperature and RH hold MORE water per pound
+of dry air. At 2,000 m the second wins. The tests now pin the two mechanisms instead of a net that is
+not a fact.
+
+**And a hand figure was out by 4%.** The explanation given to the owner said 1,000 cfm of Manila
+outdoor air is ~660 litres a day. The tool says **634**, because it corrects the air density for
+34 °C where the envelope arithmetic used standard 70 °F air. The tool is right.
+
+### Found by looking
+
+Rendering it turned up two things no test would have: a "Coil must reach below" label that reads as
+an instruction in the branch where no coil is bought at all — now the fact, *"Room dew point"*, with
+the coil consequence in the sub-line — and a 1% bar stub on a term that REMOVES water, which drew as
+a stray green dot beside the minus sign that already said it.
+
+
 ## 2026-09-21 · The Orders list read every quotation and every line item ever written
 
 Chasing the egress by ROWS had pointed at the catalogues three times. Asking for the untruncated

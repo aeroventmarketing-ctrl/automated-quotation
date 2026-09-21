@@ -10,9 +10,10 @@ import { toolKeyFrom } from "./tools";
 
 export const dynamic = "force-dynamic";
 
-const TITLE = "HVAC Tools — Fan Selector, Ductulator, Pulley, Fan Law, Air Heat & Ventilation";
+const TITLE =
+  "HVAC Tools — Fan Selector, Ductulator, Pulley, Fan Law, Air Heat, Ventilation & Moisture Removal";
 const DESCRIPTION =
-  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, apply the fan affinity laws, work out the sensible, latent and total heat an airflow carries, and size an exhaust or ventilation fan.";
+  "Free HVAC calculators from Aerovent Fans and Blowers Manufacturing: select an industrial fan for your duty point, size ductwork, work out belt-drive pulleys, apply the fan affinity laws, work out the sensible, latent and total heat an airflow carries, size an exhaust or ventilation fan, and work out the water a room needs taken out of its air in litres a day — with the coil's apparatus dew point and bypass factor.";
 
 export const metadata: Metadata = {
   title: TITLE,
@@ -24,11 +25,11 @@ export const metadata: Metadata = {
 /**
  * Public HVAC Tools page.
  *
- * The six calculators an engineer actually reaches for while specifying a job.
+ * The seven calculators an engineer actually reaches for while specifying a job.
  * The Fan Selector runs the same selection engine as the staff quotation
  * builder through `/api/public/fan-select`, which is performance-only — no
- * price, no cost, no internal id ever crosses to the public side. The other
- * rest are pure maths shared with the staff tools via `lib/hvac/*`.
+ * price, no cost, no internal id ever crosses to the public side. The rest are
+ * pure maths shared with the staff tools via `lib/hvac/*`.
  *
  * Deliberately excluded from the public set: Duct Material (a sheet-metal
  * costing aid) and Job Order (a production document) — both internal.
