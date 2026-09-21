@@ -1,3 +1,143 @@
+## 2026-09-21 · The Orders list read every quotation and every line item ever written
+
+Chasing the egress by ROWS had pointed at the catalogues three times. Asking for the untruncated
+query text pointed somewhere else entirely, and the answer was one page.
+
+### Reading the query text
+
+`pg_stat_statements` truncates at whatever the console shows, but two things in the visible prefix
+were enough:
+
+- `select q."id", q."quoteNumber", … q."classificatio` at **99 rows a call** — the approver alarm,
+  with the go-live gate halving it exactly as `pending-approvals.test.ts` says.
+- `SELECT "QuotationItem"."id", "QuotationItem"."qty", …` at **9,674 rows a call**. Prisma returns
+  columns in SCHEMA order and prepends the primary key to a NESTED relation select, so `id` then
+  `qty` means `items: { select: { qty, descriptionSnapshot, specsSnapshot } }` — the specs ARE in
+  there — and 9,674 of 9,711 is the whole table.
+
+Which named `app/(app)/orders/page.tsx`:
+
+```ts
+prisma.quotation.findMany({
+  select: { …, classification: true,
+            items: { select: { qty, descriptionSnapshot, specsSnapshot } } },
+  orderBy: { createdAt: "desc" },
+})            // ← no WHERE at all
+```
+
+…followed twelve lines later by:
+
+```ts
+if (!sale || !isSaleConfirmed(sale)) return null;
+```
+
+Every quotation ever written — drafts, rejected quotes, the lot — with the whole of `classification`
+and **every line item in the company**, to render about two hundred rows. On the owner's measured
+widths that is **10.18 MB per render**, and the page refreshes on every quotation write anywhere.
+
+### Two fixes, both patterns this codebase already had
+
+**The WHERE.** `isSaleConfirmed` returns false without a PO, so a quotation whose `sale.po` is absent
+can never survive that `return null`. The same NECESSARY condition the alarm, My Dashboard and
+`slimClassificationByOrder` already ask in SQL — and the invariant behind it is pinned for every
+caller at once by `pending-approvals.test.ts`. 1,339 quotations → 209, and because `items` rides
+along, 9,711 line items → ~1,500.
+
+**The slim classification.** The list opens only `sale` and `workflow`, which is exactly what
+`slimClassificationByOrder` keeps: 1,070 bytes a row measured, against ~440 slim.
+
+```
+/orders, one render
+  before : 1.43 MB classification + 8.75 MB line items = 10.18 MB
+  after  : 0.09 MB              + 1.37 MB             =  1.46 MB   (−86%)
+```
+
+`CONFIRMED_SALE` moved out of `pnl-actions` and into `lib/slim-classification`, beside the slim read
+it travels with. Being private to the P&L is how `/orders` came to have no filter at all.
+
+### Checked by looking
+
+The rendered Orders list is byte-identical before and after for Admin, Sales and the Purchaser — same
+orders, same order. The role harness is identical to baseline, run against the same fixtures both
+ways.
+
+
+## 2026-09-21 · Rows are not bytes
+
+The owner ran `pg_stat_statements` again, on a clean window. Two things came out of it, and the
+second one nearly cost another wasted day.
+
+### The alarm fix worked
+
+Shares, which are window-independent (the two windows are different lengths, so raw call counts are
+not comparable and were not compared):
+
+```
+share of all rows                   before    after
+approver alarm (its own read)         8.5%     2.7%
+  …its rows per call                   201       99
+StockItem catalogue                  25.0%    25.2%
+Product catalogue                    18.5%    18.7%
+```
+
+The alarm's share fell by a factor of three, and the go-live gate halved its rows per call exactly as
+the tests said it would.
+
+### …and the catalogues were the wrong target
+
+The plan was to cache the two catalogues next: 44% of rows, unchanged. Before writing it, the owner
+measured the actual column widths:
+
+```
+                                        rows   bytes per full read
+Quotation: classification              1,339              1,399 kB   → 1,070 B/row
+QuotationItem: specs + description     9,711              8,549 kB   →   901 B/row
+Product: all columns                   1,045                331 kB   →   324 B/row
+PurchaseRequest: po + voucherCheckDocs 1,051                252 kB   →   246 B/row
+StockItem: all columns                 1,049                168 kB   →   164 B/row
+```
+
+Which inverts the ranking. **Egress bills bytes, and a StockItem row is a sixth of a line item.**
+Multiplying measured widths by the rows actually read:
+
+```
+Quotation — full rows with classification      21%
+QuotationItem — three FULL-TABLE reads         18%   ← 870 MB from 100 calls
+StockItem catalogue                            12%
+QuotationItem — the alarm's line items         12%
+Product catalogue                              10%
+```
+
+So the catalogues are ~22% of bytes, not 44%. Caching them — the work that was about to be done —
+would have fixed a fifth of the bill at best. **A prediction of 4,000 B/row for `PurchaseRequest` was
+out by a factor of sixteen.** Rows had been standing in for bytes for three rounds.
+
+### What this one does
+
+The quotation builder was watching the `orders` scope — `max(updatedAt)` across every quotation — so
+anybody's autosave rebuilt everybody's open builder. And a builder rebuild is one of the fattest
+reads in the app: the quotation with its `classification` (1,070 B), every line item with its
+`specsSnapshot` (901 B each), the catalogue picker and the price list.
+
+The same narrowing `order-detail` already has, with the same machinery, and the same two guards:
+
+```
+poll carries the quote id : true
+somebody else's autosave  → rebuilds: 0   (want 0)
+this quote's own autosave → rebuilds: 1   (want ≥1)
+keyed token  1:1789962731792
+no-key token 2:1789962731792   ← an old browser mid-deploy still sees the whole table
+```
+
+### Still open
+
+The two biggest lines are `Quotation` full rows and three queries reading the ENTIRE `QuotationItem`
+table — 9,674 rows a call, 8.5 MB a call, 100 calls. `pg_stat_statements` truncates the query text at
+120 characters, which names the table but not the caller, and the obvious suspect
+(`saleLinesByQuotation`, behind the P&L) filters to its date range first and is therefore innocent.
+Finding them needs the untruncated query text.
+
+
 ## 2026-09-18 · A read I made three times more frequent
 
 The owner's egress chart, two days after the alarm fix: **16.59 GB on 18 September**, higher than the

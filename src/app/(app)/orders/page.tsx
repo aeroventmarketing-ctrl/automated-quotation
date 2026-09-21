@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { payableTotal, round2 } from "@/lib/quote";
 import { isBoughtInOnlyOrder, isStockOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
+import { slimClassificationByOrder, withSlimClassification, CONFIRMED_SALE } from "@/lib/slim-classification";
 import {
   saleFromClassification,
   isSaleConfirmed,
@@ -48,7 +49,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const stageParam = sp.stage && ORDER_STAGES.some((s) => s.key === sp.stage) ? (sp.stage as OrderStage) : undefined;
   const deptParam = sp.dept && PRODUCTION_DEPTS.some((d) => d.key === sp.dept) ? sp.dept : undefined;
 
-  const [quotes, viewer, assignments, hideOrderProgress, docCheckGate] = await Promise.all([
+  const [quotes, slim, viewer, assignments, hideOrderProgress, docCheckGate] = await Promise.all([
     // Source from confirmed sales — NOT inquiry.status === "WON". A quotation
     // revision reopens the inquiry (status leaves WON), so a WON filter would
     // drop confirmed orders from the list. isSaleConfirmed below is the real
@@ -68,21 +69,42 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
      * the whole User and Customer rows behind `preparedBy` and `customer` — all
      * dropped. Nothing the page shows comes from any of them.
      *
-     * `classification` stays, and is the bulk of what remains: it carries both
-     * the sale record and the order workflow this list is built from.
+     * Two things that comment could not yet say, both measured on the owner's own
+     * database after a month of it being the fattest read in the app:
+     *
+     *  1. **There IS a WHERE clause now.** `isSaleConfirmed` returns false
+     *     without a PO, so a quotation whose `sale.po` is absent can never
+     *     survive the `return null` twelve lines below — it was being read in
+     *     full and thrown away. The same NECESSARY condition the alarm, My
+     *     Dashboard and `slimClassificationByOrder` already ask in SQL, pinned
+     *     for all eight readers by `pending-approvals.test.ts`. On this data it
+     *     is 1,339 quotations down to 209 — and, because `items` rides along,
+     *     9,711 line items down to ~1,500.
+     *
+     *     That second number is the one that mattered. A line item carries
+     *     `specsSnapshot`, which Postgres measures at **901 bytes a row**; every
+     *     line item in the company was crossing the wire to decide a badge on
+     *     ~200 orders.
+     *
+     *  2. **`classification` is fetched SLIM** — `slimClassificationByOrder`,
+     *     the same shared read the other seven confirmed-order screens use. The
+     *     full column measures 1,070 bytes a row against ~440 slim, and this
+     *     list opens only `sale` and `workflow`, which is exactly what the slim
+     *     version keeps.
      */
     prisma.quotation.findMany({
+      where: CONFIRMED_SALE,
       select: {
         id: true, quoteNumber: true, currency: true, projectName: true, createdAt: true,
         // What `payableTotal` needs, and no more.
         total: true, discountPct: true, vatMode: true,
-        classification: true,
         inquiry: { select: { projectName: true, customer: { select: { id: true, company: true } } } },
         preparedBy: { select: { name: true } },
         items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } },
       },
       orderBy: { createdAt: "desc" },
     }),
+    slimClassificationByOrder(),
     getCurrentUser(),
     getWorkflowRoles(),
     getHideOrderProgress().catch(() => false),
@@ -97,6 +119,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const isPurchaserView = !adminViewer && viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser");
 
   const orders = quotes
+    // The slim `classification` goes back on the row, so the loop below reads
+    // exactly as it did — `payableTotal(q)` reaches into it too.
+    .map((row) => withSlimClassification(row, slim))
     .map((q) => {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) return null;

@@ -43,7 +43,30 @@
  * draws several of these cards — My Dashboard draws four — pays for it once.
  */
 import { cache } from "react";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+
+/**
+ * The NECESSARY condition every confirmed-order reader may ask Postgres.
+ *
+ * `isSaleConfirmed` returns false unless the sale carries a PO, so a quotation
+ * whose `classification.sale.po` is absent can never survive any of those loops.
+ * Asking for it in SQL therefore cannot drop a row one of them would have kept —
+ * and each loop still runs its own real gate on everything that comes back. (A
+ * JSON-null `po` still comes back, and is still rejected there.)
+ *
+ * It lives here, beside the slim read, because the two travel together: a reader
+ * that scans every confirmed order wants this `where` AND that `classification`.
+ * It was private to the P&L, which is how `/orders` came to read every quotation
+ * ever written — drafts, rejected quotes, the lot — with the whole of
+ * `classification` and EVERY line item, to render about two hundred rows.
+ *
+ * The invariant it stands on is pinned for all of its callers at once by
+ * `pending-approvals.test.ts`.
+ */
+export const CONFIRMED_SALE: Prisma.QuotationWhereInput = {
+  classification: { path: ["sale", "po"], not: Prisma.DbNull },
+};
 
 /**
  * The keys no confirmed-order reader opens. Verified one file at a time against

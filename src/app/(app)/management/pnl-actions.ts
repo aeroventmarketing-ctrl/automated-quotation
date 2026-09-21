@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
+import { slimClassificationByOrder, withSlimClassification, CONFIRMED_SALE } from "@/lib/slim-classification";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { poMemberIds } from "@/lib/purchase-batch";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -69,9 +69,8 @@ interface SaleLine {
  * quotes, the lot — with the whole of `classification` and every line item, to
  * book the handful recognised in one month.
  */
-const CONFIRMED_SALE: Prisma.QuotationWhereInput = {
-  classification: { path: ["sale", "po"], not: Prisma.DbNull },
-};
+// `CONFIRMED_SALE` now lives in `lib/slim-classification`, beside the slim read
+// it travels with, so every confirmed-order reader asks the same condition.
 
 /**
  * The sold lines of the given orders, grouped by quotation id.

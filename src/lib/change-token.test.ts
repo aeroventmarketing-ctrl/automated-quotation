@@ -148,3 +148,32 @@ describe("an order page watching its own row", () => {
     expect(after).not.toBe(before);
   });
 });
+
+/**
+ * …and the same for one quotation open in the builder.
+ *
+ * It watched the `orders` scope — every quotation in the table — so anybody's
+ * autosave rebuilt everybody's open builder. A rebuild there re-reads the
+ * quotation with its `classification`, every line item with its `specsSnapshot`,
+ * the catalogue picker and the price list. Measured on the owner's own database:
+ * ~1,070 bytes per classification and ~900 per line item.
+ */
+describe("a quotation builder watching its own row", () => {
+  const one = (updatedAt: string | null) => ({ n: updatedAt ? 1 : 0, at: updatedAt ? new Date(updatedAt) : null });
+
+  it("is a scope the server will answer for", () => {
+    expect(isChangeScope("quotation-detail")).toBe(true);
+  });
+
+  it("holds still while somebody else is typing in THEIR quote", () => {
+    expect(tokenFrom([one("2026-09-21T10:00:00Z")])).toBe(tokenFrom([one("2026-09-21T10:00:00Z")]));
+  });
+
+  it("moves on this quote's own autosave", () => {
+    expect(tokenFrom([one("2026-09-21T10:00:04Z")])).not.toBe(tokenFrom([one("2026-09-21T10:00:00Z")]));
+  });
+
+  it("moves when the quote is deleted, which no timestamp would show", () => {
+    expect(tokenFrom([one(null)])).not.toBe(tokenFrom([one("2026-09-21T10:00:00Z")]));
+  });
+});
