@@ -45,6 +45,16 @@
  * So the tool works out both, and says which applies rather than assuming. It is
  * the same honesty the ventilation calculator owes its users about cooling: a
  * fan cannot beat ambient, and here it cannot dry below ambient either.
+ *
+ * ## …and then the coil
+ *
+ * The balance says how cold a coil must get before anything condenses at all.
+ * `apparatusDewPoint` says how cold it actually runs, and what fraction of the
+ * air misses the fins entirely. That was left out of the first cut on the
+ * grounds that it needed coil geometry. It does not — see the note on the
+ * function — and leaving it out was the difference between telling a client
+ * "below 14.2 °C" and telling them "a 11.8 °C apparatus dew point at a 0.10
+ * bypass factor", which is a number they can take to a supplier.
  */
 import {
   MASS_PER_CFM,
@@ -65,6 +75,7 @@ import {
   type TempUnit,
   type AltitudeUnit,
 } from "./psychrometrics";
+import { r1 } from "./parse";
 
 export { BTU_PER_TON };
 
@@ -131,6 +142,127 @@ export function dewPointF(wLbLb: number, pPsia: number): number {
 }
 
 /* ------------------------------------------------------------------ *
+ * The coil — apparatus dew point and bypass factor
+ * ------------------------------------------------------------------ */
+
+/**
+ * Where the coil's air comes from. Two clean cases, and no third.
+ *
+ * `room` — a recirculating coil. Everything it sees is room air, ventilation
+ * reaches the room separately, and the coil has to take out the WHOLE balance
+ * (internal gains plus the outdoor-air term) through the room-to-supply
+ * difference. `removalLbHr / (W_room − W_offcoil)` is exactly its mass flow.
+ *
+ * `outdoor` — a dedicated outdoor-air unit, drying the fresh air before it ever
+ * reaches the room. Entering air is the outdoor state.
+ *
+ * A MIXED entering condition is deliberately left out. Mixing needs the supply
+ * airflow, the supply airflow needs the sensible load, and the mixed state then
+ * feeds back into the supply humidity it helped set — a loop this screen has no
+ * business closing when it only holds the latent half of the job. Two exact
+ * cases beat three where one is a guess.
+ */
+export type CoilEntering = "room" | "outdoor";
+
+export interface CoilSolution {
+  /** On-coil air — the state named by `coilEntering`. */
+  enteringTempF: number;
+  enteringW: number;
+  enteringGrains: number;
+  /** Off-coil air, as typed in. */
+  leavingTempF: number;
+  leavingW: number;
+  leavingGrains: number;
+
+  /**
+   * Apparatus dew point, °F — the single saturated state the coil behaves as if
+   * its whole surface were at.
+   */
+  adpF: number;
+  adpW: number;
+  adpGrains: number;
+
+  /** Share of the air that slips through the fins untouched, 0–1. */
+  bypassFactor: number;
+  /** 1 − bypass factor. What the fins actually get hold of. */
+  contactFactor: number;
+
+  /** Sensible share of the coil's OWN duty (the grand sensible heat ratio), 0–1. */
+  gshr: number;
+
+  /**
+   * Air that has to cross this coil to take out the day's water, cfm — at the
+   * ON-COIL condition, which is where a coil's airflow is quoted (face velocity
+   * times face area). Null when there is no water to take out.
+   */
+  coilCfm: number | null;
+}
+
+/**
+ * Where the coil's process line, extended, meets the saturation curve.
+ *
+ * **This does not need coil geometry.** That was the claim that stopped this
+ * being built, and it was wrong. Bypass factor is a *psychrometric*
+ * construction: take the on-coil state and the off-coil state, draw the straight
+ * line between them, carry it on down to the saturation curve, and where it
+ * lands is the apparatus dew point. Geometry — rows, fin spacing, face velocity
+ * — is what you need to go the OTHER way, predicting an off-coil state for a
+ * particular coil before you have chosen one. Here the designer has chosen the
+ * off-coil condition already, so the same `satPressurePsia` curve `dewPointF`
+ * inverts a few lines up is all it takes.
+ *
+ * Bisection for the same reason as `dewPointF`: the curve is already here, and a
+ * published fit would drift from the humidity ratios computed beside it.
+ *
+ * **Null is a real answer, not a failure.** A line steep enough — a duty latent
+ * enough — passes UNDER the saturation curve without ever touching it. That is
+ * the textbook case where one coil cannot do the job in one pass and you are
+ * into overcooling with reheat, or a desiccant. Returning a number there would
+ * be inventing one.
+ */
+export function apparatusDewPoint(
+  enteringTempF: number,
+  enteringW: number,
+  leavingTempF: number,
+  leavingW: number,
+  pPsia: number,
+): { adpF: number; adpW: number } | null {
+  const dT = enteringTempF - leavingTempF;
+  if (!(dT > 0)) return null;
+  const slope = (enteringW - leavingW) / dT; // lb/lb per °F; ≥ 0 for a coil that dries
+  const wLine = (t: number) => leavingW + slope * (t - leavingTempF);
+  /** Positive while the line is BELOW saturation, i.e. while the air is unsaturated. */
+  const gap = (t: number) => humidityRatio(t, 1, pPsia) - wLine(t);
+
+  // Saturated where it leaves: the coil's own leaving state IS the apparatus dew
+  // point, and the bypass factor is zero. A perfect coil, and a valid answer.
+  if (gap(leavingTempF) <= 0) return { adpF: leavingTempF, adpW: leavingW };
+
+  // No further down than the line still carries water: below that there is
+  // nothing left to condense, and any "crossing" would be arithmetic on a
+  // negative humidity ratio.
+  const floor = slope > 1e-12 ? Math.max(-80, leavingTempF - leavingW / slope) : -80;
+  const step = 0.05;
+  let above = leavingTempF;
+  for (let t = leavingTempF - step; t >= floor - 1e-9; t -= step) {
+    if (gap(t) > 0) {
+      above = t;
+      continue;
+    }
+    let lo = t; // gap ≤ 0
+    let hi = above; // gap > 0
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2;
+      if (gap(mid) <= 0) lo = mid;
+      else hi = mid;
+    }
+    const adpF = (lo + hi) / 2;
+    return { adpF, adpW: wLine(adpF) };
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------------ *
  * The calculation
  * ------------------------------------------------------------------ */
 
@@ -161,6 +293,17 @@ export interface MoistureInput {
   otherUnit: WaterRateUnit;
 
   basis: HeatBasis;
+
+  /**
+   * The coil block, all optional. Leave `offCoilTemp` null and none of it runs —
+   * the rest of the screen is unchanged, which is the point: the water balance
+   * stands on its own and the coil is a question you ask of it afterwards.
+   */
+  coilEntering?: CoilEntering;
+  /** Off-coil (supply) dry-bulb, in `tempUnit`. */
+  offCoilTemp?: number | null;
+  /** Off-coil relative humidity, %. A wet cooling coil leaves air at 90–98%. */
+  offCoilRh?: number | null;
 }
 
 export interface MoistureGain {
@@ -217,6 +360,11 @@ export interface MoistureSolution {
   /** The dry-air mass flow the outdoor-air term was worked out on, lb/hr. */
   ventMassLbHr: number;
   pressurePsia: number;
+
+  /** The coil, when one was asked about. Null when the block was left empty. */
+  coil: CoilSolution | null;
+  /** Why the coil could not be worked out, when it could not. */
+  coilRefusal: string | null;
 }
 
 export type MoistureResult = { error: string } | MoistureSolution | null;
@@ -327,6 +475,16 @@ export function solveMoisture(i: MoistureInput): MoistureResult {
       "The outdoor air is not drier than the room you are asking for, so ventilation cannot dry it — every extra cfm brings more water in. This needs a coil or a dehumidifier, not a bigger fan.";
   }
 
+  const { coil, coilRefusal } = solveCoilBlock(i, {
+    pPsia,
+    altFt,
+    outdoorTempF: outF,
+    outdoorW,
+    indoorTempF: inF,
+    indoorW,
+    removalLbHr,
+  });
+
   return {
     outdoorW,
     indoorW,
@@ -349,6 +507,152 @@ export function solveMoisture(i: MoistureInput): MoistureResult {
     dilutionRefusal,
     ventMassLbHr,
     pressurePsia: pPsia,
+    coil,
+    coilRefusal,
+  };
+}
+
+/**
+ * The lowest off-coil humidity that still HAS an apparatus dew point, %.
+ *
+ * Turns a refusal into a number. Without it, a dedicated outdoor-air coil taking
+ * 34 °C / 70% down to 17 °C reads as "impossible" across every off-coil humidity
+ * anyone would think to type, which is both discouraging and wrong: the duty is
+ * ordinary, it is the 95% that is wrong. Deep dehumidification leaves the air all
+ * but saturated, and the straight-line construction says so sharply because the
+ * saturation curve is strongly convex through that range.
+ *
+ * Monotone, so a bisection is safe: raising the off-coil humidity raises the
+ * leaving humidity ratio, which flattens the process line towards the curve it
+ * has to touch. Bounded above by the humidity at which the air would leave as wet
+ * as it arrived, which is a different refusal with its own message.
+ */
+export function shallowestOffCoilRh(
+  enteringTempF: number,
+  enteringW: number,
+  leavingTempF: number,
+  fromRh: number,
+  pPsia: number,
+): number | null {
+  // The humidity at which leaving == entering water, exactly: invert W to a
+  // vapour pressure and read it against saturation at the leaving temperature.
+  const pw = (pPsia * enteringW) / (0.621945 + enteringW);
+  const hiRh = Math.min(100, (pw / satPressurePsia(leavingTempF)) * 100);
+  if (!(hiRh > fromRh)) return null;
+
+  const works = (r: number) => {
+    const w = humidityRatio(leavingTempF, r / 100, pPsia);
+    return w <= enteringW && apparatusDewPoint(enteringTempF, enteringW, leavingTempF, w, pPsia) != null;
+  };
+  if (!works(hiRh)) return null;
+
+  let lo = fromRh; // does not work
+  let hi = hiRh; // does
+  for (let k = 0; k < 24; k++) {
+    const mid = (lo + hi) / 2;
+    if (works(mid)) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/** Everything the coil block needs that the balance above has already worked out. */
+interface CoilContext {
+  pPsia: number;
+  altFt: number;
+  outdoorTempF: number;
+  outdoorW: number;
+  indoorTempF: number;
+  indoorW: number;
+  removalLbHr: number;
+}
+
+/**
+ * The coil question, answered on top of the water balance: how cold does the
+ * surface actually run, and how much air gets past it untouched.
+ *
+ * Every refusal here names the box to change, because all three failures are
+ * things the user typed rather than things the physics forbids in general.
+ */
+function solveCoilBlock(
+  i: MoistureInput,
+  c: CoilContext,
+): { coil: CoilSolution | null; coilRefusal: string | null } {
+  if (i.offCoilTemp == null) return { coil: null, coilRefusal: null };
+
+  const rh = i.offCoilRh ?? 95;
+  if (rh < 0 || rh > 100.01) {
+    return { coil: null, coilRefusal: "Off-coil humidity runs from 0 to 100%." };
+  }
+
+  const fromRoom = (i.coilEntering ?? "room") === "room";
+  const enteringTempF = fromRoom ? c.indoorTempF : c.outdoorTempF;
+  const enteringW = fromRoom ? c.indoorW : c.outdoorW;
+  const where = fromRoom ? "room" : "outdoor";
+
+  const leavingTempF = toF(i.offCoilTemp, i.tempUnit);
+  const leavingW = humidityRatio(leavingTempF, rh / 100, c.pPsia);
+  if (!Number.isFinite(leavingTempF) || !Number.isFinite(leavingW)) {
+    return { coil: null, coilRefusal: "Check the off-coil temperature." };
+  }
+
+  const say = (f: number) =>
+    i.tempUnit === "c" ? `${Math.round(fToC(f) * 10) / 10} °C` : `${Math.round(f * 10) / 10} °F`;
+
+  if (leavingTempF >= enteringTempF) {
+    return {
+      coil: null,
+      coilRefusal: `The air has to leave the coil colder than it arrives. On-coil here is the ${where} air at ${say(enteringTempF)}, so give an off-coil temperature below that.`,
+    };
+  }
+  if (leavingW > enteringW + 1e-12) {
+    return {
+      coil: null,
+      coilRefusal: `At ${say(leavingTempF)} and ${r1(rh)}% the air would leave the coil WETTER than the ${where} air arrives. Nothing is being dried, so there is no apparatus dew point — check the off-coil humidity.`,
+    };
+  }
+
+  const adp = apparatusDewPoint(enteringTempF, enteringW, leavingTempF, leavingW, c.pPsia);
+  if (!adp) {
+    const shallowest = shallowestOffCoilRh(enteringTempF, enteringW, leavingTempF, rh, c.pPsia);
+    const cure = !shallowest
+      ? ""
+      : shallowest >= 99.95
+        ? ` At ${say(leavingTempF)} only SATURATED air comes off one coil — nothing short of 100%.`
+        : ` The shallowest one coil can leave it at ${say(leavingTempF)} is about ${r1(shallowest)}%, because deep dehumidification leaves air all but saturated.`;
+    return {
+      coil: null,
+      coilRefusal:
+        `No apparatus dew point: the line from the ${where} air down to ${say(leavingTempF)} at ${r1(rh)}% never touches the saturation curve, so no single saturated surface produces it.${cure} Below that, the duty wants overcooling and reheat — or a desiccant.`,
+    };
+  }
+
+  const bypassFactor = (leavingTempF - adp.adpF) / (enteringTempF - adp.adpF);
+  const { cp, hfg } = basisDef(i.basis);
+  const sensible = cp * (enteringTempF - leavingTempF);
+  const latent = hfg * (enteringW - leavingW);
+  const dW = enteringW - leavingW;
+
+  return {
+    coil: {
+      enteringTempF,
+      enteringW,
+      enteringGrains: enteringW * GRAINS_PER_LB,
+      leavingTempF,
+      leavingW,
+      leavingGrains: leavingW * GRAINS_PER_LB,
+      adpF: adp.adpF,
+      adpW: adp.adpW,
+      adpGrains: adp.adpW * GRAINS_PER_LB,
+      bypassFactor,
+      contactFactor: 1 - bypassFactor,
+      gshr: sensible + latent > 0 ? sensible / (sensible + latent) : 1,
+      coilCfm:
+        c.removalLbHr > 0 && dW > 1e-9
+          ? c.removalLbHr / (dW * MASS_PER_CFM * densityFactor(c.altFt, enteringTempF))
+          : null,
+    },
+    coilRefusal: null,
   };
 }
 

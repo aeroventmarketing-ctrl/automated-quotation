@@ -1,3 +1,67 @@
+## 2026-09-21 · The coil: apparatus dew point and bypass factor
+
+The first cut of the Moisture tool shipped with a note saying two things had been left out. One of
+them was coil bypass factor, on the grounds that it "needs coil geometry and is a different
+calculation". The owner's reply was two words: *"No its not"*.
+
+They were right, and the reason matters more than the correction.
+
+### Bypass factor is a psychrometric construction, not a coil property
+
+Take the on-coil state and the off-coil state. Draw the straight line between them. Carry it on down
+to the saturation curve. Where it lands is the **apparatus dew point** — the single saturated surface
+the whole coil behaves as if it were. The bypass factor is then just where the off-coil state sits
+along that line:
+
+```
+BF = (t_off − t_ADP) / (t_on − t_ADP)   =   (W_off − W_ADP) / (W_on − W_ADP)
+```
+
+Rows, fin spacing and face velocity are what you need to go the OTHER way — predicting an off-coil
+state for a coil you have not chosen yet. Here the designer has already chosen it. So this needed
+nothing that was not already in the file: the same `satPressurePsia` curve `dewPointF` inverts a few
+lines above it.
+
+The cost of the wrong reason was telling a client *"the coil has to get below 14.2 °C"* instead of
+*"a 12.0 °C apparatus dew point at a 0.08 bypass factor"* — one is a constraint, the other is a
+number a supplier can quote against.
+
+### Two on-coil cases, and deliberately not a third
+
+- **Room air**, recirculated. The coil sees room air and has to take out the WHOLE balance — internal
+  gains and the outdoor-air term both — through the room-to-off-coil difference. So
+  `removalLbHr / (W_room − W_off)` is exactly its mass flow, and the screen quotes the CFM.
+- **Outdoor air**, a dedicated fresh-air unit drying the air before it reaches the room.
+
+A **mixed** on-coil state is left out on purpose. Mixing needs the supply airflow, the supply airflow
+needs the sensible load, and the mixed state then feeds back into the supply humidity it helped set.
+That is a loop this screen has no business closing when it holds only the latent half of the job. Two
+exact cases beat three where one is a guess.
+
+### Null is an answer
+
+A line steep enough — a duty latent enough — passes UNDER the saturation curve without ever touching
+it. There is then no apparatus dew point, and returning a number would be inventing one. That is the
+textbook case where one coil cannot do it in a pass: overcooling with reheat, or a desiccant.
+
+### What rendering the range found
+
+Sweeping realistic duties turned up something no single test case would have. A dedicated outdoor-air
+coil taking 34 °C / 70% down to 13–19 °C refused at **every** off-coil humidity anyone would think to
+type. The duty is ordinary; it is the 95% that is wrong. Deep dehumidification leaves air all but
+saturated, and the construction says so sharply because the saturation curve is strongly convex
+through that range.
+
+So the refusal no longer stops at "no". It bisects for the lowest off-coil humidity that DOES have an
+apparatus dew point and says it: *"The shallowest one coil can leave it at 17 °C is about 99.2%"*.
+A test pins it as a threshold — an ADP exists 0.05% above it and does not 0.05% below.
+
+### Not touched
+
+The water balance is unchanged. The coil block is additive: leave the off-coil temperature blank and
+the screen is exactly what it was, and a coil refusal never takes the balance down with it. Both are
+tested.
+
 ## 2026-09-21 · Moisture Removal Analysis — the latent half, counted as water
 
 The owner asked what a Moisture Removal Analysis is, read the answer, and said: *"Make it a new

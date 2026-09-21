@@ -10,6 +10,7 @@ import {
   BTU_PER_TON,
   type PeopleLatent,
   type WaterRateUnit,
+  type CoilEntering,
 } from "@/lib/hvac/moisture";
 import type { HeatAirflowUnit, TempUnit, AltitudeUnit } from "@/lib/hvac/psychrometrics";
 import { signed, nonNegative, r1, r2 } from "@/lib/hvac/parse";
@@ -38,6 +39,10 @@ export function MoistureTool() {
   const [process, setProcess] = useState("");
   const [processUnit, setProcessUnit] = useState<WaterRateUnit>("kgh");
 
+  const [coilEntering, setCoilEntering] = useState<CoilEntering>("room");
+  const [offCoilTemp, setOffCoilTemp] = useState("13");
+  const [offCoilRh, setOffCoilRh] = useState("95");
+
   const result = useMemo(
     () =>
       solveMoisture({
@@ -50,9 +55,11 @@ export function MoistureTool() {
         process: nonNegative(process), processUnit,
         other: null, otherUnit: "kgh",
         basis: "carrier",
+        coilEntering, offCoilTemp: signed(offCoilTemp), offCoilRh: nonNegative(offCoilRh),
       }),
     [outdoorTemp, outdoorRh, indoorTemp, indoorRh, tempUnit, altitude, altUnit,
-     ventAirflow, ventUnit, people, activity, process, processUnit],
+     ventAirflow, ventUnit, people, activity, process, processUnit,
+     coilEntering, offCoilTemp, offCoilRh],
   );
 
   const deg = tempUnit === "c" ? "°C" : "°F";
@@ -109,6 +116,17 @@ export function MoistureTool() {
         </div>
       </SubGroup>
 
+      <SubGroup label="The coil, if you are sizing one">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <PickField label="On-coil air" value={coilEntering} onChange={(v) => setCoilEntering(v as CoilEntering)}
+            className="lg:col-span-2"
+            options={[{ value: "room", label: "Room air (recirculated)" }, { value: "outdoor", label: "Outdoor air (100% fresh)" }]} />
+          <NumField label={`Off-coil (${deg})`} value={offCoilTemp} onChange={setOffCoilTemp} />
+          <NumField label="Off-coil RH (%)" value={offCoilRh} onChange={setOffCoilRh} />
+        </div>
+        <Hint>Leave the off-coil temperature blank to skip this. A wet cooling coil leaves air at 90–98%.</Hint>
+      </SubGroup>
+
       {isMoistureError(result) && <Hint>{result.error}</Hint>}
       {result === null && <Hint>Give both air states a temperature and a humidity.</Hint>}
 
@@ -138,6 +156,29 @@ export function MoistureTool() {
               carries the moisture away on its own — worth pricing against a dehumidifier.
             </Hint>
           ) : null}
+
+          {/* The coil's answer, in the coil's own voice whether it solves or not. */}
+          {ok.coilRefusal && <Hint>The coil. {ok.coilRefusal}</Hint>}
+          {ok.coil && (
+            <>
+              <Stats>
+                <Stat label="Apparatus dew point" value={`${asDeg(ok.coil.adpF)} ${deg}`}
+                  sub="the saturated surface this coil behaves as if it were" />
+                <Stat label="Bypass factor" value={ok.coil.bypassFactor.toFixed(2)}
+                  sub={`${Math.round(ok.coil.contactFactor * 100)}% of the air touches the fins`} />
+                <Stat label="Coil sensible ratio" value={ok.coil.gshr.toFixed(2)}
+                  sub={`${Math.round((1 - ok.coil.gshr) * 100)}% of its duty is drying, not cooling`} />
+                <Stat label="Across the coil"
+                  value={ok.coil.coilCfm != null ? `${fmt(ok.coil.coilCfm)} CFM` : "—"}
+                  sub={`drops ${r1(ok.coil.enteringGrains - ok.coil.leavingGrains)} gr/lb`} />
+              </Stats>
+              <Hint>
+                On-coil {r1(ok.coil.enteringGrains)} gr/lb → off-coil {r1(ok.coil.leavingGrains)} → apparatus dew
+                point {r1(ok.coil.adpGrains)}, all on one straight line carried down to the saturation curve. No
+                coil geometry needed: the bypass factor falls out of the two air states.
+              </Hint>
+            </>
+          )}
         </>
       )}
     </ToolCard>

@@ -3,14 +3,23 @@ import {
   solveMoisture,
   isMoistureError,
   dewPointF,
+  apparatusDewPoint,
+  shallowestOffCoilRh,
   lbHrToLitresDay,
   PEOPLE_LATENT,
   fToC,
   type MoistureInput,
   type MoistureSolution,
+  type CoilSolution,
 } from "./moisture";
 import { PEOPLE_ACTIVITY } from "./ventilation";
-import { stdPressurePsia, humidityRatio, satPressurePsia } from "./psychrometrics";
+import {
+  stdPressurePsia,
+  humidityRatio,
+  satPressurePsia,
+  densityFactor,
+  MASS_PER_CFM,
+} from "./psychrometrics";
 
 /**
  * Moisture Removal Analysis.
@@ -44,6 +53,18 @@ const errorOf = (over: Partial<MoistureInput>): string => {
   return r.error;
 };
 const gain = (s: MoistureSolution, key: string) => s.gains.find((g) => g.key === key);
+
+/** The same job with the coil block switched on. Off-coil 13 °C at 95% RH. */
+const coilOf = (over: Partial<MoistureInput> = {}): CoilSolution => {
+  const s = solve({ offCoilTemp: 13, offCoilRh: 95, ...over });
+  if (!s.coil) throw new Error(`expected a coil, got refusal: ${s.coilRefusal}`);
+  return s.coil;
+};
+const coilRefusalOf = (over: Partial<MoistureInput>): string => {
+  const s = solve({ offCoilTemp: 13, offCoilRh: 95, ...over });
+  if (!s.coilRefusal) throw new Error("expected a coil refusal");
+  return s.coilRefusal;
+};
 
 describe("the two air states", () => {
   /** Everything downstream is these two numbers, so they are pinned directly. */
@@ -261,6 +282,189 @@ describe("what it refuses, and why", () => {
   it("half a form is a blank, not an error", () => {
     expect(solveMoisture({ ...manila, outdoorTemp: null })).toBeNull();
     expect(solveMoisture({ ...manila, indoorRh: null })).toBeNull();
+  });
+});
+
+/**
+ * The coil.
+ *
+ * Left out of the first cut on the stated grounds that bypass factor "needs coil
+ * geometry". It does not, and these pin the construction that shows it doesn't:
+ * a straight line between two air states, carried on to the saturation curve.
+ */
+describe("the coil — apparatus dew point and bypass factor", () => {
+  /**
+   * The definition, asserted directly rather than through a worked example: the
+   * apparatus dew point is a SATURATED state, and it is ON the line between the
+   * two air states. Those two facts are the whole construction.
+   */
+  it("lands on the saturation curve, and on the process line", () => {
+    const c = coilOf();
+    const p = stdPressurePsia(0);
+    // Saturated: its humidity ratio is the most that air can hold at that temperature.
+    expect(humidityRatio(c.adpF, 1, p)).toBeCloseTo(c.adpW, 8);
+    // Collinear with on-coil and off-coil.
+    const slope = (c.enteringW - c.leavingW) / (c.enteringTempF - c.leavingTempF);
+    expect(c.leavingW + slope * (c.adpF - c.leavingTempF)).toBeCloseTo(c.adpW, 10);
+  });
+
+  it("sits below the off-coil temperature, which sits below the on-coil", () => {
+    const c = coilOf();
+    expect(c.adpF).toBeLessThan(c.leavingTempF);
+    expect(c.leavingTempF).toBeLessThan(c.enteringTempF);
+  });
+
+  /**
+   * The number the owner asked for, on the job this screen opens with: a 24 °C /
+   * 55% room recirculated through a coil leaving at 13 °C / 95%.
+   */
+  it("puts a 24 °C room on a 13 °C coil at about a 12 °C ADP and a 0.10 bypass", () => {
+    const c = coilOf();
+    expect(fToC(c.adpF)).toBeCloseTo(11.8, 0);
+    expect(c.bypassFactor).toBeCloseTo(0.1, 1);
+    expect(c.contactFactor).toBeCloseTo(1 - c.bypassFactor, 10);
+  });
+
+  /** The definition of bypass factor, in temperature and in humidity ratio alike. */
+  it("reads the same bypass factor off the temperatures and off the humidity ratios", () => {
+    const c = coilOf();
+    const byTemp = (c.leavingTempF - c.adpF) / (c.enteringTempF - c.adpF);
+    const byW = (c.leavingW - c.adpW) / (c.enteringW - c.adpW);
+    expect(c.bypassFactor).toBeCloseTo(byTemp, 12);
+    expect(c.bypassFactor).toBeCloseTo(byW, 8);
+  });
+
+  it("is a perfect coil — bypass zero — when the air leaves saturated", () => {
+    const c = coilOf({ offCoilRh: 100 });
+    expect(c.bypassFactor).toBeCloseTo(0, 10);
+    expect(c.adpF).toBeCloseTo(c.leavingTempF, 8);
+  });
+
+  /** More bypass is drier-leaving air at the same temperature, and a colder surface. */
+  it("needs a colder surface, and bypasses more air, as the off-coil air gets drier", () => {
+    const wet = coilOf({ offCoilRh: 98 });
+    const dry = coilOf({ offCoilRh: 88 });
+    expect(dry.adpF).toBeLessThan(wet.adpF);
+    expect(dry.bypassFactor).toBeGreaterThan(wet.bypassFactor);
+  });
+
+  it("takes the on-coil air from the room or from outdoors, as asked", () => {
+    expect(coilOf({ coilEntering: "room" }).enteringGrains).toBeCloseTo(solve().indoorGrains, 8);
+    // 34 °C / 70% cooled to 13 °C is far too deep a line to meet saturation, so
+    // the outdoor case is checked on a coil that can actually do it.
+    const doas = solve({ coilEntering: "outdoor", offCoilTemp: 24, offCoilRh: 95 });
+    expect(doas.coil!.enteringGrains).toBeCloseTo(solve().outdoorGrains, 8);
+  });
+
+  /**
+   * The tie back to the water balance: this is the air that has to cross the
+   * coil to take out the litres the rest of the screen just counted.
+   */
+  it("sizes the airflow across the coil from the day's water", () => {
+    const s = solve({ offCoilTemp: 13, offCoilRh: 95 });
+    const c = s.coil!;
+    expect(c.coilCfm).toBeGreaterThan(0);
+    // Put the airflow back through the coil and it removes exactly the balance —
+    // the mass it carries, times the water it drops per pound.
+    const mass = c.coilCfm! * MASS_PER_CFM * densityFactor(0, c.enteringTempF);
+    expect(mass * (c.enteringW - c.leavingW)).toBeCloseTo(s.removalLbHr, 6);
+  });
+
+  it("has no airflow to quote when there is no water to remove", () => {
+    const s = solve({
+      outdoorTemp: 18, outdoorRh: 40, indoorTemp: 26, indoorRh: 60,
+      offCoilTemp: 13, offCoilRh: 95,
+    });
+    expect(s.surplus).toBe(true);
+    expect(s.coil!.coilCfm).toBeNull();
+  });
+
+  /**
+   * The grand sensible heat ratio: the coil's OWN split, not the room's. It
+   * falls as the coil is asked to leave the air drier, because that is latent
+   * work — the same 19.8 °F of cooling doing more of it.
+   */
+  it("reports the coil's sensible share, which falls as it is asked to leave drier air", () => {
+    const wet = coilOf({ offCoilRh: 98 });
+    const dry = coilOf({ offCoilRh: 88 });
+    expect(dry.gshr).toBeLessThan(wet.gshr);
+    for (const c of [wet, dry]) {
+      expect(c.gshr).toBeGreaterThan(0);
+      expect(c.gshr).toBeLessThan(1);
+    }
+  });
+});
+
+describe("what the coil block refuses, and why", () => {
+  it("an off-coil temperature at or above the on-coil air", () => {
+    expect(coilRefusalOf({ offCoilTemp: 24 })).toMatch(/leave the coil colder than it arrives/);
+    expect(coilRefusalOf({ offCoilTemp: 30 })).toMatch(/room air at 24 °C/);
+  });
+
+  it("an off-coil humidity outside 0–100", () => {
+    expect(coilRefusalOf({ offCoilRh: 130 })).toMatch(/0 to 100/);
+  });
+
+  /**
+   * The case that matters commercially, and the one that sends you to a
+   * desiccant: the line from on-coil to off-coil passes UNDER the saturation
+   * curve without touching it. No single saturated surface produces that leaving
+   * state, so there is no apparatus dew point to report — and inventing one
+   * would be the worst possible answer.
+   */
+  it("a duty too deep and too latent for one coil — no apparatus dew point exists", () => {
+    const why = coilRefusalOf({ coilEntering: "outdoor", offCoilTemp: 13, offCoilRh: 95 });
+    expect(why).toMatch(/No apparatus dew point/);
+    expect(why).toMatch(/overcooling and reheat|desiccant/);
+    // …and the function underneath says the same thing with a null, not a number.
+    const p = stdPressurePsia(0);
+    expect(
+      apparatusDewPoint(93.2, humidityRatio(93.2, 0.7, p), 55.4, humidityRatio(55.4, 0.95, p), p),
+    ).toBeNull();
+  });
+
+  /**
+   * …and it does not stop at "no". The duty is ordinary — it is the 95% that is
+   * wrong, because deep dehumidification leaves air all but saturated. Without
+   * this the screen refuses every off-coil humidity anyone would think to type
+   * and reads as "impossible", which is both discouraging and untrue.
+   */
+  it("says what off-coil humidity WOULD have one, rather than stopping at no", () => {
+    const why = coilRefusalOf({ coilEntering: "outdoor", offCoilTemp: 17, offCoilRh: 95 });
+    expect(why).toMatch(/shallowest one coil can leave it/);
+
+    const p = stdPressurePsia(0);
+    const onF = 34 * 1.8 + 32;
+    const onW = humidityRatio(onF, 0.7, p);
+    const offF = 17 * 1.8 + 32;
+    const rh = shallowestOffCoilRh(onF, onW, offF, 95, p)!;
+    expect(rh).toBeGreaterThan(95);
+    expect(rh).toBeLessThanOrEqual(100);
+    // It is a THRESHOLD: just above it there is an ADP, just below it there is not.
+    const at = (r: number) =>
+      apparatusDewPoint(onF, onW, offF, humidityRatio(offF, r / 100, p), p);
+    expect(at(rh + 0.05)).not.toBeNull();
+    expect(at(rh - 0.05)).toBeNull();
+  });
+
+  it("an off-coil state wetter than the air arriving", () => {
+    expect(coilRefusalOf({ indoorRh: 20, offCoilTemp: 13, offCoilRh: 95 }))
+      .toMatch(/leave the coil WETTER/);
+  });
+
+  it("is simply absent when nothing was asked — the rest of the screen is unchanged", () => {
+    const s = solve();
+    expect(s.coil).toBeNull();
+    expect(s.coilRefusal).toBeNull();
+    expect(s.removalLitresDay).toBeCloseTo(solve({ offCoilTemp: 13 }).removalLitresDay, 10);
+  });
+
+  /** A refusal is about the COIL, and must not take the water balance down with it. */
+  it("leaves the water balance standing when the coil cannot be solved", () => {
+    const s = solve({ coilEntering: "outdoor", offCoilTemp: 13 });
+    expect(s.coil).toBeNull();
+    expect(s.coilRefusal).toBeTruthy();
+    expect(s.removalLitresDay).toBeCloseTo(660, -2);
   });
 });
 

@@ -14,6 +14,7 @@ import {
   BTU_PER_TON,
   type PeopleLatent,
   type WaterRateUnit,
+  type CoilEntering,
 } from "@/lib/hvac/moisture";
 import type { HeatAirflowUnit, TempUnit, AltitudeUnit, HeatBasis } from "@/lib/hvac/psychrometrics";
 import { signed, nonNegative, r1, r2 } from "@/lib/hvac/parse";
@@ -52,6 +53,10 @@ export function MoistureCalculator() {
   const [other, setOther] = useState("");
   const [otherUnit, setOtherUnit] = useState<WaterRateUnit>("kgh");
 
+  const [coilEntering, setCoilEntering] = useState<CoilEntering>("room");
+  const [offCoilTemp, setOffCoilTemp] = useState("13");
+  const [offCoilRh, setOffCoilRh] = useState("95");
+
   const [basis] = useState<HeatBasis>("carrier");
 
   const result = useMemo(
@@ -66,13 +71,17 @@ export function MoistureCalculator() {
         process: nonNegative(process), processUnit,
         other: nonNegative(other), otherUnit,
         basis,
+        coilEntering, offCoilTemp: signed(offCoilTemp), offCoilRh: nonNegative(offCoilRh),
       }),
     [outdoorTemp, outdoorRh, indoorTemp, indoorRh, tempUnit, altitude, altUnit,
-     ventAirflow, ventUnit, people, activity, process, processUnit, other, otherUnit, basis],
+     ventAirflow, ventUnit, people, activity, process, processUnit, other, otherUnit, basis,
+     coilEntering, offCoilTemp, offCoilRh],
   );
 
   const deg = tempUnit === "c" ? "°C" : "°F";
   const asDeg = (f: number) => (tempUnit === "c" ? r1(fToC(f)) : r1(f));
+  // The same default the solver uses, so the heading reads what was solved.
+  const offRh = nonNegative(offCoilRh) ?? 95;
   const ok = result && !isMoistureError(result) ? result : null;
   // Definition order is not size order, so the "attack this first" line has to
   // look for the largest rather than take the first — the same trap the
@@ -125,6 +134,18 @@ export function MoistureCalculator() {
           <Field label="Other" value={other} onChange={setOther} width="w-28" placeholder="wet goods" />
           <Picker label="" value={otherUnit} onChange={(v) => setOtherUnit(v as WaterRateUnit)} className="w-28"
             options={[["kgh", "kg/h"], ["lday", "L/day"]]} />
+        </Group>
+
+        {/* ---- the coil, if one is being sized ---- */}
+        <Group label="The coil — leave the off-coil temperature blank to skip it">
+          <Picker label="On-coil air" value={coilEntering} onChange={(v) => setCoilEntering(v as CoilEntering)}
+            className="w-44"
+            options={[["room", "Room air (recirculated)"], ["outdoor", "Outdoor air (100% fresh)"]]} />
+          <Field label={`Off-coil (${deg})`} value={offCoilTemp} onChange={setOffCoilTemp} width="w-28" />
+          <Field label="Off-coil RH (%)" value={offCoilRh} onChange={setOffCoilRh} width="w-28" />
+          <p className="pb-1.5 text-[11px] text-muted-foreground">
+            A wet cooling coil leaves air at 90–98%; a deep one at 98–100%.
+          </p>
         </Group>
 
         {isMoistureError(result) && (
@@ -210,6 +231,57 @@ export function MoistureCalculator() {
                 dehumidifier. Worth pricing against the machine.
               </p>
             ) : null}
+
+            {/*
+              The coil: how cold the surface actually runs, and what misses it.
+              One panel whether it solves or not — a refusal in its own amber box
+              stacked straight under the fan verdict, in the same colour, and the
+              two read as a single wall of warning. The amber is the FAN's answer;
+              this is the coil's, either way.
+            */}
+            {(ok.coil || ok.coilRefusal) && (
+              <div className="space-y-3 rounded-md border border-sky-600/40 bg-sky-50/60 p-3">
+                <div className="text-xs font-medium text-sky-900">
+                  The coil — {coilEntering === "room" ? "room air recirculated" : "100% outdoor air"}, leaving at{" "}
+                  {offCoilTemp} {deg} / {r1(offRh)}%
+                </div>
+                {ok.coilRefusal && <p className="text-sm text-sky-900">{ok.coilRefusal}</p>}
+                {ok.coil && (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Stat
+                        label="Apparatus dew point"
+                        value={`${asDeg(ok.coil.adpF)} ${deg}`}
+                        sub="the one saturated surface this coil behaves as if it were"
+                      />
+                      <Stat
+                        label="Bypass factor"
+                        value={ok.coil.bypassFactor.toFixed(2)}
+                        sub={`${Math.round(ok.coil.contactFactor * 100)}% of the air touches the fins`}
+                      />
+                      <Stat
+                        label="Coil sensible ratio"
+                        value={ok.coil.gshr.toFixed(2)}
+                        sub={`${Math.round((1 - ok.coil.gshr) * 100)}% of its duty is drying, not cooling`}
+                      />
+                    </div>
+                    <p className="text-[11px] text-sky-900/80">
+                      On-coil <strong>{r1(ok.coil.enteringGrains)} gr/lb</strong> → off-coil{" "}
+                      <strong>{r1(ok.coil.leavingGrains)}</strong> → apparatus dew point{" "}
+                      <strong>{r1(ok.coil.adpGrains)}</strong>, all on one straight line to the saturation curve —
+                      no coil geometry in it.
+                      {ok.coil.coilCfm != null && (
+                        <>
+                          {" "}It drops {r1(ok.coil.enteringGrains - ok.coil.leavingGrains)} gr/lb, so{" "}
+                          <strong>{fmt(ok.coil.coilCfm)} CFM</strong> has to cross it to take out the{" "}
+                          {fmt(ok.removalLitresDay)} litres a day.
+                        </>
+                      )}
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             <p className="text-[11px] text-muted-foreground">
               Outdoor air carries <strong>{r1(ok.outdoorGrains)} gr/lb</strong> against the room&apos;s{" "}
