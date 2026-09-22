@@ -34,6 +34,12 @@ enum Family {
   ACCESSORY
   SERVICE
   OTHER
+  // Appended, to match what `ALTER TYPE ... ADD VALUE` does in 0057 — Postgres
+  // adds to the END unless told otherwise, and `orderBy: { family: "asc" }`
+  // follows the database's order, not this file's. Listing it mid-enum here
+  // would make `prisma db push` (which builds the type from this file) disagree
+  // with `prisma migrate` about where motors sort.
+  MOTOR
 }
 
 enum InquirySource {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
   hpOptions,
   dynamicBalancingApplies,
   type Voltage,
+  type MotorRow,
 } from "@/lib/pricing/motors";
 import {
   tecoSellingRow,
@@ -34,6 +35,13 @@ import {
   type TecoSellingRow,
 } from "@/lib/teco-induction-selling";
 import { hyundaiSellingRow, hyundaiHpOptions } from "@/lib/hyundai-induction-selling";
+import {
+  catalogueMotorPrice,
+  catalogueTecoPrice,
+  catalogueHyundaiPrice,
+  mountingOf,
+  type MotorPriceMap,
+} from "@/lib/motor-catalogue";
 import { Download, Send, Check, CornerUpLeft, Trash2, Gauge, Plus, RotateCcw, Search, AlertTriangle } from "lucide-react";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { PRODUCT_CATEGORIES, PRODUCT_TAXONOMY, typesFor, entryFor, bladeTypesFor, brandsFor, seriesFor, groupsFor, groupForType } from "@/lib/product-taxonomy";
@@ -1832,11 +1840,28 @@ function inductionMotorRow(specs: LineSpecs): TecoSellingRow | undefined {
     ? hyundaiSellingRow(specs.motorHp, inductionPole(specs))
     : tecoSellingRow(inductionSection(specs), specs.motorHp, inductionPole(specs));
 }
-/** Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null.
- *  Foot- vs flange-mounted price comes straight from the selling database. */
-function inductionUnitPrice(specs: LineSpecs, vatRate: number): number | null {
+/**
+ * Auto unit price (VAT-inclusive, as stored) for an induction-motor line, or null.
+ *
+ * The catalogue answers first, and the selling database is the fallback — so an
+ * admin raising a TECO price in Admin → Catalogue reaches this line, and a
+ * missing catalogue row prices exactly as it did before. Foot- vs flange-mounted
+ * follows the same rule on both sides: flange where the supplier lists one, the
+ * foot price where they do not.
+ */
+function inductionNetPrice(specs: LineSpecs, prices: MotorPriceMap | null): number | null {
   const m = inductionMotorRow(specs);
-  return m ? round2(tecoNetPrice(m, specs.motorMounting) * (1 + vatRate)) : null;
+  if (!m) return null;
+  const mounting = mountingOf(specs.motorMounting);
+  const fromCatalogue = isInductionHyundai(specs)
+    ? catalogueHyundaiPrice(m.hp, m.pole, mounting, prices)
+    : catalogueTecoPrice(inductionSection(specs), m.hp, m.pole, mounting, prices);
+  return fromCatalogue ?? tecoNetPrice(m, specs.motorMounting);
+}
+
+function inductionUnitPrice(specs: LineSpecs, vatRate: number, prices: MotorPriceMap | null): number | null {
+  const net = inductionNetPrice(specs, prices);
+  return net == null ? null : round2(net * (1 + vatRate));
 }
 /** Description for an induction motor, built from the TECO selling database by the
  *  selected phase / pole / HP (and Xproof). kW / RPM / frame come from the file;
@@ -2656,6 +2681,7 @@ export function QuotationBuilder({
   orderPaid = false,
   revisionHistory = [],
   catalog,
+  motorPrices = null,
   propellerSpLock = true,
   axialSpLock = true,
 }: {
@@ -2677,6 +2703,13 @@ export function QuotationBuilder({
   orderPaid?: boolean;
   revisionHistory?: RevisionSnapshot[];
   catalog: Record<string, CatalogEntry>;
+  /**
+   * Motor prices from the catalogue, so a TECO increase entered in
+   * Admin → Catalogue reaches a quote without a deploy. Null (or a code that is
+   * not in it) falls back to the price tables in `lib/pricing/motors` and the
+   * selling databases, which is exactly what this page did before.
+   */
+  motorPrices?: MotorPriceMap | null;
   propellerSpLock?: boolean;
   axialSpLock?: boolean;
 }) {
@@ -2684,6 +2717,19 @@ export function QuotationBuilder({
   // Engineers / admins can always edit & Save changes (any status); everyone
   // else only while the quote is DRAFT.
   const editable = quotation.status === "DRAFT" || canApprove;
+
+  /**
+   * The net price of a fan's motor — catalogue first, code table second.
+   *
+   * Every `motorNetPrice(...)` in this file goes through here instead, so there
+   * is ONE place that decides where a motor price comes from. Seeded from the
+   * code table the two agree to the peso, which `motor-catalogue.test.ts` walks
+   * every motor to prove.
+   */
+  const netMotor = useCallback(
+    (m: MotorRow, exproof: boolean) => catalogueMotorPrice(m, exproof, motorPrices) ?? motorNetPrice(m, exproof),
+    [motorPrices],
+  );
 
   // Admin-only quotation-number editing.
   const [quoteNo, setQuoteNo] = useState(quotation.quoteNumber);
@@ -3366,7 +3412,7 @@ export function QuotationBuilder({
           s2.inches = null;
           s2.power_w = null;
           s2.bodyPrice = null;
-          const price = inductionUnitPrice(s2, vatRate);
+          const price = inductionUnitPrice(s2, vatRate, motorPrices);
           return {
             ...l,
             specs: s2,
@@ -3635,7 +3681,7 @@ export function QuotationBuilder({
         const exp = specs.exproof === true;
         // No unit price until the motor is fully specified: a body-only line (missing
         // HP / phase, or an unpriceable combo) stays ₱0 rather than quoting body alone.
-        const net = motor ? computeUnitPrice(body, motorNetPrice(motor, exp), hp, phase) : 0;
+        const net = motor ? computeUnitPrice(body, netMotor(motor, exp), hp, phase) : 0;
         const gross = motor ? round2(net * (1 + vatRate)) : 0;
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
@@ -3818,7 +3864,7 @@ export function QuotationBuilder({
         const exp = specs.exproof === true;
         // No unit price until the motor is fully specified: a body-only line (missing
         // HP / phase, or an unpriceable combo) stays ₱0 rather than quoting body alone.
-        const net = motor ? computeUnitPrice(body, motorNetPrice(motor, exp), hp, phase) : 0;
+        const net = motor ? computeUnitPrice(body, netMotor(motor, exp), hp, phase) : 0;
         const gross = motor ? round2(net * (1 + vatRate)) : 0;
         const mModel = motor ? motorModelCode(motor, voltageKey(specs.motorVolts), exp) : null;
         const combined = combinedModel(displayBlowerModel(specs), mModel);
@@ -5547,7 +5593,7 @@ export function QuotationBuilder({
                           const est = isPrebuiltUnit(l.specs)
                             ? round2(cat?.basePrice ?? 0)
                             : estBody > 0
-                              ? round2(computeUnitPrice(estBody, motor?.price ?? 0, r.motorHp, 3) * (1 + vatRate))
+                              ? round2(computeUnitPrice(estBody, motor ? netMotor(motor, false) : 0, r.motorHp, 3) * (1 + vatRate))
                               : 0;
                           const isRec = r.modelId === w.rec.modelId;
                           return (
@@ -5794,7 +5840,7 @@ export function QuotationBuilder({
                           if (m == null) return "Pick phase, pole and HP to auto-price.";
                           const exp = l.specs.exproof === true && inductionExEligible(l.specs);
                           const flanged = l.specs.motorMounting === "Flanged Mounted" && m.flange != null;
-                          const net = tecoNetPrice(m, l.specs.motorMounting);
+                          const net = inductionNetPrice(l.specs, motorPrices) ?? tecoNetPrice(m, l.specs.motorMounting);
                           return `₱${net.toLocaleString()} / unit${exp ? " (Xproof)" : ""}${flanged ? " (Flange)" : ""} (VAT ex) × 1.12 = auto-priced (editable).`;
                         }
                         if (isJetFan(l.specs)) {
@@ -6003,7 +6049,7 @@ export function QuotationBuilder({
                       (hp && ph ? (
                         motor ? (
                           <>
-                            <span>Motor {mModel ?? "—"}{exp ? " (EX)" : ""}: {formatCurrency(motorNetPrice(motor, exp), quotation.currency)}</span>
+                            <span>Motor {mModel ?? "—"}{exp ? " (EX)" : ""}: {formatCurrency(netMotor(motor, exp), quotation.currency)}</span>
                             {exp && !hasExproofPrice(hp) && <span className="text-amber-600">EX price N/A for {hp} HP — using standard</span>}
                             {db && <span className="text-amber-600">+10% dynamic balancing (3-ph &gt; 10 HP)</span>}
                             {l.specs.blowerModel && <span>Model: <b>{combinedModel(displayBlowerModel(l.specs), mModel)}</b></span>}
@@ -6016,7 +6062,7 @@ export function QuotationBuilder({
                       ))}
                     {isBlower && hp && ph && motor && (
                       <span className="ml-auto">
-                        Body + Motor: <b className="text-foreground">{formatCurrency(round2((l.specs.bodyPrice ?? 0) + motorNetPrice(motor, exp)), quotation.currency)}</b>
+                        Body + Motor: <b className="text-foreground">{formatCurrency(round2((l.specs.bodyPrice ?? 0) + netMotor(motor, exp)), quotation.currency)}</b>
                       </span>
                     )}
                     <span className={`text-foreground${isBlower && hp && ph && motor ? "" : " ml-auto"}`}>

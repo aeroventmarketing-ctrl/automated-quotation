@@ -1,13 +1,18 @@
 import { prisma } from "@/lib/db";
+import { motorCatalogueRows } from "@/lib/motor-catalogue";
 import { CatalogueManager } from "./catalogue-manager";
+import { MotorSeedButton } from "./motor-seed-button";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCataloguePage() {
-  const items = await prisma.catalogueItem.findMany({
-    orderBy: [{ family: "asc" }, { modelCode: "asc" }],
-    include: { priceList: { where: { variantKey: "default" }, take: 1 } },
-  });
+  const [items, motorsPresent] = await Promise.all([
+    prisma.catalogueItem.findMany({
+      orderBy: [{ family: "asc" }, { modelCode: "asc" }],
+      include: { priceList: { where: { variantKey: "default" }, take: 1 } },
+    }),
+    prisma.catalogueItem.count({ where: { family: "MOTOR" } }),
+  ]);
 
   return (
     <CatalogueManager
@@ -23,6 +28,7 @@ export default async function AdminCataloguePage() {
         specsJson: JSON.stringify(i.specs ?? {}),
         basePrice: i.priceList[0] ? Number(i.priceList[0].basePrice) : 0,
       }))}
+      motorSeed={<MotorSeedButton present={motorsPresent} expected={motorCatalogueRows().length} />}
     />
   );
 }

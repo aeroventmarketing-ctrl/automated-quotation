@@ -8,7 +8,8 @@ import { Select } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfidenceBadge } from "@/components/status-badge";
 import { formatCurrency } from "@/lib/utils";
-import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
+import { lookupMotor, computeUnitPrice, motorNetPrice } from "@/lib/pricing/motors";
+import { catalogueMotorPrice, type MotorPriceMap } from "@/lib/motor-catalogue";
 import { AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
 
@@ -22,7 +23,14 @@ function sizeOf(sel: SelectionResult): number {
   return m ? parseInt(m[1], 10) / 100 : 0;
 }
 
-export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }) {
+export function SelectionTool({
+  priceMap,
+  motorPrices = null,
+}: {
+  priceMap: Record<string, number>;
+  /** Catalogue motor prices; null falls back to `lib/pricing/motors`. */
+  motorPrices?: MotorPriceMap | null;
+}) {
   const [airflow, setAirflow] = useState("");
   const [airflowUnit, setAirflowUnit] = useState("cfm");
   const [pressure, setPressure] = useState("");
@@ -201,7 +209,9 @@ export function SelectionTool({ priceMap }: { priceMap: Record<string, number> }
                 tag === "CABSISW" || tag === "CEBCAB" ? 1 / 0.54 : tag === "CFABCAB" ? 1 / 0.9 : 1;
               const body = (priceMap[sel.modelId] ?? 0) * tagFactor * cabFactor;
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
-              const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
+              // Catalogue price first, so this estimate matches what a quote would charge.
+              const motorNet = motor ? catalogueMotorPrice(motor, false, motorPrices) ?? motorNetPrice(motor, false) : 0;
+              const estNet = body > 0 ? computeUnitPrice(body, motorNet, sel.motorHp, 3) : 0;
               const isRec = sel.modelId === recommended.modelId;
               return (
                 <div
