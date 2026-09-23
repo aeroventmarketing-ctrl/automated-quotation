@@ -11,6 +11,7 @@ import {
   effectiveCheckAmount, effectiveCheckNo, issueApproved,
   type CheckDoc,
 } from "@/lib/voucher-check";
+import type { CashPayment } from "@/lib/cash-payment";
 import { AI_CHECK_READ_LIMIT } from "@/lib/ai/limits";
 import type { PRStatus } from "@/lib/purchasing";
 import { attachVoucherCheck, removeVoucherCheck, correctCheckRead, approveCheckDiscrepancy, unapproveCheckDiscrepancy } from "../orders/actions";
@@ -49,12 +50,19 @@ export function VoucherCheckControl({
   canApproveIssue = false,
   canView,
   netAmount,
+  cashPaid = null,
 }: {
   prId: string;
   docs: CheckDoc[];
   status: PRStatus;
   /** The PO's supplier gives us payment terms — so a check exists to photograph. */
   supplierGivesTerms: boolean;
+  /**
+   * Settled in CASH, ticked on Check Monitoring. Turns the amber *Check not
+   * attached* nag into a green *Paid in cash* statement: there is no check
+   * coming, so asking for one is simply wrong.
+   */
+  cashPaid?: CashPayment | null;
   /**
    * Accounting / Payment Approver / admin, AND the PO is in the window where a
    * check may be attached (`checkAttachableAt` — Budgeted, not yet completed).
@@ -109,6 +117,15 @@ export function VoucherCheckControl({
   const mayRead = canRead ?? canAttach;
   const mayRemove = canRemove ?? canAttach;
   const missing = checkMissing({ supplierGivesTerms, status, docs });
+  /**
+   * Paid in cash AND nothing attached.
+   *
+   * The `docs.length === 0` half matters: a photo turning up later means the
+   * check is what paid, and the register agrees — `buildCheckWatch` only takes
+   * its cash branch when a PO has no documents. Without it the card and the
+   * register would tell two different stories about the same PO.
+   */
+  const paidInCash = !!cashPaid && docs.length === 0;
   // Nothing attached and nothing expected — say nothing.
   if (docs.length === 0 && !missing && !canAttach && !mayRead && !mayRemove) return null;
   if (!canView && !canAttach && !mayRead && !mayRemove) return null;
@@ -251,7 +268,34 @@ export function VoucherCheckControl({
   return (
     <span className="inline-flex flex-col items-start gap-1">
       <span className="inline-flex flex-wrap items-center gap-2">
-        {missing && (
+        {/*
+          Paid in cash — the owner's *"put a notification … colored in green
+          stating that the PO is paid in cash"*.
+
+          Shown only while NO check photo is attached, which is the same
+          condition Check Monitoring clears on. If a photo ever turns up, the
+          check is the payment and the register says so; the card must not go on
+          claiming cash while a check sits beside it.
+
+          It REPLACES the amber badge rather than joining it: "Check not
+          attached" is a reminder to attach one, and once the PO was paid in cash
+          that reminder is not merely redundant, it is asking for something that
+          does not exist.
+        */}
+        {paidInCash && (
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-600/40 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
+            title={
+              `Settled in cash${cashPaid?.byName ? ` — recorded by ${cashPaid.byName}` : ""}`
+              + `${cashPaid?.on ? ` on ${formatDate(cashPaid.on)}` : ""}`
+              + ". No check was issued, so there is none to attach. Untick it on Check Monitoring to undo."
+            }
+          >
+            <Banknote className="h-3.5 w-3.5" /> Paid in cash
+            {cashPaid?.on && <span className="font-normal opacity-80">· {formatDate(cashPaid.on)}</span>}
+          </span>
+        )}
+        {missing && !paidInCash && (
           <span
             className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700"
             title={

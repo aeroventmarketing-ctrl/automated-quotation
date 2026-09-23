@@ -11,6 +11,7 @@ import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
 import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override";
 import { VoucherCheckControl } from "../../purchasing/voucher-check-control";
+import type { CashPayment } from "@/lib/cash-payment";
 import { PurchaseDueControl } from "../../purchasing/purchase-due-control";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
@@ -66,6 +67,8 @@ interface PRRow {
   canApproveReconcile?: boolean;
   /** Photos of the check issued for this PO's voucher. */
   checkDocs?: CheckDoc[];
+  /** Settled in cash, from Check Monitoring's tickbox. */
+  cashPaid?: CashPayment | null;
   /** The PO's supplier gives us terms — so this PO is paid by check. */
   supplierGivesTerms?: boolean;
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
@@ -623,6 +626,8 @@ export function PurchasingChain({
                       canApproveIssue={!!r.canApproveCheckIssue}
                       canView={showSupplier}
                       netAmount={r.po ? poTotals(r.po).net : undefined}
+                      // Settled in cash — a green badge instead of the amber nag.
+                      cashPaid={r.cashPaid ?? null}
                     />
                   </div>
                   {/* Once approved, only an admin may edit the PO. */}

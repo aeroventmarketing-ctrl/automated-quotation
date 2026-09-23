@@ -59,6 +59,32 @@ tab reads *Cash · Finished · cleared Sep 23 · by Admin Ana · Paid in cash*. 
 three figures precisely. Accounting sees no tickbox: this is admin-only, the same gate as clearing
 a check.
 
+### …and the PO row says so
+
+Follow-up, same day: *"once cash tick box is clicked … put a notification in row of PO number
+colored in green stating that the PO is paid in cash."*
+
+The amber **Check not attached** badge is a reminder to go and attach one. Once the PO was settled in
+cash that reminder is not merely redundant — it is asking for a document that does not exist. So the
+green badge REPLACES it rather than sitting beside it, and carries the date it was paid.
+
+Shown only while no check photo is attached, which is the same condition `buildCheckWatch` takes its
+cash branch on. If a photo ever turns up, the check is what paid and the register says so; the card
+must not go on claiming cash while a check sits next to it.
+
+Threading it through cost one optional field each way in `purchase-chain-row.ts`: `cashPayment?` in
+(so callers that never select it still compile) and `cashPaid` out, beside `checkDocs`. Both pages
+that build these rows already `findMany` without a `select`, so the column arrives with no query
+change at all.
+
+Frozen Phase 4 files — `purchase-chain-row.ts`, `purchasing-chain.tsx`, `combined-purchasing.tsx`,
+`purchasing/page.tsx` — touched with the owner's explicit approval, and UI-only: a badge, no change
+to who acts, the step order, the gating or the stage progression.
+
+**Left alone deliberately:** the *Attach check* button still sits beside the green badge. Removing it
+would be a gating change, and a mis-tick is meant to be recoverable — untick on Check Monitoring,
+then attach. Worth the owner's opinion; it does read a little oddly next to "Paid in cash".
+
 ## 2026-09-23 · The catalogue page 500'd, because code ships before schema
 
 Minutes after the motor-catalogue merge, Admin → Catalogue went down in production:

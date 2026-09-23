@@ -116,3 +116,51 @@ describe("the check flags the row hands to the screen", () => {
     expect(r.canAttachCheck).toBe(false);
   });
 });
+
+/**
+ * Paid in cash, carried to the PO row.
+ *
+ * The owner: *"once cash tick box is clicked … put a notification in row of PO
+ * number colored in green stating that the PO is paid in cash."* The tick is
+ * recorded on Check Monitoring; this is the row that has to carry it back to
+ * the purchasing screen, so the PO stops being nagged for a check that is never
+ * coming.
+ */
+describe("a PO settled in cash", () => {
+  it("carries the payment through to the row", () => {
+    const row = buildPurchaseChainRow(
+      { ...pr("COMPLETED"), cashPayment: { on: "2026-09-23", byName: "Admin Ana", at: "2026-09-23T03:00:00.000Z" } },
+      { canManagePO: false, namesForRole: () => [], canAct: () => false },
+    );
+    expect(row.cashPaid).toEqual({ on: "2026-09-23", byName: "Admin Ana", at: "2026-09-23T03:00:00.000Z" });
+  });
+
+  it("is null on every ordinary PO", () => {
+    const row = buildPurchaseChainRow(pr("COMPLETED"), {
+      canManagePO: false, namesForRole: () => [], canAct: () => false,
+    });
+    expect(row.cashPaid).toBeNull();
+  });
+
+  /**
+   * A stored value the coercion refuses — a date it cannot use — must read as
+   * "not paid in cash" rather than as a payment with a blank date. A green badge
+   * dated nothing is worse than no badge.
+   */
+  it("refuses a malformed payment rather than half-showing it", () => {
+    const row = buildPurchaseChainRow(
+      { ...pr("COMPLETED"), cashPayment: { on: "23/09/2026", byName: "Admin Ana" } },
+      { canManagePO: false, namesForRole: () => [], canAct: () => false },
+    );
+    expect(row.cashPaid).toBeNull();
+  });
+
+  /** Callers that never select the column still build a row. */
+  it("copes with the field simply not being selected", () => {
+    const { cashPayment: _drop, ...without } = { ...pr("COMPLETED"), cashPayment: undefined };
+    const row = buildPurchaseChainRow(without, {
+      canManagePO: false, namesForRole: () => [], canAct: () => false,
+    });
+    expect(row.cashPaid).toBeNull();
+  });
+});

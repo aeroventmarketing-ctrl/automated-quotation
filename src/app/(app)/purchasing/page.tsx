@@ -21,6 +21,7 @@ import { getProducts } from "@/lib/product-catalog";
 import { REF_PRICE_KEY, matchKey } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy } from "@/lib/voucher-check";
+import { coerceCashPayment } from "@/lib/cash-payment";
 import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
@@ -402,6 +403,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const canApproveReconcile = canAct("payment_approver");
       return {
         checkDocs: coerceCheckDocs(anchor.voucherCheckDocs),
+        cashPaid: coerceCashPayment(anchor.cashPayment),
         supplierGivesTerms: givesTerms(po?.supplier.company),
         // The role may attach one AND this PO is in the window where a check can
         // be attached (Budgeted, not yet completed) — see `checkAttachableAt`.
