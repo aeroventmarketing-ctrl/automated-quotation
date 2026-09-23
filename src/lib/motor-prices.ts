@@ -12,7 +12,7 @@
  */
 import { cache } from "react";
 import { prisma } from "@/lib/db";
-import type { MotorPriceMap } from "@/lib/motor-catalogue";
+import { MOTOR_CODE_PREFIX, type MotorPriceMap } from "@/lib/motor-catalogue";
 
 /**
  * Model code → price, for every active motor in the catalogue.
@@ -26,7 +26,10 @@ import type { MotorPriceMap } from "@/lib/motor-catalogue";
 export const getMotorPrices = cache(async function getMotorPrices(): Promise<MotorPriceMap> {
   try {
     const items = await prisma.catalogueItem.findMany({
-      where: { family: "MOTOR", active: true },
+      // Selected by CODE, not by `family: "MOTOR"` — see MOTOR_CODE_PREFIX. The
+      // enum value arrives with a migration, and a query naming it throws until
+      // that migration runs. This one cannot.
+      where: { modelCode: { startsWith: MOTOR_CODE_PREFIX }, active: true },
       select: {
         modelCode: true,
         priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } },

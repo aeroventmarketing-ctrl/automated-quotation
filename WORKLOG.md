@@ -1,3 +1,49 @@
+## 2026-09-23 · The catalogue page 500'd, because code ships before schema
+
+Minutes after the motor-catalogue merge, Admin → Catalogue went down in production:
+*"This page couldn't be loaded."*
+
+### What happened
+
+`MOTOR` is a new value on the `Family` enum, added by migration `0057`. The deploy script is:
+
+```
+"build": "prisma generate && next build"
+```
+
+No `prisma migrate deploy`. **Migrations are applied by hand, so code always lands before schema.**
+The new code ran `count({ where: { family: "MOTOR" } })`, Postgres answered
+`invalid input value for enum "Family": "MOTOR"`, and the page 500'd. A second read would have
+failed the same way — the website price-list CSV, whose exclusion was `family: { notIn: [...,
+"MOTOR"] }`.
+
+This was visible on the harness during development, and was read as "the throwaway database is
+stale" rather than as "this is exactly what production will do". The harness was telling the truth.
+
+### The fix is not "remember to run migrations"
+
+It is to stop asking the database a question it might not be able to answer yet. **`MOTOR` is now a
+label, not a query key.** Every read finds motors by their model-code prefix instead:
+
+- the price map: `where: { modelCode: { startsWith: "MTR-" } }`
+- the catalogue page's count: computed in JS over rows already fetched (one query fewer, too)
+- the website price list: `notIn` the fabricated families as before, motors dropped in JS after
+
+A query keyed on a model code cannot fail on a missing enum value, whatever order a deploy happens
+in. The family still shows on the row, still groups the tab, still drives the chip — it just no
+longer gatekeeps whether the page renders.
+
+One place genuinely needs the enum: the seed action, because it WRITES `family: "MOTOR"`. That now
+checks `pg_enum` first and fails with a sentence naming the migration and the one-line SQL, instead
+of a raw Prisma error that names the symptom and nothing to do about it.
+
+### The rule worth keeping
+
+A new enum value, a new column, a new table — anything a migration supplies — must not be on the
+critical path of a page render in the same deploy that introduces it. Either the deploy applies
+migrations first, or the code tolerates their absence. This repo does the former nowhere, so the
+code has to do the latter.
+
 ## 2026-09-22 · Motor prices move into the catalogue
 
 The owner asked how to handle a price increase, and then said the thing that changed the answer:

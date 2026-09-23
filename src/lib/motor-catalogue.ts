@@ -57,6 +57,24 @@ import { MOTORS, EXPROOF_PRICE_BY_HP, exproofApplies, type MotorRow } from "@/li
 import { TECO_SELLING, type TecoSection } from "@/lib/teco-induction-selling";
 import { HYUNDAI_SELLING } from "@/lib/hyundai-induction-selling";
 
+/**
+ * Every motor's catalogue code starts with this.
+ *
+ * It is how the price map is SELECTED, rather than `family: "MOTOR"`. That is
+ * not a style choice — it is the fix for an outage. `MOTOR` is a new value on
+ * the `Family` enum, supplied by a migration, and this repo's deploy runs
+ * `prisma generate && next build` with no `prisma migrate deploy`. So the code
+ * shipped before the enum existed, and every query naming `"MOTOR"` threw
+ * `invalid input value for enum "Family"` — taking the whole Admin → Catalogue
+ * page down with a 500.
+ *
+ * A query keyed on the model code cannot fail that way, whatever order the
+ * deploy happens in. `MOTOR` stays on the row as a LABEL — for the family chip,
+ * for grouping, for the person reading the list — and nothing depends on it
+ * being there to answer a question.
+ */
+export const MOTOR_CODE_PREFIX = "MTR-";
+
 /** Which code table a row came from — also the prefix of its catalogue code. */
 export type MotorSource = "fan" | "teco" | "hyundai";
 

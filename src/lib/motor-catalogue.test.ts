@@ -9,6 +9,7 @@ import {
   tecoCode,
   hyundaiCode,
   hpKey,
+  MOTOR_CODE_PREFIX,
   type MotorPriceMap,
 } from "./motor-catalogue";
 import { MOTORS, EXPROOF_PRICE_BY_HP, motorNetPrice, exproofApplies } from "./pricing/motors";
@@ -109,6 +110,20 @@ describe("the rows", () => {
     const row = byCode.get(fanMotorCode(5, 3, 4, true))!;
     expect(row.specs.exproof).toBe(true);
     expect(row.specs.m380).toBe("5K3F3X");
+  });
+
+  /**
+   * Every code carries the prefix, because the prefix is how motors are FOUND.
+   *
+   * Selecting them by `family: "MOTOR"` took the Admin → Catalogue page down
+   * with a 500 in production: the enum value arrives with a migration, this
+   * repo's deploy runs `prisma generate && next build` and never
+   * `prisma migrate deploy`, so the code was live before the value existed and
+   * the query threw. Queries key on this prefix now. If a row ever stops
+   * carrying it, that row silently stops being priced — so it is pinned here.
+   */
+  it("prefixes every code, since that is what the queries look for", () => {
+    expect(rows.filter((r) => !r.modelCode.startsWith(MOTOR_CODE_PREFIX))).toEqual([]);
   });
 
   it("sorts stably, so two exports differ only where a price changed", () => {
