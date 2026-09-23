@@ -384,6 +384,12 @@ model PurchaseRequest {
   // required) on a PO to a supplier who gives us terms; a missing one is flagged,
   // never blocked.
   voucherCheckDocs Json                  @default("[]")
+  /// Settled in CASH instead of by check — { on, byName, at, note? }, null for
+  /// almost every row. Check monitoring turns a PO carrying this into a CLEARED
+  /// row with "Cash" as its form of payment, so it leaves the Upcoming tab and
+  /// stops counting towards "Still to clear". Its own column rather than a key
+  /// in `po`, which `coercePurchaseOrder` would drop on the next save.
+  cashPayment      Json?
 
   /// When this purchase has to be MADE by, set by the Purchaser, an admin or the
   /// Payment Approver. Distinct from the production job-order deadlines it

@@ -11,6 +11,7 @@
  * owner asked for those rows after *"september 3 and september 4 PO not showing
  * in check monitoring"* — POs payable by check that nobody had photographed yet.
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceCheckDocs, checkExpected } from "@/lib/voucher-check";
@@ -18,15 +19,44 @@ import type { PRStatus } from "@/lib/purchasing";
 import { getSuppliers } from "@/lib/suppliers";
 import { poBatchId } from "@/lib/purchase-batch";
 import { buildCheckWatch, type CheckWatchRow } from "@/lib/check-monitor";
+import { coerceCashPayment } from "@/lib/cash-payment";
+
+/**
+ * Which purchases were settled in cash — asked SEPARATELY, and on purpose.
+ *
+ * `cashPayment` is a column added by a migration, and this repo deploys
+ * `prisma generate && next build` with no `prisma migrate deploy`, so code
+ * reliably goes live before schema. Selecting it in the register's own query
+ * would be worse than a crash: that query already catches into `[]`, so a column
+ * that is not there yet would leave the page rendering an EMPTY register rather
+ * than failing loudly. An empty check register is a lie; a missing "Cash" tag on
+ * a handful of rows for a few minutes is not.
+ *
+ * So it is its own small read, and its own empty-on-failure. Only rows that have
+ * one come back, which is almost none of them.
+ */
+async function loadCashPayments(): Promise<Map<string, unknown>> {
+  try {
+    const rows = await prisma.purchaseRequest.findMany({
+      where: { cashPayment: { not: Prisma.DbNull } },
+      select: { id: true, cashPayment: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.cashPayment]));
+  } catch (e) {
+    console.error("cash payments unavailable — the register will show none", e);
+    return new Map();
+  }
+}
 
 export async function loadCheckRegister(todayYMD: string): Promise<CheckWatchRow[]> {
   // No status filter: a check clears long after its PO is finished, so a
   // COMPLETED PO's check is still on the register.
-  const [prs, suppliers] = await Promise.all([
+  const [prs, suppliers, cash] = await Promise.all([
     prisma.purchaseRequest
       .findMany({ select: { id: true, quotationId: true, po: true, voucherCheckDocs: true, status: true } })
       .catch(() => []),
     getSuppliers().catch(() => []),
+    loadCashPayments(),
   ]);
 
   // Which suppliers we pay later, by check. The flag lives on the supplier
@@ -36,6 +66,9 @@ export async function loadCheckRegister(todayYMD: string): Promise<CheckWatchRow
 
   return buildCheckWatch(prs, todayYMD, {
     coerceDocs: coerceCheckDocs,
+    // Paid in cash — a PO carrying this clears as cash instead of waiting for a
+    // check that is never coming.
+    cashPaidOf: (pr) => coerceCashPayment(cash.get(pr.id)),
     // A combined PO is several requests sharing one `po` JSON — and one net.
     // Grouping on the batch id makes the register count that PO once, where
     // walking requests counted it once per member. See `buildCheckWatch`.

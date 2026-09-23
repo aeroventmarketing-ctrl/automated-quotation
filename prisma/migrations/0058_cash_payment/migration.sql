@@ -1,0 +1,18 @@
+-- A purchase settled in CASH, rather than by check.
+--
+-- Check monitoring lists every PO that owes a check but has none yet — the
+-- owner's "For Payment" rows. Some of those were simply paid in cash and no
+-- check will ever exist, so they sat in Upcoming for ever, inflating both the
+-- attention count and the "Still to clear" total. This records the cash
+-- payment so the row can move to the Cleared tab where it belongs.
+--
+-- Its own column rather than a key inside the `po` JSON: `coercePurchaseOrder`
+-- rebuilds that object field by field and drops anything it does not know, so a
+-- stamp kept there would be wiped the next time the PO was saved.
+--
+-- Shape: { "on": "YYYY-MM-DD", "byName": "...", "at": "<ISO>", "note"?: "..." }
+-- Null means "not paid in cash", which is almost every row.
+--
+-- Adds a column, creates no table, so no RLS block is needed — PurchaseRequest
+-- already has row level security from 0038_enable_rls.
+ALTER TABLE "PurchaseRequest" ADD COLUMN IF NOT EXISTS "cashPayment" JSONB;

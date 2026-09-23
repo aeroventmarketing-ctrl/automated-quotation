@@ -2763,6 +2763,94 @@ export async function unclearCheck(purchaseRequestId: string, path: string): Pro
 }
 
 /**
+ * Paid in cash — there is no check, and there never will be.
+ *
+ * Check monitoring lists every PO that owes a check but has none attached, so a
+ * purchase somebody settled in cash sat in Upcoming for ever with an **Attach
+ * check** button and nothing to attach, counting towards both the attention
+ * badge and the *Still to clear* total long after the money had gone.
+ *
+ * Ticking it records the payment and the register treats it as it treats a
+ * cleared check: Cleared tab, form of payment *Cash*, no longer owed.
+ *
+ * **Dated today, deliberately.** The owner asked for a tickbox, and a tickbox
+ * that opens a date picker is not one. Today is right for the overwhelmingly
+ * common case — you tick it when you pay it — and a mis-tick is undone with the
+ * same box rather than corrected in a form.
+ *
+ * Same gate as clearing a check: this says money left the business.
+ */
+export async function markPaidInCash(purchaseRequestId: string): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const user = await getCurrentUser();
+  const pr = await prisma.purchaseRequest.findUnique({
+    where: { id: purchaseRequestId },
+    select: { id: true, quotationId: true, voucherCheckDocs: true },
+  });
+  if (!pr) return { error: "Purchase order not found." };
+  /**
+   * A PO with a check photo clears as a CHECK.
+   *
+   * Not an arbitrary restriction: the check is the thing being monitored, it has
+   * its own clearing date and its own Cleared button, and letting a cash tick
+   * override it would leave the register asserting a payment method the photo on
+   * the row contradicts.
+   */
+  if (coerceCheckDocs(pr.voucherCheckDocs).length > 0) {
+    return { error: "This purchase order has a check attached — clear the check instead." };
+  }
+  const now = new Date();
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: {
+      cashPayment: {
+        on: ymdOf(now),
+        byName: user?.name ?? "",
+        at: now.toISOString(),
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  revalidateCheckScreens(pr.quotationId);
+  return { ok: true };
+}
+
+/** Untick it — back to *For Payment*, awaiting its check. */
+export async function unmarkPaidInCash(purchaseRequestId: string): Promise<{ ok?: true; error?: string }> {
+  const denied = await assertCheckAdmin();
+  if (denied) return { error: denied };
+  const pr = await prisma.purchaseRequest.findUnique({
+    where: { id: purchaseRequestId },
+    select: { id: true, quotationId: true },
+  });
+  if (!pr) return { error: "Purchase order not found." };
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { cashPayment: Prisma.DbNull },
+  });
+  revalidateCheckScreens(pr.quotationId);
+  return { ok: true };
+}
+
+/** The local calendar day, as `YYYY-MM-DD`. */
+function ymdOf(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/**
+ * Every screen built from the check register — the same set `updateCheckDoc`
+ * refreshes, because they are built from the same rows and must not disagree.
+ */
+function revalidateCheckScreens(quotationId: string | null) {
+  if (quotationId) revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/checks");
+  revalidatePath("/management");
+  revalidatePath("/my-dashboard");
+}
+
+/**
  * Correct a date the AI read wrongly — *"Error in reading date. It should be
  * October 17, 2026."*
  *

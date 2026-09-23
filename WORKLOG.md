@@ -1,3 +1,64 @@
+## 2026-09-23 · Paid in cash — a tickbox that clears a PO no check is coming for
+
+The owner, looking at eleven SMARTPLUS PAINT CENTER rows stuck on *For Payment*: *"add an option to
+pay in cash by clicking tickbox to be cleared. Once cleared it will move to cleared tab."*
+
+### What was wrong
+
+Check monitoring lists every PO that owes a check but has none attached. Some of those were simply
+paid in cash — no check exists and none is coming — so they sat in Upcoming permanently, offering an
+**Attach check** button with nothing to attach, and counting towards both the attention badge and
+the **Still to clear** total long after the money had gone.
+
+### Where the record lives, and where it cannot
+
+Not in the `po` JSON. `coercePurchaseOrder` rebuilds that object field by field and drops keys it
+does not recognise, so a stamp kept there would survive until the next time anybody saved the PO and
+then vanish without trace. Adding it to the coercer would mean editing `lib/purchase-order.ts`,
+which is frozen Phase 4.
+
+Not in `chainLog` either — that preserves unknown keys, but it is documented as the sign-off log for
+chain STEPS and is walked by the frozen rollback action.
+
+So `PurchaseRequest.cashPayment`, its own column. "How this purchase was paid" is a fact about the
+purchase, not about the document sent to the supplier.
+
+### The reading is deliberately a second query
+
+`cashPayment` arrives with a migration, and this repo deploys `prisma generate && next build` with
+no `prisma migrate deploy` — the same gap that took the catalogue page down yesterday. Adding the
+column to the register's own select would have been WORSE than a crash: that query already catches
+into `[]`, so a column that was not there yet would have rendered an EMPTY check register rather
+than failing loudly. An empty register is a lie; a missing "Cash" tag for a few minutes is not.
+
+So it is its own small read with its own empty-on-failure, and the register renders exactly as
+before if the migration has not landed.
+
+### Cash outranks "is a check expected?"
+
+The cash branch is checked BEFORE `expectsCheck` and does not depend on it. Gated the other way,
+ticking a PO that no longer expected a check would have DELETED the row rather than moving it — and
+a button that makes a payment disappear is one nobody presses twice. A cash payment is a fact about
+money that left; it outranks any rule about what was anticipated. A test pins it.
+
+Everything downstream needed nothing: the tabs, the **Still to clear** total and the attention
+counts all key off `state === "cleared"` already.
+
+### Found by clicking it
+
+The box is driven by the server — the tick is only true once the row comes back cleared — so a plain
+`checked={on}` sprang straight back to unticked for the second or two the action took. The reader
+clicked and saw nothing happen, then the row jumped tabs. It now shows the state being moved TO
+while saving, and says *Saving…*.
+
+### Checked on the harness
+
+Ticked a ₱8,424.11 row: Upcoming 17 → 16, Cleared 0 → 1, Still to clear ₱416,436.68 → ₱408,012.57 —
+exactly the row's amount, and the Cash position panel's Accounts Payable moved with it. The Cleared
+tab reads *Cash · Finished · cleared Sep 23 · by Admin Ana · Paid in cash*. Unticking restored all
+three figures precisely. Accounting sees no tickbox: this is admin-only, the same gate as clearing
+a check.
+
 ## 2026-09-23 · The catalogue page 500'd, because code ships before schema
 
 Minutes after the motor-catalogue merge, Admin → Catalogue went down in production:
