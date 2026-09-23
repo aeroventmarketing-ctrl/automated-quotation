@@ -158,6 +158,31 @@ export async function seedMotorCatalogue(): Promise<MotorSeedResult> {
   await assertAdmin();
   const rows = motorCatalogueRows();
 
+  /**
+   * This is the one place that genuinely needs the `MOTOR` enum value — it is
+   * WRITING it. Everything that only reads keys on the model code instead, so a
+   * missing migration cannot take a page down; here it can only stop a button
+   * working, and it should say why.
+   *
+   * Worth the check because this repo deploys with `prisma generate && next
+   * build` and no `prisma migrate deploy`, so code reliably lands before schema.
+   * Without it the admin gets a raw `invalid input value for enum "Family"`,
+   * which names the symptom and not one thing they can do about it.
+   */
+  const familyReady = await prisma
+    .$queryRaw<{ ok: boolean }[]>`
+      select exists (
+        select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'Family' and e.enumlabel = 'MOTOR'
+      ) as ok`
+    .then((r) => r[0]?.ok === true)
+    .catch(() => true); // Can't tell? Try anyway — a failed insert is no worse.
+  if (!familyReady) {
+    throw new Error(
+      "The database does not have the MOTOR catalogue family yet — migration 0057 has not run. Apply it (or run `ALTER TYPE \"Family\" ADD VALUE IF NOT EXISTS 'MOTOR';`) and press this again.",
+    );
+  }
+
   const existing = await prisma.catalogueItem.findMany({
     where: { modelCode: { in: rows.map((r) => r.modelCode) } },
     select: { id: true, modelCode: true, priceList: { where: { variantKey: "default" }, select: { id: true } } },

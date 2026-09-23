@@ -12,21 +12,28 @@
  */
 import { prisma } from "@/lib/db";
 import type { Family } from "@prisma/client";
+import { MOTOR_CODE_PREFIX } from "@/lib/motor-catalogue";
 
 /** Families that ARE fabricated fans / blowers — excluded from the store list. */
 export const FABRICATED_FAN_FAMILIES: Family[] = ["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET"];
 
 /**
- * Families this list leaves out on top of the fabricated fans.
+ * Motors are left out of this list too — and dropped in JS, not in the query.
  *
- * `MOTOR` is a PRICE TABLE that happens to live in the catalogue — the induction
- * motors that used to sit in three hand-edited TypeScript files, moved here so
+ * They are a PRICE TABLE that happens to live in the catalogue: the induction
+ * motors that used to sit in three hand-edited TypeScript files, moved there so
  * the owner can edit them without a deploy. They are an input to a fan's price,
- * not something anybody adds to a cart, and there are a few hundred of them. Left
- * in, they would be ~half of a CSV whose whole question is "what do we charge for
- * this online?" — a question a 15 HP 6-pole motor has no answer to.
+ * not something anybody adds to a cart, and there are a few hundred of them.
+ * Left in, they would be ~half of a CSV whose whole question is "what do we
+ * charge for this online?" — which a 15 HP 6-pole motor has no answer to.
+ *
+ * The exclusion was `family: { notIn: [...FABRICATED, "MOTOR"] }`, which sends
+ * the enum label to Postgres and throws `invalid input value for enum "Family"`
+ * until the migration that adds it has run. This repo's deploy does not run
+ * migrations, so that window is real and it took a page down. Filtering on the
+ * model code afterwards asks the database nothing it might not know yet.
  */
-const NOT_ON_THE_WEBSITE: Family[] = [...FABRICATED_FAN_FAMILIES, "MOTOR"];
+const isMotor = (modelCode: string) => modelCode.startsWith(MOTOR_CODE_PREFIX);
 
 /** AeroQuote selling price → website selling price (5% online fee grossed up). */
 export function websiteSellingPrice(aeroquotePrice: number): number {
@@ -45,13 +52,14 @@ export interface WebsitePriceRow {
 
 export async function buildWebsitePriceList(): Promise<WebsitePriceRow[]> {
   const items = await prisma.catalogueItem.findMany({
-    where: { active: true, family: { notIn: NOT_ON_THE_WEBSITE } },
+    where: { active: true, family: { notIn: FABRICATED_FAN_FAMILIES } },
     orderBy: [{ family: "asc" }, { name: "asc" }],
     include: { priceList: { where: { active: true }, orderBy: { effectiveDate: "desc" } } },
   });
 
   const rows: WebsitePriceRow[] = [];
   for (const it of items) {
+    if (isMotor(it.modelCode)) continue;
     // Latest active price per variant (a resale item usually has one "default").
     const byVariant = new Map<string, (typeof it.priceList)[number]>();
     for (const p of it.priceList) if (!byVariant.has(p.variantKey)) byVariant.set(p.variantKey, p);
