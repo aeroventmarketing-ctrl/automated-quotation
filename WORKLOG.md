@@ -1,3 +1,54 @@
+## 2026-09-23 · Finding one commission among four hundred
+
+The owner: *"add a search bar so I can search by order number and client name"*.
+
+The Commissions page is a card per salesperson per month, and each card is a table. The salesperson
+is the heading you scroll to and the month is written beside it — what is hard to find is the ROW.
+
+### It had to be a client component, and that had a cost worth paying
+
+Every other table in this app filters as you type. Matching that meant getting the rows into the
+browser, and the rows could not import `lib/sales-commission` — it reaches Prisma. So the page now
+answers the four questions that module owns (`dealKey`, `isVoucherable`, `canMarkPaid`,
+`markPaidOpensYMD`) on the SERVER and sends the answers down with each row; the types travel as
+`import type`, which compiles away to nothing.
+
+The consequence is the reassuring one: **the browser cannot widen anything.** It receives rows
+already decided and picks which to show. A tick still carries only a key, and the voucher page still
+recomputes every peso from the confirmed sales.
+
+### Two separators problem
+
+Order numbers are printed `2026 - AFBM00003264S` and typed `AFBM00003264`, or pasted out of an email
+as `2026-AFBM00003264S`. A plain substring match finds none of those. So the matcher runs two passes
+— as-written, then with everything but letters and digits stripped from both sides — and a hit on
+either counts. A punctuation-only term squashes to the empty string, which `includes` would treat as
+matching every row, so that case is rejected explicitly and tested.
+
+### What a filter must not quietly do to a total
+
+Hiding rows does not make a month earn less, and the numbers on the card are month facts: "Sales this
+month", the Qualified badge, Earned / Paid / Unpaid. Recomputing them from the visible rows would put
+a smaller, wrong figure under a familiar label — the kind of number somebody quotes in a meeting.
+
+So while a search is active the card keeps its real totals and SAYS so ("Totals are for the whole
+month, not the matches"), and the header reads "1 of 4 sales match" rather than "1 sale".
+
+The one thing that does follow the filter is **Select all**, which ticks what is on screen and
+nothing else. Ticking a month's worth of money from a card showing one row is how you put a
+commission on a voucher without ever having looked at it.
+
+### Rendered, because typecheck and lint have caught none of this week's UI faults
+
+The harness needed a month that actually qualifies before any tick box would appear — two ₱700,000
+orders, paid in full. Two false starts getting there, both mine: the seed wrote the sale fields at
+the top level instead of under `sale`, and then used `at` for the payment date where the reader wants
+`date`. Neither would have shown up as an error; the rows simply did not appear.
+
+With real tickable rows: `Select all 2` unfiltered → `Select all 1` filtered → ticks exactly one, and
+the hidden row is still unticked when the search clears. A tick made before filtering survives its
+row being hidden and stays visible in the sticky voucher bar.
+
 ## 2026-09-23 · Four-fifths of the database traffic was not the application
 
 The owner sent the Supabase chart: 241 GB of a 250 GB allowance, 13 days in. Shared Pooler 95–97%
