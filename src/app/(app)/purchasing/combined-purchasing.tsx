@@ -21,6 +21,7 @@ import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-c
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
+import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
@@ -85,6 +86,8 @@ export interface BatchCard {
   canApproveReconcile: boolean;
   /** Photos of the check issued for this PO's voucher (on the anchor request). */
   checkDocs: CheckDoc[];
+  /** Settled in cash, from Check Monitoring's tickbox — also the anchor's. */
+  cashPaid?: CashPayment | null;
   /** The PO's supplier gives us terms — so this PO is paid by check. */
   supplierGivesTerms: boolean;
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
@@ -493,6 +496,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             canApproveIssue={batch.canApproveCheckIssue}
             canView={showSupplier}
             netAmount={totals.net}
+            // Settled in cash — a green badge instead of the amber nag.
+            cashPaid={batch.cashPaid ?? null}
           />
         </div>
       </div>

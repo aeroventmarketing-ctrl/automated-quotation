@@ -659,3 +659,117 @@ describe("a combined PO is one row, not one per member", () => {
     expect(one).toBe("a"); // lowest id, deterministically
   });
 });
+
+/**
+ * Paid in cash — the owner: *"add an option to pay in cash by clicking tickbox
+ * to be cleared. Once cleared it will move to cleared tab."*
+ *
+ * A PO that owes a check but has none attached sat in Upcoming for ever with an
+ * **Attach check** button and nothing to attach, counting towards both the
+ * attention badge and the *Still to clear* total long after the money had gone.
+ */
+describe("a purchase settled in cash", () => {
+  const TODAY = "2026-09-04";
+  const base = {
+    coerceDocs: (v: unknown) => (v as CheckDoc[]) ?? [],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+    expectsCheck: () => true,
+  };
+  const pr = (id: string, docs: CheckDoc[], net = 208.12) => ({
+    id, quotationId: null,
+    po: { poNumber: `PO-${id}`, supplierCompany: "SMARTPLUS PAINT CENTER", date: "2026-08-03", net },
+    voucherCheckDocs: docs,
+    status: "CASH_RELEASED",
+  });
+  const paid = { on: "2026-09-04", byName: "Michelle Cotura", at: "2026-09-04T09:00:00.000Z" };
+  const withCash = { ...base, cashPaidOf: () => paid };
+
+  it("is CLEARED, so it lands on the Cleared tab", () => {
+    const [row] = buildCheckWatch([pr("529", [])], TODAY, withCash);
+    expect(row.state).toBe("cleared");
+    expect(row.statusLabel).toBe("Finished");
+    expect(row.form).toBe("Cash");
+    expect(row.clearedOn).toBe("2026-09-04");
+    expect(row.clearedByName).toBe("Michelle Cotura");
+    expect(row.remarks).toBe("Paid in cash");
+  });
+
+  /** The whole point: it stops being money the business still owes. */
+  it("drops out of Still to clear and out of the attention counts", () => {
+    const owed = checkWatchSummary(buildCheckWatch([pr("529", [])], TODAY, base));
+    expect(owed.openAmount).toBe(208.12);
+    expect(owed.open).toBe(1);
+    expect(owed.cleared).toBe(0);
+
+    const settled = checkWatchSummary(buildCheckWatch([pr("529", [])], TODAY, withCash));
+    expect(settled.openAmount).toBe(0);
+    expect(settled.open).toBe(0);
+    expect(settled.cleared).toBe(1);
+    expect(settled.attention).toBe(0);
+    expect(settled.overdue).toBe(0);
+  });
+
+  /**
+   * The row must MOVE, never vanish.
+   *
+   * Cash is checked before `expectsCheck` and does not depend on it. Were it
+   * gated the other way, ticking a PO that no longer expected a check would
+   * delete the row instead of moving it — and a button that makes a payment
+   * disappear is one nobody will press twice.
+   */
+  it("still shows when no check is expected, rather than disappearing", () => {
+    const rows = buildCheckWatch([pr("529", [])], TODAY, { ...withCash, expectsCheck: () => false });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].state).toBe("cleared");
+    expect(rows[0].form).toBe("Cash");
+  });
+
+  /** Cash clears the instant it changes hands, so the date column is the pay date. */
+  it("dates the row by the day it was paid", () => {
+    const [row] = buildCheckWatch([pr("529", [])], TODAY, withCash);
+    expect(row.clearingYMD).toBe("2026-09-04");
+    expect(row.dateVerified).toBe(true); // a person typed it; nothing was read off a photo
+  });
+
+  it("keeps the PO's net as the amount paid", () => {
+    const [row] = buildCheckWatch([pr("529", [], 19999.82)], TODAY, withCash);
+    expect(row.amount).toBe(19999.82);
+  });
+
+  it("carries a note when one was left", () => {
+    const rows = buildCheckWatch([pr("529", [])], TODAY, {
+      ...base, cashPaidOf: () => ({ ...paid, note: "Petty cash, receipt 4412" }),
+    });
+    expect(rows[0].remarks).toBe("Petty cash, receipt 4412");
+  });
+
+  /**
+   * A PO with a check photo clears as a CHECK. The check is the thing being
+   * monitored and has its own date and its own button; a cash tick overriding it
+   * would leave the register asserting a payment method the photo contradicts.
+   * The server action refuses it too — this pins the reader half.
+   */
+  it("never overrides a PO that actually has a check", () => {
+    const [row] = buildCheckWatch([pr("529", [due("2026-10-04", { path: "p" })])], TODAY, withCash);
+    expect(row.form).not.toBe("Cash");
+    expect(row.path).toBe("p");
+  });
+
+  it("leaves every other PO alone", () => {
+    const rows = buildCheckWatch(
+      [pr("529", []), pr("541", [])],
+      TODAY,
+      { ...base, cashPaidOf: (p: { id: string }) => (p.id === "529" ? paid : null) },
+    );
+    const byPo = Object.fromEntries(rows.map((r) => [r.poNumber, r]));
+    expect(byPo["PO-529"].state).toBe("cleared");
+    expect(byPo["PO-541"].state).toBe("awaiting");
+  });
+
+  /** Callers that never opt in keep the register exactly as it was. */
+  it("changes nothing for a caller that passes no cash helper", () => {
+    const [row] = buildCheckWatch([pr("529", [])], TODAY, base);
+    expect(row.state).toBe("awaiting");
+    expect(row.form).not.toBe("Cash");
+  });
+});

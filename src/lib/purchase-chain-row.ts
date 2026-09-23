@@ -17,6 +17,7 @@ import {
 } from "@/lib/purchase-returns";
 import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReconcileAt, type ReconcileStatus, type ReconcileVatMode } from "@/lib/purchase-reconcile";
 import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy, type CheckDoc } from "@/lib/voucher-check";
+import { coerceCashPayment, type CashPayment } from "@/lib/cash-payment";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -176,6 +177,13 @@ export interface PurchaseChainRow {
   canApproveReconcile: boolean;
   /** Photos of the check issued for this PO's voucher. */
   checkDocs: CheckDoc[];
+  /**
+   * Set when this PO was settled in CASH, from Check Monitoring's tickbox — so
+   * the PO row says so instead of nagging for a check that is never coming.
+   *
+   * Null for almost every PO. Read from `PurchaseRequest.cashPayment`.
+   */
+  cashPaid: CashPayment | null;
   /** The PO's supplier gives us terms — so this PO is paid by check. */
   supplierGivesTerms: boolean;
   /** Accounting / Payment Approver / admin may attach or remove the check photo. */
@@ -237,6 +245,8 @@ export interface PurchaseRequestLike {
   status: string;
   po: unknown;
   voucherCheckDocs?: unknown;
+  /** `PurchaseRequest.cashPayment` — optional, so callers that don't select it still compile. */
+  cashPayment?: unknown;
   createdByName: string;
   createdAt: Date;
   decidedByName: string | null;
@@ -463,6 +473,7 @@ export function buildPurchaseChainRow(
     canEscalateReconcile,
     canApproveReconcile,
     checkDocs: coerceCheckDocs(pr.voucherCheckDocs),
+    cashPaid: coerceCashPayment(pr.cashPayment),
     supplierGivesTerms: ctx.givesTerms?.(coercePurchaseOrder(pr.po)?.supplier.company) ?? false,
     // The role may attach one AND this PO is in the window where a check can be
     // attached (Budgeted, not yet completed) — see `checkAttachableAt`. Applied

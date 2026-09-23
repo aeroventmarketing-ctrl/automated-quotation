@@ -1,3 +1,96 @@
+## 2026-09-23 · Paid in cash — a tickbox that clears a PO no check is coming for
+
+The owner, looking at eleven SMARTPLUS PAINT CENTER rows stuck on *For Payment*: *"add an option to
+pay in cash by clicking tickbox to be cleared. Once cleared it will move to cleared tab."*
+
+### What was wrong
+
+Check monitoring lists every PO that owes a check but has none attached. Some of those were simply
+paid in cash — no check exists and none is coming — so they sat in Upcoming permanently, offering an
+**Attach check** button with nothing to attach, and counting towards both the attention badge and
+the **Still to clear** total long after the money had gone.
+
+### Where the record lives, and where it cannot
+
+Not in the `po` JSON. `coercePurchaseOrder` rebuilds that object field by field and drops keys it
+does not recognise, so a stamp kept there would survive until the next time anybody saved the PO and
+then vanish without trace. Adding it to the coercer would mean editing `lib/purchase-order.ts`,
+which is frozen Phase 4.
+
+Not in `chainLog` either — that preserves unknown keys, but it is documented as the sign-off log for
+chain STEPS and is walked by the frozen rollback action.
+
+So `PurchaseRequest.cashPayment`, its own column. "How this purchase was paid" is a fact about the
+purchase, not about the document sent to the supplier.
+
+### The reading is deliberately a second query
+
+`cashPayment` arrives with a migration, and this repo deploys `prisma generate && next build` with
+no `prisma migrate deploy` — the same gap that took the catalogue page down yesterday. Adding the
+column to the register's own select would have been WORSE than a crash: that query already catches
+into `[]`, so a column that was not there yet would have rendered an EMPTY check register rather
+than failing loudly. An empty register is a lie; a missing "Cash" tag for a few minutes is not.
+
+So it is its own small read with its own empty-on-failure, and the register renders exactly as
+before if the migration has not landed.
+
+### Cash outranks "is a check expected?"
+
+The cash branch is checked BEFORE `expectsCheck` and does not depend on it. Gated the other way,
+ticking a PO that no longer expected a check would have DELETED the row rather than moving it — and
+a button that makes a payment disappear is one nobody presses twice. A cash payment is a fact about
+money that left; it outranks any rule about what was anticipated. A test pins it.
+
+Everything downstream needed nothing: the tabs, the **Still to clear** total and the attention
+counts all key off `state === "cleared"` already.
+
+### Found by clicking it
+
+The box is driven by the server — the tick is only true once the row comes back cleared — so a plain
+`checked={on}` sprang straight back to unticked for the second or two the action took. The reader
+clicked and saw nothing happen, then the row jumped tabs. It now shows the state being moved TO
+while saving, and says *Saving…*.
+
+### Checked on the harness
+
+Ticked a ₱8,424.11 row: Upcoming 17 → 16, Cleared 0 → 1, Still to clear ₱416,436.68 → ₱408,012.57 —
+exactly the row's amount, and the Cash position panel's Accounts Payable moved with it. The Cleared
+tab reads *Cash · Finished · cleared Sep 23 · by Admin Ana · Paid in cash*. Unticking restored all
+three figures precisely. Accounting sees no tickbox: this is admin-only, the same gate as clearing
+a check.
+
+### …and the PO row says so
+
+Follow-up, same day: *"once cash tick box is clicked … put a notification in row of PO number
+colored in green stating that the PO is paid in cash."*
+
+The amber **Check not attached** badge is a reminder to go and attach one. Once the PO was settled in
+cash that reminder is not merely redundant — it is asking for a document that does not exist. So the
+green badge REPLACES it rather than sitting beside it, and carries the date it was paid.
+
+Shown only while no check photo is attached, which is the same condition `buildCheckWatch` takes its
+cash branch on. If a photo ever turns up, the check is what paid and the register says so; the card
+must not go on claiming cash while a check sits next to it.
+
+Threading it through cost one optional field each way in `purchase-chain-row.ts`: `cashPayment?` in
+(so callers that never select it still compile) and `cashPaid` out, beside `checkDocs`. Both pages
+that build these rows already `findMany` without a `select`, so the column arrives with no query
+change at all.
+
+Frozen Phase 4 files — `purchase-chain-row.ts`, `purchasing-chain.tsx`, `combined-purchasing.tsx`,
+`purchasing/page.tsx` — touched with the owner's explicit approval, and UI-only: a badge, no change
+to who acts, the step order, the gating or the stage progression.
+
+**And the Attach check button goes with it.** Left in at first — removing it is a gating change, and
+a mis-tick is meant to be recoverable. The owner ruled otherwise: *"once paid in cash is ticked,
+attach check must not show. When paid in cash is unticked, attach check will show."* They are right;
+there is no check to photograph, so the button could only ever invite a wrong action. It is derived
+from `paidInCash` rather than stored, so unticking brings it straight back.
+
+Measured both ways on the harness rather than eyeballed, because a de-duplicated survey cannot prove
+a PARTICULAR row changed: with one PO ticked, 3 cash badges / 3 attach buttons / 3 amber badges;
+unticking that one PO gave 2 / 4 / 4. One badge swapped for one button, exactly, and reversibly.
+
 ## 2026-09-23 · The catalogue page 500'd, because code ships before schema
 
 Minutes after the motor-catalogue merge, Admin → Catalogue went down in production:

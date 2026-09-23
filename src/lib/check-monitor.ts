@@ -20,6 +20,7 @@
 import type { CheckDoc } from "@/lib/voucher-check";
 import { clearingFromDateBoxes, effectiveClearingYMD, printedClearingYMD, effectiveCheckAmount, effectiveCheckNo, normalizeCheckNo, openCheckIssues } from "@/lib/voucher-check";
 import { duplicateCheckIndex, duplicateCheckKey, purchaseOrderKey } from "@/lib/check-duplicates";
+import type { CashPayment } from "@/lib/cash-payment";
 
 /**
  * How far ahead a check reads as *Clearing soon* on screen.
@@ -203,8 +204,12 @@ export interface CheckWatchRow {
   clearedByName: string | null;
   /** "Check Clearing" / "Finished" — the owner's register wording. */
   statusLabel: string;
-  /** "PDC" for a post-dated check, the register's Form of Payment column. */
-  form: "PDC" | "Check";
+  /**
+   * The register's Form of Payment column: "PDC" for a post-dated check,
+   * "Check" for a current-dated one, "Cash" for a purchase settled in cash and
+   * never written a check at all.
+   */
+  form: "PDC" | "Check" | "Cash";
   /** Why a date was moved, or the note left when it cleared. */
   remarks: string | null;
 }
@@ -232,6 +237,11 @@ export function buildCheckWatch(
      * row per attached photo.
      */
     expectsCheck?: (pr: CheckWatchSource, supplierCompany: string) => boolean;
+    /**
+     * Was this purchase settled in CASH? A PO that was is finished — there is no
+     * check coming and nothing left to wait for.
+     */
+    cashPaidOf?: (pr: CheckWatchSource) => CashPayment | null;
     /**
      * The combined-PO batch id on this request's `po` JSON, or null.
      *
@@ -317,6 +327,42 @@ export function buildCheckWatch(
     // carries the PO's NET, because that is what the check will be written for,
     // and nothing else: there is no number, no date and no photo to open.
     if (docs.length === 0) {
+      /**
+       * Settled in cash — finished, and it says so.
+       *
+       * Checked BEFORE `expectsCheck`, and deliberately not gated on it. The
+       * tick is how somebody says "this was paid, stop waiting for a check", and
+       * if the answer depended on whether a check was still expected then
+       * ticking a row could make it DISAPPEAR rather than move to the Cleared
+       * tab — which is the one outcome that would make a person distrust the
+       * button. A cash payment is a fact about money that left; it outranks any
+       * rule about what was anticipated.
+       */
+      const cash = po ? members.map((m) => helpers.cashPaidOf?.(m) ?? null).find(Boolean) ?? null : null;
+      if (po && cash) {
+        const poDate = po.date ? po.date.slice(0, 10) : null;
+        rows.push({
+          prId: pr.id, path: "", fileName: "",
+          poDate, poNumber: po.poNumber, supplier: po.supplierCompany, orderId: pr.quotationId,
+          // No check exists, so there is no number and nothing to disagree with.
+          checkNo: null, amount: po.net,
+          // The clearing date IS the day it was paid: cash clears the moment it
+          // changes hands, so the register's date column reads the same either way.
+          clearingYMD: cash.on, originalYMD: null,
+          dateFixedBy: null, amountFixedBy: null, checkNoFixedBy: null,
+          duplicateOf: [],
+          openIssues: 0, issuesApprovedBy: null, issuesApprovedAt: null,
+          moves: 0, lastMoveReason: null, daysLeft: null,
+          // A person typed this date; nothing was read off a photograph.
+          dateVerified: true,
+          state: "cleared", clearedOn: cash.on, clearedByName: cash.byName || null,
+          statusLabel: registerStatus("cleared"),
+          form: "Cash",
+          remarks: cash.note || "Paid in cash",
+        });
+        owners.push(ownerOf(pr, po.poNumber));
+        continue;
+      }
       // "Expected" is asked of EVERY member, because a combined PO's stage is
       // kept in step across them but its members can be of different kinds.
       if (po && members.some((m) => helpers.expectsCheck?.(m, po.supplierCompany))) {

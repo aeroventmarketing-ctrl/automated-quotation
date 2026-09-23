@@ -14,7 +14,7 @@ import {
   searchCheckRows, sortCheckRows, groupCheckRows, DEFAULT_CHECK_SORT, CHECK_GROUP_LABEL,
   type CheckSortKey, type SortDir, type CheckGroupBy,
 } from "@/lib/check-register-view";
-import { correctCheckDate, markCheckCleared, rescheduleCheck, unclearCheck } from "../orders/actions";
+import { correctCheckDate, markCheckCleared, markPaidInCash, rescheduleCheck, unclearCheck, unmarkPaidInCash } from "../orders/actions";
 
 /**
  * The three things a person can do to a check's date, kept apart on purpose.
@@ -550,27 +550,48 @@ export function CheckMonitor({
                       <td className="px-2 py-2">
                         <div className="flex flex-col items-stretch gap-1.5">
                           {r.state === "awaiting" ? (
-                            // Nothing to clear and no date to move — the only
-                            // move here is Accounting attaching the photo, on
-                            // the PO itself.
-                            <Link
-                              href={`/purchasing?req=${r.prId}`}
-                              className="rounded-md border px-2 py-1 text-center text-xs font-medium hover:bg-accent"
-                              title="Open this PO to attach the check"
-                            >
-                              Attach check
-                            </Link>
+                            <>
+                              {/* Nothing to clear and no date to move — the only
+                                  move here is Accounting attaching the photo, on
+                                  the PO itself. */}
+                              <Link
+                                href={`/purchasing?req=${r.prId}`}
+                                className="rounded-md border px-2 py-1 text-center text-xs font-medium hover:bg-accent"
+                                title="Open this PO to attach the check"
+                              >
+                                Attach check
+                              </Link>
+                              {/* …or it was never going to have one. A purchase
+                                  paid in cash has nothing to attach and nothing
+                                  to wait for, so it can be ticked off here. */}
+                              <CashTick
+                                on={false}
+                                busy={busy === key}
+                                onToggle={() => run(key, () => markPaidInCash(r.prId))}
+                              />
+                            </>
                           ) : r.state === "cleared" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 w-full justify-center px-1 text-xs"
-                              disabled={busy === key}
-                              onClick={() => run(key, () => unclearCheck(r.prId, r.path))}
-                              title="Put this check back on the watch list"
-                            >
-                              <Undo2 className="mr-1 h-3.5 w-3.5" /> Not cleared
-                            </Button>
+                            r.form === "Cash" ? (
+                              // Untick it the same way it was ticked — a
+                              // mis-tick should be undone with the box that made
+                              // it, not hunted for in a different control.
+                              <CashTick
+                                on
+                                busy={busy === key}
+                                onToggle={() => run(key, () => unmarkPaidInCash(r.prId))}
+                              />
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 w-full justify-center px-1 text-xs"
+                                disabled={busy === key}
+                                onClick={() => run(key, () => unclearCheck(r.prId, r.path))}
+                                title="Put this check back on the watch list"
+                              >
+                                <Undo2 className="mr-1 h-3.5 w-3.5" /> Not cleared
+                              </Button>
+                            )
                           ) : (
                             <>
                               <Button
@@ -692,5 +713,43 @@ export function CheckMonitor({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The "Paid in cash" tickbox.
+ *
+ * A real checkbox, because the owner asked for one — *"add an option to pay in
+ * cash by clicking tickbox to be cleared"* — and because a checkbox says what a
+ * button cannot: that this is a two-way state you can put back. Ticking records
+ * the payment as of today and moves the row to the Cleared tab; unticking
+ * returns it to *For Payment*.
+ */
+function CashTick({ on, busy, onToggle }: { on: boolean; busy: boolean; onToggle: () => void }) {
+  return (
+    <label
+      className={`flex cursor-pointer items-center justify-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${
+        on ? "border-emerald-600/40 bg-emerald-50 text-emerald-800" : "hover:bg-accent"
+      } ${busy ? "pointer-events-none opacity-60" : ""}`}
+      title={on ? "Untick to put this back on the watch list" : "Settled in cash — no check is coming"}
+    >
+      <input
+        type="checkbox"
+        className="h-3.5 w-3.5 accent-emerald-600"
+        /**
+         * While saving, show the state being moved TO, not the one on record.
+         *
+         * This box is driven by the server: the tick is only true once the row
+         * has come back as cleared. So a plain `checked={on}` sprang straight
+         * back to unticked for the second or two the action took, and the reader
+         * saw their click do nothing before the row jumped tabs. Showing the
+         * destination makes the wait legible instead of looking like a failure.
+         */
+        checked={busy ? !on : on}
+        disabled={busy}
+        onChange={onToggle}
+      />
+      {busy ? "Saving…" : "Paid in cash"}
+    </label>
   );
 }
