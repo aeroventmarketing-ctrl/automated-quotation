@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { hasSession } from "@/lib/auth";
 import { changeToken, isChangeScope, UNKNOWN_TOKEN } from "@/lib/change-token";
 
 export const runtime = "nodejs";
@@ -18,8 +18,18 @@ export const dynamic = "force-dynamic";
  * every page's permissions here.
  */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  /**
+   * `hasSession`, not `getCurrentUser` — this route never read the user.
+   *
+   * It asked for one purely to null-check it, and paid for five `auth` queries,
+   * a `User` row and a transaction round trip to do so. On the busiest endpoint
+   * in the app, polled every eight seconds by every open tab, that was most of
+   * the 34% of all database calls that auth accounted for.
+   *
+   * "Signed in" is the right bar: the answer is a row count and a timestamp, as
+   * the note above says, so WHO is asking has never changed it.
+   */
+  if (!(await hasSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const scope = req.nextUrl.searchParams.get("scope");
   /**

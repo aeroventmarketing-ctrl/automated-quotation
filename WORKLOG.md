@@ -1,3 +1,83 @@
+## 2026-09-23 · Four-fifths of the database traffic was not the application
+
+The owner sent the Supabase chart: 241 GB of a 250 GB allowance, 13 days in. Shared Pooler 95–97%
+of it. The two earlier fixes had taken the daily figure from ~26 GB to ~10.5 GB and it had stopped
+falling.
+
+### Measuring it properly, and being wrong twice on the way
+
+First I ranked by ROWS and said the StockItem and Product catalogues were "45–50% of the bytes".
+Then `stats_reset` came back as 18 Sep 13:38 — a 4.7-day window, not two days — and the same
+arithmetic gave **10%**. I had compared the two catalogues against *the top fifteen queries'
+estimated bytes* rather than against actual egress, which is the same class of error as the three
+before it. Said so and carried on.
+
+The honest numbers over that window: **59.3M rows** (~2.5 GB/day of row data) against **~10.5 GB/day**
+of actual egress. So query results were about a quarter of it. Then I guessed the rest was
+connection churn — wrong again: `pg_stat_database.sessions` is 275,009 since 22 May, ~2,200/day.
+Connections are pooled fine.
+
+Ordering by CALLS instead of rows is what found it.
+
+### 80% of the calls do no work for the application
+
+```
+BEGIN + COMMIT + DEALLOCATE ALL      2,854,752   46%
+Supabase Auth (5 queries × ~421k)    2,109,840   34%
+everything the app actually asks     ~1,196,000  20%
+```
+
+`supabase.auth.getUser()` is not a local check. It posts the token to the Auth server, which reads
+`sessions`, `users`, `identities`, `mfa_factors` and `mfa_amr_claims` **in this same database**. And
+it was called TWICE per request: once in `middleware.ts` and once in `getCurrentUser()`. React's
+`cache()` memoises the second within a request but cannot reach across into middleware — they are
+separate executions.
+
+The ratio proves it: 421,580 auth validations against 182,891 `User` lookups, **2.3 : 1**.
+
+`/api/changes` — the endpoint built to make this app cheap — was paying ten auth queries per poll,
+every eight seconds, per open tab.
+
+### getClaims, and why it is a safe swap rather than a gamble
+
+`getClaims()` verifies the JWT's signature locally with WebCrypto against the project's cached JWKS.
+If the project still signs with a symmetric secret it falls back to exactly the server call
+`getUser()` makes — so the worst case is today's behaviour, and the best case removes 2.1M queries.
+
+`hasSession()` is new and narrower: "is somebody signed in", with no `User` row read at all. The
+poll route asked for a user purely to null-check it and never looked at it.
+
+### The trade-off, written down rather than buried
+
+A locally-verified token is trusted until it EXPIRES, so revoking a session in the Supabase dashboard
+is no longer instant — it lands within the access token's lifetime, an hour by default.
+
+Acceptable here because Supabase Auth is not this app's gate: every request still resolves the `User`
+row by email, so disabling somebody in AeroERP locks them out on their next request exactly as
+before. The window applies only to a ban applied in Supabase while the app's own record is left
+alone.
+
+### What was verified, and what was not
+
+The REJECT path was tested against real `getClaims()` with Supabase configured: no session → 307 to
+/login; a public path → 200; `/api/changes` with no session → 307; and **a hand-forged JWT carrying
+`sub` and `email` → 307**, because local verification is still verification.
+
+The ACCEPT path with a genuine Supabase token could not be exercised here — the role harness patches
+`getCurrentUser` to read a cookie, so it never reaches the real client. It does prove the gating
+still works for all seven roles. If `getClaims` mishandled a valid token the failure would be nobody
+can sign in: loud, immediate and one revert away, not a silent hole.
+
+The harness needed teaching about `hasSession` too. Patched only on `getCurrentUser`, every
+`/api/changes` poll would have 401'd and the auto-refresh the harness exists to exercise would have
+looked broken while the app was fine.
+
+### Still outstanding
+
+`DEALLOCATE ALL` at 953,168 — Prisma discarding prepared statements on every transaction because it
+is talking through a transaction-mode pooler. That is `?pgbouncer=true` missing from `DATABASE_URL`,
+an environment variable the owner has to set; no code can fix it.
+
 ## 2026-09-23 · Paid in cash — a tickbox that clears a PO no check is coming for
 
 The owner, looking at eleven SMARTPLUS PAINT CENTER rows stuck on *For Payment*: *"add an option to
