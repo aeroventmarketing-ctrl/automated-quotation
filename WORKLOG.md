@@ -81,9 +81,15 @@ Frozen Phase 4 files — `purchase-chain-row.ts`, `purchasing-chain.tsx`, `combi
 `purchasing/page.tsx` — touched with the owner's explicit approval, and UI-only: a badge, no change
 to who acts, the step order, the gating or the stage progression.
 
-**Left alone deliberately:** the *Attach check* button still sits beside the green badge. Removing it
-would be a gating change, and a mis-tick is meant to be recoverable — untick on Check Monitoring,
-then attach. Worth the owner's opinion; it does read a little oddly next to "Paid in cash".
+**And the Attach check button goes with it.** Left in at first — removing it is a gating change, and
+a mis-tick is meant to be recoverable. The owner ruled otherwise: *"once paid in cash is ticked,
+attach check must not show. When paid in cash is unticked, attach check will show."* They are right;
+there is no check to photograph, so the button could only ever invite a wrong action. It is derived
+from `paidInCash` rather than stored, so unticking brings it straight back.
+
+Measured both ways on the harness rather than eyeballed, because a de-duplicated survey cannot prove
+a PARTICULAR row changed: with one PO ticked, 3 cash badges / 3 attach buttons / 3 amber badges;
+unticking that one PO gave 2 / 4 / 4. One badge swapped for one button, exactly, and reversibly.
 
 ## 2026-09-23 · The catalogue page 500'd, because code ships before schema
 

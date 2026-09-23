@@ -307,7 +307,19 @@ export function VoucherCheckControl({
             <AlertTriangle className="h-3.5 w-3.5" /> Check not attached
           </span>
         )}
-        {canAttach && (
+        {/*
+          A PO paid in cash offers no way to attach a check.
+
+          The owner: *"once paid in cash is ticked, attach check must not show.
+          When paid in cash is unticked, attach check will show."* There is no
+          check to photograph, so the button could only ever invite a wrong
+          action — and the state is a tick away from being undone, which is
+          where a PO that really does have a check should be corrected.
+
+          Derived from `paidInCash`, not stored, so unticking on Check
+          Monitoring brings the button straight back.
+        */}
+        {canAttach && !paidInCash && (
           <>
             <input
               ref={fileRef}
