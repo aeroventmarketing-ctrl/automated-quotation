@@ -378,14 +378,34 @@ function makeWorktree() {
   ];
   const anchor = anchors.find((a) => src.includes(a));
   if (!anchor) throw new Error("auth.ts has moved — update the harness patch anchor.");
-  writeFileSync(authPath, src.replace(anchor, `${anchor}
+  let patched = src.replace(anchor, `${anchor}
   // HARNESS ONLY — throwaway worktree, never committed.
   if (process.env.HARNESS_AUTH === "1") {
     const { cookies } = await import("next/headers");
     const email = (await cookies()).get("e2e_as")?.value;
     if (!email) return null;
     return prisma.user.findUnique({ where: { email: email.toLowerCase() } });
-  }`));
+  }`);
+
+  // `hasSession` is a SECOND way in, and it has to be faked too.
+  //
+  // It answers "is somebody signed in?" without loading the user, and
+  // /api/changes — polled by every open tab — is built on it. Patched here, the
+  // harness would answer "no" to the real Supabase client it has no credentials
+  // for, every poll would 401, and the auto-refresh the harness exists to
+  // exercise would look broken while the app was fine.
+  const sessionAnchor = "export const hasSession = cache(async function hasSession(): Promise<boolean> {";
+  if (patched.includes(sessionAnchor)) {
+    patched = patched.replace(sessionAnchor, `${sessionAnchor}
+  // HARNESS ONLY — throwaway worktree, never committed.
+  if (process.env.HARNESS_AUTH === "1") {
+    const { cookies } = await import("next/headers");
+    return !!(await cookies()).get("e2e_as")?.value;
+  }`);
+  } else {
+    throw new Error("auth.ts hasSession has moved — update the harness patch anchor.");
+  }
+  writeFileSync(authPath, patched);
 }
 
 async function seed() {

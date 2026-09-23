@@ -30,9 +30,29 @@ export async function middleware(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /**
+   * Verified LOCALLY, not at the Auth server.
+   *
+   * This runs on every request that is not a static file, and the route or page
+   * behind it validates again — so `getUser()` here meant two round trips per
+   * request, each costing five queries in the `auth` schema. Measured over 4.7
+   * days: 421,580 validations, 2.1 million queries, 34% of every database call
+   * the system made. The ratio against our own `User` lookup was 2.3 : 1, which
+   * is those two calls.
+   *
+   * `getClaims()` checks the JWT's signature with WebCrypto against the cached
+   * JWKS. If the project signs with a symmetric secret instead, it falls back to
+   * the same server call as before — so this is never worse than what it
+   * replaces, only cheaper when the project allows it.
+   *
+   * This is a REDIRECT GATE, not the security boundary. `(app)/layout.tsx` and
+   * every API route resolve the user properly for themselves; a token that
+   * passes here and has no matching `User` row gets signed out there.
+   */
+  const { data: verified } = await supabase.auth.getClaims();
+  // `sub` is the user id, and a JWT without one is not a session whoever signed
+  // it — so this is "is there a verified user", not "did a cookie parse".
+  const user = verified?.claims?.sub ? verified.claims : null;
 
   const path = request.nextUrl.pathname;
   // Match a public path exactly, as a slash-terminated prefix (entries ending in
