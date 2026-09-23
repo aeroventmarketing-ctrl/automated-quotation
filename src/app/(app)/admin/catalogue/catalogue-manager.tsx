@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +14,21 @@ import { formatCurrency } from "@/lib/utils";
 import { upsertCatalogueItem, deleteCatalogueItem } from "../actions";
 import { CatalogueTransfer } from "./catalogue-transfer";
 
-const FAMILIES = ["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET", "ACCESSORY", "SERVICE", "OTHER"];
+const FAMILIES = ["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET", "ACCESSORY", "MOTOR", "SERVICE", "OTHER"];
+
+/** Everything visible in a row, lower-cased once so typing stays cheap. */
+const haystack = (it: Item) => `${it.modelCode} ${it.family} ${it.name}`.toLowerCase();
+
+/**
+ * Show this many rows until asked for more.
+ *
+ * The tab rendered EVERY item in one table. At 316 that was merely long; the
+ * motor price tables add a few hundred more, and an admin looking for one fan
+ * should not be scrolling past four hundred motors to find it. Search narrows,
+ * the family tabs narrow harder, and this caps what is drawn when neither has
+ * been used.
+ */
+const PAGE = 100;
 
 interface Item {
   id: string;
@@ -42,11 +56,36 @@ const blank: Item = {
   basePrice: 0,
 };
 
-export function CatalogueManager({ items }: { items: Item[] }) {
+export function CatalogueManager({ items, motorSeed }: { items: Item[]; motorSeed?: React.ReactNode }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [family, setFamily] = useState("");
+  const [showAll, setShowAll] = useState(false);
+
+  /** Only the families actually present, with a count — an empty tab is noise. */
+  const families = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of items) counts.set(it.family, (counts.get(it.family) ?? 0) + 1);
+    return FAMILIES.filter((f) => counts.has(f)).map((f) => ({ family: f, count: counts.get(f)! }));
+  }, [items]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    // Every word has to appear, in any order and any field — so "motor 15 6p"
+    // finds a row that "motor 15 6p" as a phrase never would.
+    const words = q ? q.split(/\s+/) : [];
+    return items.filter((it) => {
+      if (family && it.family !== family) return false;
+      if (!words.length) return true;
+      const hay = haystack(it);
+      return words.every((w) => hay.includes(w));
+    });
+  }, [items, query, family]);
+
+  const shown = showAll ? matches : matches.slice(0, PAGE);
 
   async function save() {
     if (!editing) return;
@@ -87,6 +126,8 @@ export function CatalogueManager({ items }: { items: Item[] }) {
       </div>
 
       <CatalogueTransfer count={items.length} />
+
+      {motorSeed}
 
       {editing && (
         <Card className="border-primary/40">
@@ -142,7 +183,27 @@ export function CatalogueManager({ items }: { items: Item[] }) {
       )}
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="space-y-3 pt-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              className="w-full sm:w-72"
+              placeholder="Search model, name or family…"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setShowAll(false); }}
+            />
+            <div className="flex flex-wrap gap-1">
+              <FamilyChip label={`All (${items.length})`} on={family === ""} onClick={() => { setFamily(""); setShowAll(false); }} />
+              {families.map((f) => (
+                <FamilyChip
+                  key={f.family}
+                  label={`${f.family} (${f.count})`}
+                  on={family === f.family}
+                  onClick={() => { setFamily(family === f.family ? "" : f.family); setShowAll(false); }}
+                />
+              ))}
+            </div>
+          </div>
+
           <Table>
             <TableHeader>
               <TableRow>
@@ -155,7 +216,7 @@ export function CatalogueManager({ items }: { items: Item[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((it) => (
+              {shown.map((it) => (
                 <TableRow key={it.id}>
                   <TableCell className="font-medium">{it.modelCode}</TableCell>
                   <TableCell><Badge variant="secondary">{it.family}</Badge></TableCell>
@@ -167,8 +228,36 @@ export function CatalogueManager({ items }: { items: Item[] }) {
               ))}
             </TableBody>
           </Table>
+
+          {matches.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Nothing matches {query.trim() ? <>“{query.trim()}”</> : "this filter"}.
+            </p>
+          )}
+          {/* Say what is HIDDEN, not just what is shown — a silently truncated
+              list is how somebody concludes an item does not exist. */}
+          {matches.length > shown.length && (
+            <div className="flex items-center justify-center gap-3 pt-1 text-sm text-muted-foreground">
+              <span>Showing {shown.length} of {matches.length}.</span>
+              <Button size="sm" variant="outline" onClick={() => setShowAll(true)}>Show all {matches.length}</Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function FamilyChip({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+        on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-accent"
+      }`}
+    >
+      {label}
+    </button>
   );
 }

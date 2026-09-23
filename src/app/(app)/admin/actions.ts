@@ -31,6 +31,7 @@ import { setThankYouSettings, buildThankYouEmail, buildThankYouSms, type ThankYo
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
+import { motorCatalogueRows } from "@/lib/motor-catalogue";
 import { saveAiUsageLimit } from "@/lib/ai/usage";
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -74,7 +75,7 @@ export async function saveDocViewersAction(input: { ids: string[] }): Promise<st
 const catalogueSchema = z.object({
   id: z.string().optional(),
   modelCode: z.string().min(1),
-  family: z.enum(["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET", "ACCESSORY", "SERVICE", "OTHER"]),
+  family: z.enum(["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET", "ACCESSORY", "MOTOR", "SERVICE", "OTHER"]),
   name: z.string().min(1),
   description: z.string().optional(),
   sizeLabel: z.string().optional(),
@@ -124,6 +125,83 @@ export async function upsertCatalogueItem(input: z.infer<typeof catalogueSchema>
   }
 
   revalidatePath("/admin/catalogue");
+}
+
+export interface MotorSeedResult {
+  /** Rows the code tables define. */
+  total: number;
+  itemsCreated: number;
+  pricesCreated: number;
+  /** Already there, and deliberately left exactly as they were. */
+  untouched: number;
+}
+
+/**
+ * Put the induction-motor prices into the catalogue, so they can be edited
+ * without a deploy.
+ *
+ * **Creates only. It never overwrites anything.** That is the whole safety
+ * property: the point of moving these prices is that the owner edits them, so a
+ * seed that "refreshed" from the code tables would silently undo a price
+ * increase the moment anybody pressed the button again. A row that exists is
+ * left alone — name, specs and price — and counted as untouched.
+ *
+ * Which means this is safe to run at any time, as many times as you like, and
+ * the sensible thing to do after adding motors to the code tables is to run it
+ * again: the new ones appear, the edited ones stay edited.
+ *
+ * Seeded prices are exactly what the code tables hold today, so the app prices
+ * identically the moment this lands — see `motor-catalogue.test.ts`, which walks
+ * every motor and asserts it to the peso.
+ */
+export async function seedMotorCatalogue(): Promise<MotorSeedResult> {
+  await assertAdmin();
+  const rows = motorCatalogueRows();
+
+  const existing = await prisma.catalogueItem.findMany({
+    where: { modelCode: { in: rows.map((r) => r.modelCode) } },
+    select: { id: true, modelCode: true, priceList: { where: { variantKey: "default" }, select: { id: true } } },
+  });
+  const byCode = new Map(existing.map((e) => [e.modelCode, e]));
+
+  const res: MotorSeedResult = { total: rows.length, itemsCreated: 0, pricesCreated: 0, untouched: 0 };
+
+  for (const row of rows) {
+    const found = byCode.get(row.modelCode);
+    if (found) {
+      // The item is here. Its price may have been edited since — leave it.
+      // Only a row with NO price at all gets one, which is the half-seeded case
+      // (interrupted run, or a price deleted by hand).
+      if (found.priceList.length > 0) {
+        res.untouched++;
+        continue;
+      }
+      await prisma.priceListEntry.create({
+        data: { catalogueItemId: found.id, variantKey: "default", basePrice: row.basePrice },
+      });
+      res.pricesCreated++;
+      continue;
+    }
+
+    const item = await prisma.catalogueItem.create({
+      data: {
+        modelCode: row.modelCode,
+        family: "MOTOR",
+        name: row.name,
+        uom: "unit",
+        specs: row.specs as Prisma.InputJsonValue,
+        active: true,
+      },
+    });
+    await prisma.priceListEntry.create({
+      data: { catalogueItemId: item.id, variantKey: "default", basePrice: row.basePrice },
+    });
+    res.itemsCreated++;
+    res.pricesCreated++;
+  }
+
+  revalidatePath("/admin/catalogue");
+  return res;
 }
 
 export async function deleteCatalogueItem(id: string) {

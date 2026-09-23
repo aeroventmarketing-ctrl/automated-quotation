@@ -1,0 +1,15 @@
+-- MOTOR: a catalogue family for induction motors.
+--
+-- Motor prices lived in three hand-edited TypeScript tables, so a supplier
+-- increase needed a developer and a deploy. They move into CatalogueItem, where
+-- the owner edits them in Admin -> Catalogue and bulk-edits them through the
+-- Excel/CSV round trip that already exists there.
+--
+-- Its own family rather than OTHER, because the tab groups by family and a few
+-- hundred motors mixed into OTHER would bury everything else in it. It also
+-- keeps motors out of the public website price list, which lists every active
+-- item that is not a fabricated fan.
+--
+-- Creates no table, so no RLS block is needed. IF NOT EXISTS so a re-run is a
+-- no-op (same as 0015_pr_cancelled).
+ALTER TYPE "Family" ADD VALUE IF NOT EXISTS 'MOTOR';

@@ -18,7 +18,8 @@ import { AIRFLOW_UNIT_LABELS, PRESSURE_UNIT_LABELS, normalizeAirflowUnit, normal
 import { Cog, AlertTriangle } from "lucide-react";
 import type { SelectionResult } from "@/lib/selection";
 import { isNextControlFlowError } from "@/lib/utils";
-import { lookupMotor, computeUnitPrice } from "@/lib/pricing/motors";
+import { lookupMotor, computeUnitPrice, motorNetPrice } from "@/lib/pricing/motors";
+import { catalogueMotorPrice, type MotorPriceMap } from "@/lib/motor-catalogue";
 import { createQuotationFromInquiry } from "../../quotations/actions";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import type { SaleDoc } from "@/lib/sale";
@@ -83,12 +84,15 @@ export function InquiryWorkspace({
   initialDocs = {},
   canEditDocs = true,
   isAdmin = false,
+  motorPrices = null,
 }: {
   inquiryId: string;
   projectName: string;
   items: ItemLite[];
   catalogue: CatLite[];
   templates: { id: string; name: string }[];
+  /** Catalogue motor prices; null falls back to `lib/pricing/motors`. */
+  motorPrices?: MotorPriceMap | null;
   initialDocs?: Record<string, SaleDoc[]>;
   canEditDocs?: boolean;
   isAdmin?: boolean;
@@ -405,7 +409,9 @@ export function InquiryWorkspace({
                     // (body + suggested motor at 3-phase / 4-pole, +10% if applicable).
                     const body = catById[sel.modelId]?.basePrice ?? 0;
                     const motor = lookupMotor(sel.motorHp, 3, 4);
-                    const estNet = body > 0 ? computeUnitPrice(body, motor?.price ?? 0, sel.motorHp, 3) : 0;
+                    // Catalogue price first, so this estimate matches what a quote would charge.
+                    const motorNet = motor ? catalogueMotorPrice(motor, false, motorPrices) ?? motorNetPrice(motor, false) : 0;
+                    const estNet = body > 0 ? computeUnitPrice(body, motorNet, sel.motorHp, 3) : 0;
                     return (
                     <button
                       key={sel.modelId}

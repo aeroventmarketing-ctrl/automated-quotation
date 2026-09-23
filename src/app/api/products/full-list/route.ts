@@ -1,5 +1,6 @@
 import { canTransferCatalogueFiles, CATALOGUE_FILE_MESSAGE } from "@/lib/price-authority";
 import { buildProductListCsv } from "@/lib/product-list-export";
+import { getMotorPrices } from "@/lib/motor-prices";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export async function GET() {
   if (!(await canTransferCatalogueFiles())) {
     return new Response(CATALOGUE_FILE_MESSAGE, { status: 403 });
   }
-  const csv = buildProductListCsv();
+  const csv = buildProductListCsv(await getMotorPrices());
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv;charset=utf-8",

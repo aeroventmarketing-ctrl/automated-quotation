@@ -16,6 +16,18 @@ import type { Family } from "@prisma/client";
 /** Families that ARE fabricated fans / blowers — excluded from the store list. */
 export const FABRICATED_FAN_FAMILIES: Family[] = ["AXIAL", "CENTRIFUGAL", "PROPELLER", "TUBULAR_INLINE", "CABINET"];
 
+/**
+ * Families this list leaves out on top of the fabricated fans.
+ *
+ * `MOTOR` is a PRICE TABLE that happens to live in the catalogue — the induction
+ * motors that used to sit in three hand-edited TypeScript files, moved here so
+ * the owner can edit them without a deploy. They are an input to a fan's price,
+ * not something anybody adds to a cart, and there are a few hundred of them. Left
+ * in, they would be ~half of a CSV whose whole question is "what do we charge for
+ * this online?" — a question a 15 HP 6-pole motor has no answer to.
+ */
+const NOT_ON_THE_WEBSITE: Family[] = [...FABRICATED_FAN_FAMILIES, "MOTOR"];
+
 /** AeroQuote selling price → website selling price (5% online fee grossed up). */
 export function websiteSellingPrice(aeroquotePrice: number): number {
   return Math.round(aeroquotePrice / 0.95);
@@ -33,7 +45,7 @@ export interface WebsitePriceRow {
 
 export async function buildWebsitePriceList(): Promise<WebsitePriceRow[]> {
   const items = await prisma.catalogueItem.findMany({
-    where: { active: true, family: { notIn: FABRICATED_FAN_FAMILIES } },
+    where: { active: true, family: { notIn: NOT_ON_THE_WEBSITE } },
     orderBy: [{ family: "asc" }, { name: "asc" }],
     include: { priceList: { where: { active: true }, orderBy: { effectiveDate: "desc" } } },
   });

@@ -12,8 +12,9 @@
  * induction motors) are blank too.
  */
 import { PRODUCT_TAXONOMY } from "@/lib/product-taxonomy";
-import { TECO_SELLING } from "@/lib/teco-induction-selling";
+import { TECO_SELLING, type TecoSection } from "@/lib/teco-induction-selling";
 import { HYUNDAI_SELLING } from "@/lib/hyundai-induction-selling";
+import { catalogueTecoPrice, catalogueHyundaiPrice, type MotorPriceMap } from "@/lib/motor-catalogue";
 
 export interface ProductListRow {
   category: string;
@@ -45,10 +46,19 @@ function pushMotorRows(
   base: { category: string; brand: string; type: string },
   phaseLabel: string,
   r: { hp: number; pole: number; kw: number | null; rpm: number | null; frame: string; foot: number; flange: number | null },
+  /**
+   * The catalogue price for this row's mounting, or null to use the file's.
+   * Passed in rather than looked up here so this stays one function for both
+   * brands — TECO and Hyundai key their catalogue codes differently.
+   */
+  fromCatalogue: (mounting: "foot" | "flange") => number | null = () => null,
 ) {
   const details = motorDetails(r.kw, r.rpm, r.frame);
-  const add = (mounting: string, price: number | null) => {
+  const add = (mounting: string, price: number | null, key: "foot" | "flange") => {
+    // A mounting the supplier does not offer stays absent — a catalogue price
+    // cannot conjure a flange-mounted motor that is not sold.
     if (price == null) return;
+    price = fromCatalogue(key) ?? price;
     rows.push({
       category: base.category,
       brand: base.brand,
@@ -62,12 +72,18 @@ function pushMotorRows(
       details,
     });
   };
-  add("Foot Mounted", r.foot);
-  add("Flanged Mounted", r.flange);
+  add("Foot Mounted", r.foot, "foot");
+  add("Flanged Mounted", r.flange, "flange");
 }
 
-/** Build the full flattened product list from the taxonomy + motor tables. */
-export function buildProductListRows(): ProductListRow[] {
+/**
+ * Build the full flattened product list from the taxonomy + motor tables.
+ *
+ * `motorPrices` are the catalogue's, and they win where they exist — otherwise
+ * this export would keep publishing the old figure after a price increase was
+ * entered in Admin → Catalogue. Omitted, it behaves exactly as it always did.
+ */
+export function buildProductListRows(motorPrices: MotorPriceMap | null = null): ProductListRow[] {
   const rows: ProductListRow[] = [];
   for (const e of PRODUCT_TAXONOMY) {
     const brand = e.brand ?? "";
@@ -78,13 +94,17 @@ export function buildProductListRows(): ProductListRow[] {
       for (const [key, r] of Object.entries(TECO_SELLING)) {
         const section = key.split("|")[0];
         const phaseLabel = section === "single" ? "1-Phase" : section === "ex" ? "3-Phase Ex-Proof" : "3-Phase";
-        pushMotorRows(rows, { category: e.category, brand, type: e.type }, phaseLabel, r);
+        pushMotorRows(rows, { category: e.category, brand, type: e.type }, phaseLabel, r, (m) =>
+          catalogueTecoPrice(section as TecoSection, r.hp, r.pole, m, motorPrices),
+        );
       }
       continue;
     }
     if (e.category === "Other Products" && e.type === "Induction Motor (Hyundai)") {
       for (const r of Object.values(HYUNDAI_SELLING)) {
-        pushMotorRows(rows, { category: e.category, brand, type: e.type }, "3-Phase", r);
+        pushMotorRows(rows, { category: e.category, brand, type: e.type }, "3-Phase", r, (m) =>
+          catalogueHyundaiPrice(r.hp, r.pole, m, motorPrices),
+        );
       }
       continue;
     }
@@ -129,9 +149,9 @@ export const PRODUCT_LIST_HEADER = [
 ] as const;
 
 /** Render the full product list as a UTF-8 CSV string (with BOM for Excel). */
-export function buildProductListCsv(): string {
+export function buildProductListCsv(motorPrices: MotorPriceMap | null = null): string {
   const lines = [PRODUCT_LIST_HEADER.join(",")];
-  for (const r of buildProductListRows()) {
+  for (const r of buildProductListRows(motorPrices)) {
     lines.push(
       [r.category, r.brand, r.group, r.type, r.variant, r.sku, r.sellingPrice, r.supplierPrice, r.unit, r.details]
         .map(csvCell)

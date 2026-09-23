@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { getMotorPrices } from "@/lib/motor-prices";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { InquiryStatusBadge, QuotationStatusBadge } from "@/components/status-badge";
 import { InquiryStatusControl } from "./inquiry-status-control";
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
 export default async function InquiryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   await ensureBuiltinTemplates(); // make sure the built-in templates are in the picker
-  const [inquiry, catalogue, templates] = await Promise.all([
+  const [inquiry, catalogue, templates, motorPrices] = await Promise.all([
     prisma.inquiry.findUnique({
       where: { id },
       include: {
@@ -45,6 +46,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
       where: { active: true, layoutKey: { in: [...RETAINED_TEMPLATE_LAYOUT_KEYS] } },
       orderBy: { name: "asc" },
     }),
+    getMotorPrices(),
   ]);
 
   if (!inquiry) notFound();
@@ -141,6 +143,7 @@ export default async function InquiryDetailPage({ params }: { params: Promise<{ 
         }))}
         catalogue={catalogueLite}
         templates={sortTemplatesByName(templates).map((t) => ({ id: t.id, name: t.name }))}
+        motorPrices={motorPrices}
         initialDocs={inquiryDocs}
         canEditDocs={canEditDocs}
         isAdmin={isAdmin(viewer)}

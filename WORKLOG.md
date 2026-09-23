@@ -1,3 +1,79 @@
+## 2026-09-22 · Motor prices move into the catalogue
+
+The owner asked how to handle a price increase, and then said the thing that changed the answer:
+*"Price increases does not happen once. It happen per supplier."* Then, looking at the Catalogue tab:
+*"can you add in the catalog all motors?"*
+
+### The trap in that request
+
+Adding the motors to the Catalogue tab is the easy half, and on its own it would have been worse than
+doing nothing. FOUR places read a motor price — the quotation builder, the staff fan selector, the
+inquiry workspace and the product-list export — and all four imported the number straight from
+`src/lib/pricing/motors.ts` at build time. The owner would have edited a price, saved it, and every
+quote would have kept the old figure. Silently.
+
+So this is two pieces shipped together: seed the rows, and rewire the readers.
+
+### The model code cannot be the motor's model code
+
+`CatalogueItem.modelCode` is UNIQUE and TECO's codes are not. Eight codes in `pricing/motors.ts` are
+shared by two or three rows at DIFFERENT prices — `1K3F2T` is 1 HP 3-phase at 2, 4 and 6 poles, at
+₱10,001 / ₱10,001 / ₱15,572 — because the pole is not encoded in the code. Same for frame numbers: 32
+distinct frames across 81 TECO rows.
+
+So the catalogue code is synthetic (`MTR-FAN-005.00HP-3PH-4P`) and the real codes ride in `specs`,
+where the builder already reads them. One row per price, flat — the alternative was one item per
+(HP, phase) with the pole as a `PriceListEntry.variantKey`, which reads better but **cannot be bulk
+edited**, because the catalogue CSV importer only ever writes the `default` variant. That would have
+defeated the entire point.
+
+A key that ROUNDS is a key waiting to stop being unique: at one decimal the 0.25 HP motor came out as
+`000.3`. Two decimals.
+
+### The two TECO tables are not merged
+
+`pricing/motors.ts` and `teco-induction-selling.ts` describe the same TECO motors, and **33 of 41
+overlapping prices have drifted** — ₱15,440 apart on a 100 HP 4-pole, ₱12,305 the other way on a
+15 HP 6-pole. That is deliberate: the selling file's own header says it is independent and that fan
+pricing "must not change". Merging them here would have silently re-priced every fabricated fan.
+
+Both are seeded as separate rows, named so the difference is visible in the tab instead of buried in
+two files. Whether fan motors should adopt the newer TECO prices is a commercial decision and it
+belongs to the owner. A test pins the separation so nobody collapses it by accident.
+
+### Seeded from the code tables, so day one is a no-op
+
+The safety property the whole change rests on: the seed copies today's figures, so the app prices
+identically the moment it lands. A test walks every motor, standard and explosion-proof, and asserts
+it to the peso — and two more walk every TECO and Hyundai row for both mountings, including the
+flange-falls-back-to-foot rule that `tecoNetPrice` has always applied.
+
+Everything falls back. No catalogue row, a zeroed price, a database hiccup — each one prices the old
+way rather than pricing at zero. A quotation that is quietly wrong is far worse than one that is
+quietly old-fashioned.
+
+### The seed button never overwrites
+
+Press it twice and nothing is undone. It only ever CREATES: a motor already in the catalogue keeps
+the price it has. A seed that "refreshed" from the code tables would wipe out a price increase the
+moment somebody pressed the button again, which is the one thing this must never do. The screen says
+so, because "will this reset what I just typed?" is what stops somebody pressing it at all.
+
+### Found on the way
+
+- **A ninth price table.** `EXPROOF_PRICE_BY_HP` — nine explosion-proof prices, an override rather
+  than a surcharge, so it seeds as its own rows and can be raised independently.
+- **The Catalogue tab had no search and no filter.** 316 rows in one table; this adds 282 more. Now
+  there is a search across model / name / family (all words must match, in any order) and a family
+  chip row with counts, capped at 100 rows until asked for more — and it says what it is HIDING,
+  because a silently truncated list is how somebody concludes an item does not exist.
+- **The Edit form would have rejected a motor outright.** `catalogueSchema` hardcodes the family
+  list and would have failed validation on `MOTOR`. So does the dropdown in the manager. Both fixed.
+  The CSV importer derives its list from the Prisma enum, so the bulk-edit path needed nothing.
+- **Motors would have flooded the website price-list CSV**, which lists every active non-fabricated
+  item. That report's whole question is "what do we charge for this online?", which a 15 HP 6-pole
+  motor has no answer to. Excluded by name.
+
 ## 2026-09-21 · The coil: apparatus dew point and bypass factor
 
 The first cut of the Moisture tool shipped with a note saying two things had been left out. One of

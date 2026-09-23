@@ -7,6 +7,7 @@ import { readOrderWorkflow, stageIndex } from "@/lib/order-workflow";
 import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByName } from "@/lib/ensure-templates";
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
+import { getMotorPrices } from "@/lib/motor-prices";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { BatchDocumentList } from "./batch-document-list";
 import { SaleDocumentList } from "../../orders/[id]/sale-document-list";
@@ -26,7 +27,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const { id } = await params;
   // Make sure the built-in "KDK" template is available in the picker.
   await ensureBuiltinTemplates();
-  const [quotation, templates, user, catItems, propellerSpLock, axialSpLock] = await Promise.all([
+  const [quotation, templates, user, catItems, motorPrices, propellerSpLock, axialSpLock] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: {
@@ -52,6 +53,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
         priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } },
       },
     }),
+    getMotorPrices(),
     getPropellerSpLock(),
     getAxialSpLock(),
   ]);
@@ -113,6 +115,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       orderInProduction={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("producing")}
       hasOrderWorkflow={quotation.inquiry.status === "WON" && isSaleConfirmed(saleFromClassification(quotation.classification))}
       orderPaid={stageIndex(readOrderWorkflow(quotation.classification).stage) >= stageIndex("released")}
+      motorPrices={motorPrices}
       propellerSpLock={propellerSpLock}
       axialSpLock={axialSpLock}
       revisionHistory={(() => {
