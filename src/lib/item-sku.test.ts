@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildSkuIndex, skuFor, normalizeItemName, itemNameCandidates, EMPTY_SKU_INDEX } from "./item-sku";
+import { buildSkuIndex, skuFor, skuNameCandidates, normalizeItemName, itemNameCandidates, EMPTY_SKU_INDEX } from "./item-sku";
 import { coercePurchaseOrder, type PurchaseOrder } from "./purchase-order";
 import { renderPurchaseOrderHtml } from "./po-html";
 
@@ -178,5 +178,85 @@ describe("a row with a remark typed into it", () => {
   /** Peeling must not turn an item nobody stocks into somebody else's code. */
   it("still says nothing for an item the catalogue has never heard of", () => {
     expect(skuFor("SOMETHING ELSE ENTIRELY (with a remark)", CATALOGUE)).toBeNull();
+  });
+});
+
+/**
+ * The owner: *"sku not showing in purchasing tab. Please check"* — two
+ * screenshots of the SAME material request, MRF #0363. On the order page each
+ * line carried `SKU CAT00199`; in the Purchasing workspace the same three lines
+ * carried none.
+ *
+ * The difference is what each screen looks the item up BY. The MRF card asks for
+ * the stored description. Purchasing asks `poLineFromPRItem(line).description`,
+ * which is everything after the qty and unit — so the item's whole specification
+ * comes along, and the catalogue has never heard of that string.
+ */
+describe("a purchasing line carrying its specification", () => {
+  const VAV = 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER';
+  const CATALOGUE = buildSkuIndex({
+    products: [
+      { name: VAV, sku: "CAT00199" },
+      { name: 'NENUTEC VARIABLE AIR VOLUME 4" DIAMETER', sku: "CAT00198" },
+    ],
+  });
+  /** Exactly the line off the owner's screenshot, qty/unit already stripped. */
+  const asPurchasingSeesIt =
+    `${VAV} · Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH`;
+
+  it("finds the item under its specification", () => {
+    expect(skuFor(asPurchasingSeesIt, CATALOGUE)).toBe("CAT00199");
+  });
+
+  it("agrees with what the MRF card already showed", () => {
+    expect(skuFor(VAV, CATALOGUE)).toBe("CAT00199");
+    expect(skuFor(asPurchasingSeesIt, CATALOGUE)).toBe(skuFor(VAV, CATALOGUE));
+  });
+
+  it("does not confuse the 6\" with the 4\"", () => {
+    expect(skuFor('NENUTEC VARIABLE AIR VOLUME 4" DIAMETER · Duct Diameter: 150 mm (6 in)', CATALOGUE)).toBe("CAT00198");
+  });
+
+  /**
+   * The `(10 in)` in the middle of the specification is not a remark, and the
+   * parenthetical peel is anchored at the end — which is exactly why this line
+   * showed nothing before: it ends in `CMH`, so nothing was ever peeled.
+   */
+  it("was unreachable by the bracket peel alone", () => {
+    expect(itemNameCandidates(asPurchasingSeesIt)).toEqual([asPurchasingSeesIt]);
+  });
+
+  it("still says nothing for an item the catalogue does not have", () => {
+    expect(skuFor("SOME OTHER DIFFUSER · Duct Diameter: 250 mm", CATALOGUE)).toBeNull();
+  });
+});
+
+describe("skuNameCandidates", () => {
+  /**
+   * Longest first. The two shortenings interleave — a remark AND a spec — and
+   * trying the bare item before `A · B` would hand a spec'd line the wrong code
+   * wherever the catalogue holds both.
+   */
+  it("offers every shortening, most specific first", () => {
+    expect(skuNameCandidates("A · B · C")).toEqual(["A · B · C", "A · B", "A"]);
+    expect(skuNameCandidates("A · B (remark)")).toEqual(["A · B (remark)", "A · B", "A"]);
+    expect(skuNameCandidates("PLAIN NAME")).toEqual(["PLAIN NAME"]);
+  });
+
+  it("never offers an empty candidate", () => {
+    for (const d of ["", "   ", null, undefined, " · ", " · · "]) {
+      expect(skuNameCandidates(d).every((c) => c.length > 0)).toBe(true);
+    }
+  });
+
+  /**
+   * A name that really contains `·` keeps its own code: the untouched name is
+   * the longest candidate, so it is always tried first.
+   */
+  it("lets a real name beat any shortening of it", () => {
+    const idx = buildSkuIndex({ products: [{ name: "PUMP · INLINE", sku: "PRD1" }, { name: "PUMP", sku: "PRD2" }] });
+    expect(skuFor("PUMP · INLINE", idx)).toBe("PRD1");
+    expect(skuFor("PUMP", idx)).toBe("PRD2");
+    expect(skuFor("PUMP · INLINE · 2HP", idx)).toBe("PRD1");
   });
 });

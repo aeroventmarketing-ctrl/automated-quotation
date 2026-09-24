@@ -116,6 +116,54 @@ export function itemNameCandidates(description: string | null | undefined): stri
   return out;
 }
 
+/** The separator `mrfItemLine` and the quotation builder both join parts with. */
+const SPEC_SEPARATOR = " · ";
+
+/**
+ * The same candidates, plus each one shortened a specification at a time.
+ *
+ * The owner: *"sku not showing in purchasing tab"* — beside a line reading
+ *
+ * > `2 pc · NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator
+ * > & Thermostat · Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH`
+ *
+ * while the very same item showed `SKU CAT00199` on the order's MRF card. The
+ * purchasing view hands `poLineFromPRItem(line).description` to the lookup, and
+ * that is *everything after the qty and unit* — the item name with its whole
+ * specification glued on. The catalogue is called `NENUTEC VARIABLE AIR VOLUME
+ * 6" DIAMETER`, so nothing matched. `itemNameCandidates` did not help: it peels
+ * a trailing `(…)`, and this line ends in `CMH`.
+ *
+ * So each candidate is also tried with its last `·` segment dropped, then the
+ * one before, longest first — the longest prefix the catalogue actually knows
+ * wins. An item whose real name contains `·` still matches itself first, because
+ * the unshortened name is always tried before any shortening of it.
+ *
+ * ## Why this lives here and not in `itemNameCandidates`
+ *
+ * `po-catalog`'s `matchKey` calls `itemNameCandidates` to decide **which product
+ * a PO line is**, and from that its supplier and its unit price. Widening the
+ * names it will accept would change what a purchase order costs. This is a code
+ * printed beside an item so somebody can find it on a shelf; the two want
+ * different amounts of latitude, and only this one may be generous.
+ */
+export function skuNameCandidates(description: string | null | undefined): string[] {
+  const out = new Set<string>();
+  for (const name of itemNameCandidates(description)) {
+    const parts = name.split(SPEC_SEPARATOR);
+    for (let take = parts.length; take >= 1; take--) {
+      const candidate = parts.slice(0, take).join(SPEC_SEPARATOR).trim();
+      if (candidate) out.add(candidate);
+    }
+  }
+  // Longest first, because the two shortenings interleave: peeling `A · B
+  // (remark)` yields `A · B (remark)`, `A · B` and `A`, and trying `A` before
+  // `A · B` would hand a spec'd line the bare item's code when the catalogue
+  // holds both. Length orders them exactly right, and leaves the untouched name
+  // — always the longest — first.
+  return [...out].sort((a, b) => b.length - a.length);
+}
+
 /**
  * The code for one item, or null when the catalogue has never heard of it.
  *
@@ -123,7 +171,7 @@ export function itemNameCandidates(description: string | null | undefined): stri
  * by hand, and "—" on every such row would train the eye past the real codes.
  */
 export function skuFor(description: string | null | undefined, index: SkuIndex): string | null {
-  for (const name of itemNameCandidates(description)) {
+  for (const name of skuNameCandidates(description)) {
     const hit = index.get(normalizeItemName(name));
     if (hit) return hit;
   }

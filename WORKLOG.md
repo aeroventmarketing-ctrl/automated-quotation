@@ -1,3 +1,61 @@
+## 2026-09-24 · The SKU the Purchasing tab could not find
+
+The owner sent two screenshots of the same material request, MRF #0363. On the order page each
+line carried its code — `SKU CAT00199`. In the Purchasing workspace the same three lines carried
+none. *"sku not showing in purchasing tab. Please check"*.
+
+### The two screens ask by different names
+
+The MRF card looks the item up by its stored description:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER
+```
+
+Purchasing looks it up by `poLineFromPRItem(line).description`, which is *everything after the qty
+and unit* — and a requisition line is composed, so that is the item name with its whole
+specification glued on:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat ·
+Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH
+```
+
+No catalogue row is called that, so the lookup returned null and the chip never rendered.
+
+`itemNameCandidates` already peels a trailing `(…)` — added when a *remark* hid a SKU. It could not
+help here: the peel is anchored at the end and this line ends in `CMH`. The `(10 in)` sits in the
+middle, where the regex cannot reach it.
+
+### Why the fix is not in `itemNameCandidates`
+
+The obvious move — teach `itemNameCandidates` about `·` — would have been wrong. `po-catalog`'s
+`matchKey` calls it to decide **which product a PO line is**, and from that the supplier and the unit
+price. Its own comment records the last time a looser match went wrong: a remark mentioning a size
+handed an `INDUCTION MOTOR 2 HP` line to the **1 HP** product, and with it the wrong supplier.
+
+Widening that function would have changed what a purchase order costs, to make a chip appear. So the
+shortening lives in `skuNameCandidates`, which only `skuFor` uses, and every caller of `skuFor` is a
+code printed beside an item for somebody walking to a shelf.
+
+Candidates come out longest first, because the two shortenings interleave — `A · B (remark)` yields
+`A · B (remark)`, `A · B` and `A`, and trying `A` before `A · B` would hand a spec'd line the bare
+item's code wherever the catalogue holds both. The untouched name is always the longest, so a product
+whose real name contains `·` still beats any shortening of itself.
+
+### Proved both ways on the real screen
+
+Reproduced in the harness — two catalogue products with short names, one purchase request whose lines
+carry the full specification:
+
+```
+old candidate list → SKU chips present: 0 of 2      (the owner's screenshot)
+new candidate list → SKU chips present: 2 of 2      CAT00199 and CAT00198, not swapped
+```
+
+Same database, same page, one function swapped underneath a running dev server. The 6" and the 4"
+resolve to their own codes rather than collapsing onto one.
+
 ## 2026-09-23 · Finding one commission among four hundred
 
 The owner: *"add a search bar so I can search by order number and client name"*.
