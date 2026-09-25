@@ -1,3 +1,64 @@
+## 2026-09-25 · One purchase order, four rows, and a reconciliation that wouldn't stick
+
+The owner, on the Unreconciled PO list opened an hour earlier: *"List shows multiple same PO's. When
+reconciling it returns to unreconciled"*. `PO-AFBM20260000797` four times, ₱44,845.98 each.
+
+Two symptoms, one cause, written down in `lib/purchase-batch`'s own header:
+
+> every member PurchaseRequest carries the SAME `po` JSON (with the combined lines and one PO number)
+
+A combined PO covering four requests is **four rows in `PurchaseRequest`**, each holding the same PO
+number and the same COMBINED total. A loop over requests therefore reports one purchase order four
+times, at four times its value. The count was always wrong the same way — showing only a number hid
+it, and listing the items is what made it visible.
+
+And `recordReconciliation` ends with:
+
+```js
+await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, ... })
+```
+
+**One member.** The other three keep an empty `reconciliation`, so the PO stays in the backlog after
+being reconciled — which is exactly what "it returns to unreconciled" describes.
+
+### Keyed on the batch, not the PO number
+
+```ts
+const purchaseOrderKey = (prId: string, po: unknown) => poBatchId(po) ?? prId;
+```
+
+A single-request PO has no batch id and falls back to its own request id, so it can never merge with
+anything. Keying on the PO NUMBER would have been the obvious choice and is worse: two unrelated
+requests that happen to carry the same number would silently collapse into one, and that is a data
+error to surface, not to hide. There is a test for exactly that case.
+
+The raw `pr.po` goes into the key, not the coerced object — `coercePurchaseOrder` rebuilds the JSON
+field by field and drops unknown keys, `batchId` among them.
+
+### A PO is handled if ANY member is
+
+`handled` is a separate set, filtered at the end rather than checked inline, because the reconciled
+member can be visited after its unreconciled siblings — and in the owner's data it was. Skipping the
+reconciled row and letting a sibling create the entry is how the PO would have stayed in the backlog
+even after the collapse.
+
+The row says "· 4 requests on this PO" when it stands for more than one, so the combined total does
+not read as belonging to the single request behind the link.
+
+### Fixed where it is displayed, NOT where it is written
+
+The deeper inconsistency is still there: reconciling a combined PO leaves three member rows with no
+record. The lists and counts now agree with reality, which is what the owner is looking at. Making
+`recordReconciliation` write to every member is a change to what a Phase 4 action writes, across
+several purchase requests, and that is asked for before it is done.
+
+### Tests
+
+Seven, against real Postgres, from the owner's own numbers: one row not four, the PO's net not four
+times it, dated from the oldest request, out of the backlog when any member is reconciled — including
+when that member is seen last — once in the hand-tallied list, four separate rows when four requests
+merely share a PO number, and no "N requests" note when a PO really is one request.
+
 ## 2026-09-25 · Two tiles that answered the wrong question
 
 The owner: *"in Unreconciled Vouchers and Unreconciled PO, copy the behavior to be same as Reconciled
