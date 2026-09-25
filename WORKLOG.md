@@ -1,3 +1,88 @@
+## 2026-09-25 · 296 KB to answer "who owns this client?"
+
+The owner's egress chart went UP after the auth fix — 16.6 GB on 24 September against ~10.5 GB/day
+before. Five measurements later, here is what was true.
+
+### The auth fix never fired, and I had the reason wrong twice
+
+`pg_stat_statements`, on a window reset after the deploy, still had the five GoTrue queries at the
+top: 437,368 validations. So `getClaims()` was falling back.
+
+My first explanation — the project signs with a legacy shared secret — was checkable, and the owner
+checked: the JWKS endpoint returns a real ES256 key. Wrong.
+
+Reading the shipped `auth-js` rather than remembering it gave the actual condition:
+
+```js
+const signingKey = !header.alg || header.alg.startsWith('HS') || !header.kid || !crypto.subtle
+    ? null : await this.fetchJwk(header.kid, ...)
+if (!signingKey) { await this.getUser(token) }   // the five queries
+```
+
+It branches on **the token's** `alg`, not the project's published keys. A key can exist in JWKS as
+standby while the legacy secret is still what signs. Publishing is step one; rotating is step two.
+
+### Ordering by calls is blind to bytes, which I knew and did anyway
+
+Auth is 30% of the CALLS and about 7% of the BYTES — five queries returning one small row each.
+Chasing it further would have been chasing 7%.
+
+`order by rows desc` said something different:
+
+```
+11,981 calls × 1,046 rows   StockItem    ← the whole table
+ 9,600 calls × 1,041 rows   Product      ← the whole table
+```
+
+`rows_per_call` of 1,046 against 1,049 live rows means no WHERE clause. **94.8M rows in 40 hours —
+56.8M/day against 12.6M/day in the earlier window.** A 4.5× rise, from the SKU-chip feature adding
+full-catalogue reads to pages that already refresh every eight seconds.
+
+In the first investigation I named StockItem and Product, then retracted it against the wrong
+denominator. The retraction was the error.
+
+### Why the catalogue reads are NOT narrowed here
+
+The obvious fix — fetch only the names on the page — is unsafe, and finding that out cost less than
+shipping it would have:
+
+- `matchKey` is **fuzzy**, tokenised across the whole product catalogue. Narrowing it would break the
+  supplier and price matching fixed three hours earlier.
+- The release-to-requestor stock picker browses the catalogue by design.
+
+That needs a cache with write invalidation, not a narrower query. It is the bigger half and it starts
+fresh, not at the end of a long session.
+
+### What this commit does: one key instead of the whole map
+
+`getAccountData(customerId)` read the entire registry — every client's ownership history,
+conversations and follow-up record — to return one customer's few hundred bytes. On the quotation
+detail page and the customer detail page, both of which auto-refresh.
+
+Postgres can pick the key out: `config -> 'accounts' -> $customerId`. Measured on a 1,200-customer
+registry:
+
+```
+whole registry on the wire: 496 kB
+one customer on the wire  : 409 bytes
+                            1,242x
+```
+
+And a correction that makes the earlier number too small: **`pg_column_size` reports the COMPRESSED
+size.** The 296 KB I quoted is what TOAST stores; the wire carries it decompressed, and in this test
+540 KB of JSON compressed to 13 KB — 40×. So "2.5 GB, 9% of egress" was conservative.
+
+`getAccountsRegistry` is now memoised per request as well, for the passes that genuinely walk every
+account.
+
+### The test is the equivalence, not the speed
+
+The narrow read is only safe if it returns exactly what indexing into the whole registry returned —
+including for the records `parseAccounts` drops, where both must say null. Eleven cases against real
+Postgres: one per parse branch, a customer that never existed, the empty string, and three
+customer ids shaped like SQL injection (they are parameters, and the registry is still there
+afterwards).
+
 ## 2026-09-25 · The supplier the PO form dropped without saying so
 
 The owner: *"when creating PO for Nenutec products it is showing Zenith United as supplier, it
