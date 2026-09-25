@@ -18,6 +18,7 @@ import {
   catalogPriceFor,
   catalogReferencePriceFor,
   suppliersForDescription,
+  unregisteredCarriers,
   withReferencePrices,
   type CatalogPrices,
 } from "./po-catalog";
@@ -209,5 +210,53 @@ describe("the article decides, the remark is ignored", () => {
 
   it("gives up rather than guessing when the article names nothing", () => {
     expect(matchKey("SOMETHING NOBODY SELLS (urgent)", KEYS)).toBeUndefined();
+  });
+});
+
+/**
+ * The owner: *"when creating PO for Nenutec products it is showing Zenith United
+ * as supplier, it should be Ideal Controls"* — and Products had Ideal Controls
+ * saved against the item the whole time.
+ *
+ * The picker offers `registered ∩ carriers`. Ideal Controls was not in the
+ * supplier list, so it fell out of that intersection without a word, leaving one
+ * survivor — which is exactly the condition that auto-picks, and picking
+ * force-overwrites every line's unit price with the picked supplier's.
+ */
+describe("a carrier the supplier list has never heard of", () => {
+  const VAV = 'nenutec variable air volume 6" diameter';
+  const CATALOGUE = { [VAV]: ["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."] };
+  const line = {
+    description: 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in)',
+    qty: "2", unit: "pc", unitPrice: "",
+  };
+
+  it("names the carrier that is missing from the supplier list", () => {
+    expect(unregisteredCarriers([line], CATALOGUE, ["ZENITH UNITED ELECTRIC CORP."])).toEqual(["IDEAL CONTROLS"]);
+  });
+
+  it("says nothing when every carrier is registered", () => {
+    expect(unregisteredCarriers([line], CATALOGUE, ["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."])).toEqual([]);
+  });
+
+  it("is not fooled by case or stray spacing on either side", () => {
+    expect(unregisteredCarriers([line], CATALOGUE, ["  ideal controls ", "zenith united electric corp."])).toEqual([]);
+  });
+
+  it("reports both when neither is registered", () => {
+    expect(unregisteredCarriers([line], CATALOGUE, [])).toEqual(["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."]);
+  });
+
+  /** "Nobody has said who sells it" is a different problem, with its own message. */
+  it("does not report a product that names no carrier at all", () => {
+    expect(unregisteredCarriers([line], { [VAV]: [] }, [])).toEqual([]);
+    expect(unregisteredCarriers([line], { [VAV]: ["", "   "] }, [])).toEqual([]);
+    expect(unregisteredCarriers([line], {}, [])).toEqual([]);
+  });
+
+  it("reports each company once across several lines", () => {
+    const other = { ...line, description: 'NENUTEC VARIABLE AIR VOLUME 4" DIAMETER' };
+    const cat = { ...CATALOGUE, 'nenutec variable air volume 4" diameter': ["Ideal Controls"] };
+    expect(unregisteredCarriers([line, other], cat, ["ZENITH UNITED ELECTRIC CORP."])).toEqual(["IDEAL CONTROLS"]);
   });
 });

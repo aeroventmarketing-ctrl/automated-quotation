@@ -1,3 +1,66 @@
+## 2026-09-25 · The supplier the PO form dropped without saying so
+
+The owner: *"when creating PO for Nenutec products it is showing Zenith United as supplier, it
+should be Ideal Controls"*. And in Products, Ideal Controls was saved against the item all along.
+
+### Two guesses I did not act on
+
+The obvious reading was that yesterday's long spec'd description — the one that hid the SKU — was
+also matching the wrong product. I tested it instead of assuming. With the NENUTEC products in the
+catalogue the matcher finds them correctly, decoys or not; it only goes wrong when the product is
+absent entirely, where it silently landed on `vav actuator`.
+
+The second guess was bad catalogue data. The owner checked: Products says Ideal Controls.
+
+Both wrong, and asking one question settled what an hour of reading could not.
+
+### The picker shows an INTERSECTION, and only apologised for the empty case
+
+```
+eligible = registered suppliers  ∩  carriers named by the catalogue
+```
+
+Ideal Controls is not in the supplier list, so it fell out of that intersection. There was already a
+message for *nothing* surviving — it even names the missing company. There was none for the partial
+case, which is the one that reached the owner:
+
+- the grey line counted the survivors, "Showing 1 supplier that carry these products", which is true
+  of Zenith and silent about Ideal Controls;
+- one survivor is exactly the condition that AUTO-PICKS;
+- and `pickSupplier` calls `withCatalogPrices(..., force = true)`, which overwrites **every line's
+  unit price** with the picked supplier's.
+
+So a missing registry entry did not merely mislabel the purchase order. It priced it.
+
+A form that fills itself in confidently reads as a form that knows.
+
+### The fix
+
+`unregisteredCarriers(lines, catalogue, registeredCompanies)` — pure, in `po-catalog` — names the
+carriers the intersection dropped. Both PO forms (the order panel and the combined-PO card) now say
+which company is missing and where to add it, and **neither auto-picks when a carrier was dropped**:
+the lone survivor is a guess at that point, and the auto-pick would write its prices over the lines.
+
+### Reproduced both ways on the page
+
+A product carrying IDEAL CONTROLS and ZENITH, with only ZENITH in the supplier list, one function
+guarded and unguarded under a running dev server:
+
+```
+before → Company name: "ZENITH UNITED ELECTRIC CORP."   amber: (none)
+after  → Company name: (empty)                          amber: IDEAL CONTROLS also carries these
+                                                               products but isn't in the supplier list…
+```
+
+The first line is the owner's screenshot.
+
+### What this does NOT change
+
+The seeded unit prices still read ₱558 / ₱398. That is `catalogReferencePriceFor` — the *lowest*
+carrier's price, shown before any supplier is chosen — and it is deliberate and documented. It
+refines the moment a supplier is picked. Changing how a line is priced before a supplier exists is a
+money decision, not a bug fix, and it stays out of this commit.
+
 ## 2026-09-24 · The SKU the Purchasing tab could not find
 
 The owner sent two screenshots of the same material request, MRF #0363. On the order page each
