@@ -1,3 +1,52 @@
+## 2026-09-25 · Two tiles that answered the wrong question
+
+The owner: *"in Unreconciled Vouchers and Unreconciled PO, copy the behavior to be same as Reconciled
+by hand. Reconciled by hand tile shows all items reconciled by hand when clicked."*
+
+Both were links. Clicking jumped to the Purchasing or Cash Requests tab positioned on the FIRST
+outstanding item — which answers "show me one of these" when the question a number provokes is "show
+me *which* ones". "Reconciled by hand" beside them already did the right thing: click, and the list
+opens full-width under the row.
+
+### Counting and listing must come from the same loop
+
+`getUnreconciledCounts` returned four numbers. It now returns the rows too — pushed from **inside the
+existing loop, after the existing guards**, not recomputed alongside them. A tile whose number
+disagreed with its own list would be worse than one that only ever showed a number, and two passes
+over the same rules is how that happens. Not one guard changed.
+
+`firstPoId` / `firstVoucherId` existed only to aim those deep links. Each row now carries its own
+`href`, so they went rather than staying as fields nobody reads.
+
+### One component, not two near-copies
+
+The two lists differ in icon, label and caption. `UnreconciledCard` takes those as props, so the next
+change to how a row reads is made once instead of twice-and-hopefully-identically.
+
+### The bug that only rendering could find
+
+The first version passed the Lucide icon as a prop: `icon={Wallet}`. It typechecks. It lints. It
+builds. Then every request fails with
+
+> Functions cannot be passed directly to Client Components
+
+because a React component is a function, and a Server Component may not hand one to a Client
+Component. The whole Production Dashboard rendered as an error boundary with a "Try Again" button.
+
+The icon is chosen by a key now — `icon="voucher"` — and the map lives on the client side of the
+boundary.
+
+Worth writing down twice: **typecheck, lint, 896 unit tests and a production build all passed on a
+dashboard that was completely broken.** Opening the page is what found it, and opening the page is
+what found every UI fault this week.
+
+### Verified by clicking
+
+Each of the three tiles, in the harness: `aria-expanded` false → true → false, the right caption, and
+the count agreeing with the rows beneath it. Unreconciled PO showed 2 and listed exactly its two —
+reference, supplier, amount, and "Raised by Michelle Cotura · Sep 25, 2026, 5:40 PM". The
+zero-count Vouchers tile opens to "Every released voucher is liquidated." rather than an empty box.
+
 ## 2026-09-25 · 296 KB to answer "who owns this client?"
 
 The owner's egress chart went UP after the auth fix — 16.6 GB on 24 September against ~10.5 GB/day
