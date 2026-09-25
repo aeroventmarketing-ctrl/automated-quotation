@@ -131,3 +131,48 @@ run("a combined PO in the unreconciled list", () => {
     expect(poRows[0].detail).not.toContain("requests on this PO");
   });
 });
+
+/**
+ * The write side, now that `recordReconciliation` fans out across the batch.
+ *
+ * These assert the INVARIANT rather than the action (the action needs a signed-in
+ * user with a workflow role): after a reconciliation lands on a combined PO,
+ * **every member row carries it**. That is what makes every other reader — the
+ * purchasing chain, the reports, the order page — agree with these lists.
+ */
+run("a reconciliation on a combined PO", () => {
+  beforeEach(async () => {
+    await prisma.purchaseRequest.deleteMany({});
+  });
+
+  it("reaches every member, so no sibling still reads as unreconciled", async () => {
+    await members(4, { batched: true });
+    const all = await prisma.purchaseRequest.findMany({ select: { id: true, po: true } });
+    const ids = all.map((r) => r.id);
+
+    // What writeReconciliation does: one write across the whole batch.
+    await prisma.purchaseRequest.updateMany({
+      where: { id: { in: ids } },
+      data: { reconciliation: recorded as never },
+    });
+
+    const after = await prisma.purchaseRequest.findMany({ select: { reconciliation: true } });
+    expect(after).toHaveLength(4);
+    expect(after.every((r) => (r.reconciliation as { recordedAt?: string } | null)?.recordedAt)).toBe(true);
+    expect((await getUnreconciledCounts()).pos).toBe(0);
+  });
+
+  /**
+   * The bug as it was: the record on one member only. The list survives it now
+   * (a PO is handled if ANY member is), which is why the display fix shipped
+   * first — but the rows disagreeing with each other is what this change ends.
+   */
+  it("was inconsistent when only one member was written", async () => {
+    await members(4, { batched: true, reconciledIndex: 1 });
+    const after = await prisma.purchaseRequest.findMany({ select: { reconciliation: true } });
+    const carried = after.filter((r) => (r.reconciliation as { recordedAt?: string } | null)?.recordedAt).length;
+    expect(carried).toBe(1); // ← what the old write produced
+    // The reader tolerates it, which is why the symptom is gone either way.
+    expect((await getUnreconciledCounts()).pos).toBe(0);
+  });
+});

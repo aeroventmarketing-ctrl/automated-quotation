@@ -1,3 +1,45 @@
+## 2026-09-25 · A reconciliation belongs to the purchase order, not to one request on it
+
+Follow-up to the same report, with the owner's approval to change what the Phase 4 action writes:
+*"Make it consistent."*
+
+### Nine writers, one invariant, stated nowhere
+
+`recordReconciliation` wrote to a single `PurchaseRequest`. So did the three receipt edits, escalate,
+approve, settle, and both AI-read actions — **nine of them**, each ending in the same line:
+
+```js
+await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, ... })
+```
+
+Every one of those records describes the **purchase order**: on a combined PO the lines are the
+combined lines and the total is the combined total. A combined PO has no row of its own — the same
+`po` JSON sits on every member — so writing to the one member whose id reached the action left the
+others holding nothing, and any reader asking a sibling "is this reconciled?" was told no.
+
+They now all go through `writeReconciliation(pr, next)`. "Which rows does this land on?" is answered
+once instead of nine times, and the tenth writer added later gets it right by construction.
+
+### `updateMany`, and why not a transaction
+
+The codebase's existing combined-PO idiom is `$transaction(ids.map(update))`. That is right for
+editing the PO itself and wrong here: a member id that no longer resolves — a request deleted out of
+the batch — makes every `update` in the transaction fail, and the PO could then **never be
+reconciled at all**. `updateMany` writes the rows that exist and ignores the ones that do not, which
+is the correct failure for a record-keeping step.
+
+The current request is always in the id list, even if the member list has drifted and forgotten it.
+
+### The display fix stays
+
+Shipped an hour earlier: a PO leaves the backlog when ANY member carries a reconciliation. That is
+not made redundant by this — it is what keeps the **existing** production data correct. Every
+combined PO reconciled before today still has its record on one member only, and nothing here
+backfills them. The reader tolerating that is why those POs do not reappear.
+
+Two tests assert exactly that pair: after the fan-out every member carries the record; and with the
+old one-member write the rows disagree while the list is still right.
+
 ## 2026-09-25 · One purchase order, four rows, and a reconciliation that wouldn't stick
 
 The owner, on the Unreconciled PO list opened an hour earlier: *"List shows multiple same PO's. When
