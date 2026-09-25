@@ -22,6 +22,7 @@ import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport } from "../management/pnl-actions";
 import { ExpensesReport } from "./expenses-report";
 import { getManualReconciliations, getUnreconciledCounts } from "@/lib/manual-reconciliations";
+import { UnreconciledCard } from "./unreconciled-card";
 import { ManualReconcileCard } from "./manual-reconcile-card";
 import { getLowStock } from "@/lib/low-stock";
 import { StockAlertsCards } from "./stock-alerts-cards";
@@ -137,7 +138,9 @@ export default async function MyDashboardPage() {
   const manualReconCard = manualRecon ? <ManualReconcileCard rows={manualRecon} /> : null;
   // Outstanding reconciliation backlog — POs / vouchers that can be reconciled
   // but haven't been. Shown as its own tiles beside "Reconciled by hand".
-  const unrecon = canSeeManualRecon ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0, firstPoId: null, firstVoucherId: null })) : null;
+  const unrecon = canSeeManualRecon
+    ? await getUnreconciledCounts().catch(() => ({ pos: 0, vouchers: 0, poRows: [], voucherRows: [] }))
+    : null;
   // An inventory Edit also waits on the catalogue price owner, so they see the
   // pending list here too — otherwise the sign-off they now hold is invisible
   // until they happen to open Inventory.
@@ -224,28 +227,23 @@ export default async function MyDashboardPage() {
       {manualReconCard}
       {unrecon && (
         <>
-          <Link href={unrecon.firstPoId ? `/purchasing?req=${unrecon.firstPoId}` : "/purchasing"} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
-              <CardContent className="flex items-center gap-3 py-4">
-                <ShoppingCart className="h-6 w-6 text-amber-600" />
-                <div>
-                  <div className="text-2xl font-bold tabular-nums leading-none">{unrecon.pos}</div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Unreconciled PO</div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-          <Link href={unrecon.firstVoucherId ? `/cash-requests?id=${unrecon.firstVoucherId}` : "/cash-requests"} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-            <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
-              <CardContent className="flex items-center gap-3 py-4">
-                <Wallet className="h-6 w-6 text-amber-600" />
-                <div>
-                  <div className="text-2xl font-bold tabular-nums leading-none">{unrecon.vouchers}</div>
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Unreconciled Vouchers</div>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
+          {/* The owner: *"copy the behavior to be same as Reconciled by hand"*.
+              These were links that jumped to the FIRST item, which answers "show
+              me one of these" when the number provokes "show me which ones". */}
+          <UnreconciledCard
+            rows={unrecon.poRows}
+            label="Unreconciled PO"
+            caption="Purchase orders with no reconciliation yet — not by hand, not by the receipt reader"
+            emptyText="Every purchase order is reconciled."
+            icon="po"
+          />
+          <UnreconciledCard
+            rows={unrecon.voucherRows}
+            label="Unreconciled Vouchers"
+            caption="Cash vouchers released but not yet liquidated"
+            emptyText="Every released voucher is liquidated."
+            icon="voucher"
+          />
           <a href="/reports/sales-summary" target="_blank" rel="noopener noreferrer" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
             <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
               <CardContent className="flex items-center gap-3 py-4">
