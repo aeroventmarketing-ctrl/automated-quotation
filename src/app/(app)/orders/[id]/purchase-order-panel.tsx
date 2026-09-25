@@ -12,7 +12,7 @@ import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/p
 type EditLine = POLine & { priceReason?: string };
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, suppliersForDescription, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, suppliersForDescription, unregisteredCarriers, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -124,6 +124,19 @@ export function PurchaseOrderPanel({
    */
   const namedLines = lines.some((l) => l.description.trim());
   const carrierNames = [...new Set(lines.flatMap((l) => suppliersForDescription(l.description, catalogSuppliers)))];
+  /**
+   * Carriers the catalogue names that are NOT in the supplier list — case 2
+   * above, but PARTIAL: some carriers registered, some not.
+   *
+   * The owner: *"when creating PO for Nenutec products it is showing Zenith
+   * United as supplier, it should be Ideal Controls"* — with Ideal Controls
+   * saved against the product all along, and simply absent from the supplier
+   * list. It dropped out of `eligible` in silence, Zenith was the only survivor,
+   * and "exactly one survivor" is what auto-picks below. Picking force-overwrites
+   * every line's unit price, so the missing registry entry repriced the PO as
+   * well as misnaming it.
+   */
+  const droppedCarriers = unregisteredCarriers(lines, catalogSuppliers, suppliers.map((s) => s.company));
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
@@ -167,7 +180,12 @@ export function PurchaseOrderPanel({
       else setCompany(KDK_SUPPLIER);
       return;
     }
-    if (filtered && eligible.length === 1) { autoPicked.current = true; pickSupplier(eligible[0]); }
+    // One survivor is only an answer when nothing was dropped getting there. If
+    // the catalogue named a carrier the supplier list doesn't hold, the lone
+    // remaining company is a guess — and this call would write its prices over
+    // every line. Leave the box empty; the amber note below says which company
+    // to add.
+    if (filtered && eligible.length === 1 && droppedCarriers.length === 0) { autoPicked.current = true; pickSupplier(eligible[0]); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // JOEL LATERO SHOP is non-VATable — EWT never applies, however the supplier is
@@ -300,6 +318,16 @@ export function PurchaseOrderPanel({
           {filtered && eligible.length > 0 && (
             <p className="text-[11px] text-muted-foreground">
               Showing {eligible.length} supplier{eligible.length === 1 ? "" : "s"} that carry these products. Type to use another.
+            </p>
+          )}
+          {/* Some carriers registered, some not. The line above counts only the
+              survivors, which reads as a complete answer — so name what it left
+              out, and say where to fix it. */}
+          {filtered && eligible.length > 0 && droppedCarriers.length > 0 && (
+            <p className="text-[11px] text-amber-700">
+              {droppedCarriers.length === 1
+                ? `${droppedCarriers[0]} also carries these products but isn't in the supplier list, so it isn't offered above — add it under Admin › Suppliers, or type it here.`
+                : `These products are also carried by ${droppedCarriers.join(", ")}, which aren't in the supplier list — add them under Admin › Suppliers, or type one here.`}
             </p>
           )}
           {/* The product names a supplier nobody has registered. Say which. */}

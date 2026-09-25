@@ -223,3 +223,43 @@ export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): Se
   for (const l of lines) for (const co of suppliersForDescription(l.description, catalog)) set.add(co.toLowerCase());
   return set;
 }
+
+/**
+ * Carriers the catalogue names for these lines that are **not in the supplier
+ * list** — the ones the picker silently drops.
+ *
+ * The owner: *"when creating PO for Nenutec products it is showing Zenith United
+ * as supplier, it should be Ideal Controls"* — with Ideal Controls saved against
+ * the product in Products all along.
+ *
+ * The picker offers `registered ∩ carriers`. A carrier nobody registered falls
+ * out of that intersection, and until now it fell out **without a word**: the
+ * form said "Showing 1 supplier that carry these products", which is true of the
+ * survivor and silent about the company the product actually names. Worse, one
+ * survivor is exactly the condition that triggers the auto-pick — and picking a
+ * supplier force-overwrites every line's unit price with that supplier's. So a
+ * missing registry entry did not merely mislabel the PO, it repriced it.
+ *
+ * There was already a message for the case where NOTHING survives. This is the
+ * partial case, which is the one that reached the owner, because a form that
+ * fills itself in confidently reads as a form that knows.
+ */
+export function unregisteredCarriers(
+  lines: POLine[],
+  catalog: CatalogSuppliers,
+  registeredCompanies: readonly string[],
+): string[] {
+  const known = new Set(registeredCompanies.map((c) => c.trim().toLowerCase()));
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const l of lines) {
+    for (const co of suppliersForDescription(l.description, catalog)) {
+      const key = co.trim().toLowerCase();
+      // A blank carrier is "nobody has said who sells it", not a missing record.
+      if (!key || known.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(co.trim());
+    }
+  }
+  return out;
+}

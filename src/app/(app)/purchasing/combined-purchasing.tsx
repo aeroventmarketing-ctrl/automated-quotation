@@ -22,7 +22,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
 import type { CashPayment } from "@/lib/cash-payment";
-import { catalogPriceFor, withCatalogPrices, suppliersForDescription, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { catalogPriceFor, withCatalogPrices, suppliersForDescription, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -572,6 +572,13 @@ function CombineForm({
   // Only show suppliers that carry the products; fall back to all when nothing matched.
   const eligible = carrierSet.size > 0 ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
   const filtered = carrierSet.size > 0;
+  /**
+   * Carriers the catalogue names that the supplier list doesn't hold — dropped
+   * from `eligible` above without a word. See `unregisteredCarriers`: a product
+   * whose real supplier is unregistered leaves one survivor, and one survivor is
+   * what auto-picks below — which force-overwrites every line's unit price.
+   */
+  const droppedCarriers = unregisteredCarriers(lines, catalogSuppliers, suppliers.map((s) => s.company));
 
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
@@ -595,7 +602,9 @@ function CombineForm({
   const autoPicked = useRef(false);
   useEffect(() => {
     if (autoPicked.current) return;
-    if (!company && filtered && eligible.length === 1) {
+    // Only when nothing was dropped getting to that one — otherwise the survivor
+    // is a guess, and picking writes its prices over every line.
+    if (!company && filtered && eligible.length === 1 && droppedCarriers.length === 0) {
       autoPicked.current = true;
       pickSupplier(eligible[0]);
     }
@@ -665,6 +674,14 @@ function CombineForm({
           {filtered && (
             <p className="text-[11px] text-muted-foreground">
               Showing {eligible.length} supplier{eligible.length === 1 ? "" : "s"} that carry these products. Type to use another.
+            </p>
+          )}
+          {/* The count above is of survivors only. Name the carriers it left out. */}
+          {filtered && droppedCarriers.length > 0 && (
+            <p className="text-[11px] text-amber-700">
+              {droppedCarriers.length === 1
+                ? `${droppedCarriers[0]} also carries these products but isn't in the supplier list, so it isn't offered above — add it under Admin › Suppliers, or type it here.`
+                : `These products are also carried by ${droppedCarriers.join(", ")}, which aren't in the supplier list — add them under Admin › Suppliers, or type one here.`}
             </p>
           )}
         </div>
