@@ -1,3 +1,112 @@
+## 2026-09-24 · The SKU the Purchasing tab could not find
+
+The owner sent two screenshots of the same material request, MRF #0363. On the order page each
+line carried its code — `SKU CAT00199`. In the Purchasing workspace the same three lines carried
+none. *"sku not showing in purchasing tab. Please check"*.
+
+### The two screens ask by different names
+
+The MRF card looks the item up by its stored description:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER
+```
+
+Purchasing looks it up by `poLineFromPRItem(line).description`, which is *everything after the qty
+and unit* — and a requisition line is composed, so that is the item name with its whole
+specification glued on:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat ·
+Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH
+```
+
+No catalogue row is called that, so the lookup returned null and the chip never rendered.
+
+`itemNameCandidates` already peels a trailing `(…)` — added when a *remark* hid a SKU. It could not
+help here: the peel is anchored at the end and this line ends in `CMH`. The `(10 in)` sits in the
+middle, where the regex cannot reach it.
+
+### Why the fix is not in `itemNameCandidates`
+
+The obvious move — teach `itemNameCandidates` about `·` — would have been wrong. `po-catalog`'s
+`matchKey` calls it to decide **which product a PO line is**, and from that the supplier and the unit
+price. Its own comment records the last time a looser match went wrong: a remark mentioning a size
+handed an `INDUCTION MOTOR 2 HP` line to the **1 HP** product, and with it the wrong supplier.
+
+Widening that function would have changed what a purchase order costs, to make a chip appear. So the
+shortening lives in `skuNameCandidates`, which only `skuFor` uses, and every caller of `skuFor` is a
+code printed beside an item for somebody walking to a shelf.
+
+Candidates come out longest first, because the two shortenings interleave — `A · B (remark)` yields
+`A · B (remark)`, `A · B` and `A`, and trying `A` before `A · B` would hand a spec'd line the bare
+item's code wherever the catalogue holds both. The untouched name is always the longest, so a product
+whose real name contains `·` still beats any shortening of itself.
+
+### Proved both ways on the real screen
+
+Reproduced in the harness — two catalogue products with short names, one purchase request whose lines
+carry the full specification:
+
+```
+old candidate list → SKU chips present: 0 of 2      (the owner's screenshot)
+new candidate list → SKU chips present: 2 of 2      CAT00199 and CAT00198, not swapped
+```
+
+Same database, same page, one function swapped underneath a running dev server. The 6" and the 4"
+resolve to their own codes rather than collapsing onto one.
+
+## 2026-09-23 · Finding one commission among four hundred
+
+The owner: *"add a search bar so I can search by order number and client name"*.
+
+The Commissions page is a card per salesperson per month, and each card is a table. The salesperson
+is the heading you scroll to and the month is written beside it — what is hard to find is the ROW.
+
+### It had to be a client component, and that had a cost worth paying
+
+Every other table in this app filters as you type. Matching that meant getting the rows into the
+browser, and the rows could not import `lib/sales-commission` — it reaches Prisma. So the page now
+answers the four questions that module owns (`dealKey`, `isVoucherable`, `canMarkPaid`,
+`markPaidOpensYMD`) on the SERVER and sends the answers down with each row; the types travel as
+`import type`, which compiles away to nothing.
+
+The consequence is the reassuring one: **the browser cannot widen anything.** It receives rows
+already decided and picks which to show. A tick still carries only a key, and the voucher page still
+recomputes every peso from the confirmed sales.
+
+### Two separators problem
+
+Order numbers are printed `2026 - AFBM00003264S` and typed `AFBM00003264`, or pasted out of an email
+as `2026-AFBM00003264S`. A plain substring match finds none of those. So the matcher runs two passes
+— as-written, then with everything but letters and digits stripped from both sides — and a hit on
+either counts. A punctuation-only term squashes to the empty string, which `includes` would treat as
+matching every row, so that case is rejected explicitly and tested.
+
+### What a filter must not quietly do to a total
+
+Hiding rows does not make a month earn less, and the numbers on the card are month facts: "Sales this
+month", the Qualified badge, Earned / Paid / Unpaid. Recomputing them from the visible rows would put
+a smaller, wrong figure under a familiar label — the kind of number somebody quotes in a meeting.
+
+So while a search is active the card keeps its real totals and SAYS so ("Totals are for the whole
+month, not the matches"), and the header reads "1 of 4 sales match" rather than "1 sale".
+
+The one thing that does follow the filter is **Select all**, which ticks what is on screen and
+nothing else. Ticking a month's worth of money from a card showing one row is how you put a
+commission on a voucher without ever having looked at it.
+
+### Rendered, because typecheck and lint have caught none of this week's UI faults
+
+The harness needed a month that actually qualifies before any tick box would appear — two ₱700,000
+orders, paid in full. Two false starts getting there, both mine: the seed wrote the sale fields at
+the top level instead of under `sale`, and then used `at` for the payment date where the reader wants
+`date`. Neither would have shown up as an error; the rows simply did not appear.
+
+With real tickable rows: `Select all 2` unfiltered → `Select all 1` filtered → ticks exactly one, and
+the hidden row is still unticked when the search clears. A tick made before filtering survives its
+row being hidden and stays visible in the sticky voucher bar.
+
 ## 2026-09-23 · Four-fifths of the database traffic was not the application
 
 The owner sent the Supabase chart: 241 GB of a 250 GB allowance, 13 days in. Shared Pooler 95–97%
