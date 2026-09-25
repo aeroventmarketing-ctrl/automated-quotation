@@ -23,7 +23,27 @@ import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { coerceReconciliation, isReconciled, canReconcileAt } from "@/lib/purchase-reconcile";
 import { coerceLiquidation, isLiquidated, canLiquidateAt, type CashRequestStatus } from "@/lib/cash-request";
 import { isDeptRequisition, type PRStatus } from "@/lib/purchasing";
+import { poBatchId } from "@/lib/purchase-batch";
 import { formatDateTime } from "@/lib/utils";
+
+/**
+ * What makes two PurchaseRequest rows the SAME purchase order.
+ *
+ * A combined PO stores the identical `po` JSON — same PO number, same combined
+ * lines, same total — on **every member request** (see `lib/purchase-batch`). So
+ * a PO covering four requests is four rows in this table, and a loop over
+ * requests reports it four times at four times its value.
+ *
+ * The owner: *"List shows multiple same PO's."* — `PO-AFBM20260000797` four
+ * times at ₱44,845.98 each.
+ *
+ * Keyed on the BATCH id, not the PO number. A single-request PO has no batch id
+ * and falls back to its own request id, so it can never be merged with anything
+ * — where keying on the PO number would silently collapse two unrelated requests
+ * that happened to carry the same number, which is a data error to surface, not
+ * to hide.
+ */
+const purchaseOrderKey = (prId: string, po: unknown): string => poBatchId(po) ?? prId;
 
 export type ManualReconKind = "PO" | "Requisition" | "Cash";
 
@@ -57,7 +77,11 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
 
   const rows: ManualReconRow[] = [];
 
-  // POs / requisitions — reconciled by hand (not AI-verified).
+  // POs / requisitions — reconciled by hand (not AI-verified). One entry per
+  // purchase order: a combined PO puts the same `po` on every member request, so
+  // without this a PO whose members were each tallied would be listed once per
+  // member, at the combined total each time. See `purchaseOrderKey`.
+  const seenPo = new Set<string>();
   for (const pr of prs) {
     const r = coerceReconciliation(pr.reconciliation);
     if (!isReconciled(r) || r.aiVerified === true || !r.recordedAt) continue;
@@ -65,6 +89,9 @@ export async function getManualReconciliations(): Promise<ManualReconRow[]> {
     // A discrepancy that's been authorised (by the Payment Approver or an Admin)
     // is already handled — drop it.
     if (r.approval) continue;
+    const key = purchaseOrderKey(pr.id, pr.po);
+    if (seenPo.has(key)) continue;
+    seenPo.add(key);
     const po = coercePurchaseOrder(pr.po);
     rows.push({
       id: `pr-${pr.id}`,
@@ -151,17 +178,43 @@ export async function getUnreconciledCounts(): Promise<{
   // and a tile whose number disagreed with its own list would be worse than one
   // that only ever showed a number — so the rows are pushed from inside the very
   // same loop, after the very same guards, rather than recomputed alongside.
-  const poRows: UnreconciledRow[] = [];
+  /**
+   * One entry per PURCHASE ORDER, not per request — see `purchaseOrderKey`.
+   *
+   * A combined PO is reconciled once, for the whole PO, and `recordReconciliation`
+   * writes that record to a single member. So a PO counts as handled the moment
+   * ANY of its members carries a reconciliation: `handled` remembers that even if
+   * the reconciled member was visited after its unreconciled siblings, which is
+   * the order they arrive in.
+   */
+  const byPo = new Map<string, UnreconciledRow & { members: number }>();
+  const handled = new Set<string>();
   for (const pr of prs) {
     if (!canReconcileAt(pr.status as PRStatus)) continue;
     // Nothing purchased from a supplier (e.g. every line issued from stock) →
     // there's no PO spend to reconcile.
     const po = coercePurchaseOrder(pr.po);
     if (!po || poTotals(po).net <= 0) continue;
+    const key = purchaseOrderKey(pr.id, pr.po);
     const r = coerceReconciliation(pr.reconciliation);
-    // Handled by ANY method → not part of the backlog.
-    if (isReconciled(r) || r.recordedAt || r.aiVerified === true || r.approval || r.settled) continue;
-    poRows.push({
+    // Handled by ANY method → not part of the backlog, and not for any sibling
+    // of this PO either.
+    if (isReconciled(r) || r.recordedAt || r.aiVerified === true || r.approval || r.settled) {
+      handled.add(key);
+      continue;
+    }
+    const prev = byPo.get(key);
+    if (prev) {
+      prev.members += 1;
+      // Keep the OLDEST raise date: a backlog entry's age is how long the need
+      // has been waiting, which is the first request on the PO, not the last.
+      if (pr.createdAt && pr.createdAt.toISOString() < prev.raisedAtISO) {
+        prev.detail = raisedLabel(pr.createdByName, pr.createdAt);
+        prev.raisedAtISO = pr.createdAt.toISOString();
+      }
+      continue;
+    }
+    byPo.set(key, {
       id: `pr-${pr.id}`,
       ref: po.poNumber || "—",
       title: po.supplier?.company || "",
@@ -169,8 +222,17 @@ export async function getUnreconciledCounts(): Promise<{
       detail: raisedLabel(pr.createdByName, pr.createdAt),
       raisedAtISO: pr.createdAt?.toISOString() ?? "",
       href: `/purchasing?req=${pr.id}`,
+      members: 1,
     });
   }
+  const poRows: UnreconciledRow[] = [...byPo.entries()]
+    .filter(([key]) => !handled.has(key))
+    .map(([, row]) => {
+      const { members, ...r } = row;
+      // Say so when one row stands for several requests, rather than leaving the
+      // combined total looking like it belongs to the one request behind the link.
+      return members > 1 ? { ...r, detail: `${r.detail} · ${members} requests on this PO` } : r;
+    });
 
   const voucherRows: UnreconciledRow[] = [];
   for (const cr of crs) {

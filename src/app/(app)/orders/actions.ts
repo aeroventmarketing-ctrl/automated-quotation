@@ -3060,6 +3060,45 @@ export async function saveCashPositionAction(input: {
 // --- Voucher reconciliation -------------------------------------------------
 
 /**
+ * Write a reconciliation onto EVERY member of its purchase order.
+ *
+ * The owner: *"When reconciling it returns to unreconciled"*.
+ *
+ * A combined PO has no row of its own — `lib/purchase-batch` stores the same
+ * `po` JSON on every member PurchaseRequest, with one PO number and one set of
+ * combined lines. A reconciliation describes **that purchase order**: its lines
+ * are the combined lines and its total is the combined total. Writing it to the
+ * single member whose id happened to reach the action left the others holding
+ * nothing, so every reader that asks "is this reconciled?" of a sibling said no
+ * — and the PO came straight back to the unreconciled list.
+ *
+ * `updateMany`, deliberately, rather than a transaction of `update`s: a member
+ * id that no longer resolves (a request deleted out of the batch) would make
+ * every `update` in that transaction fail, and the PO could then never be
+ * reconciled at all. `updateMany` writes the rows that are there and ignores the
+ * ones that are not, which is the right failure for a record-keeping step.
+ *
+ * The current request is always included, even if the member list has drifted
+ * and forgotten it.
+ *
+ * Every reconciliation writer below goes through here — record, the three
+ * receipt edits, escalate, approve, settle, and the two AI-read actions. They
+ * all describe the purchase order rather than one request on it, so "which rows
+ * does this land on?" is answered once, in one place, instead of nine times.
+ */
+async function writeReconciliation(
+  pr: { id: string; po: unknown },
+  next: unknown,
+): Promise<void> {
+  const members = poMemberIds(pr.po);
+  const ids = members.length > 0 ? [...new Set([pr.id, ...members])] : [pr.id];
+  await prisma.purchaseRequest.updateMany({
+    where: { id: { in: ids } },
+    data: { reconciliation: next as unknown as Prisma.InputJsonValue },
+  });
+}
+
+/**
  * Record the per-line actual spend + receipts against the issued voucher. The
  * purchaser enters the actual amount paid for each PO line and attaches the
  * receipts (uploaded to /api/purchase-uploads); the system tallies each line
@@ -3121,7 +3160,7 @@ export async function recordReconciliation(
     aiVerified: input.aiVerified === true,
     note: input.note?.trim() || undefined,
   };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3134,7 +3173,7 @@ export async function removeReconciliationReceipt(purchaseRequestId: string, pat
   if (!pr) throw new Error("Purchase request not found");
   const cur = coerceReconciliation(pr.reconciliation);
   const next = { ...cur, receipts: (cur.receipts ?? []).filter((d) => d.path !== path) };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3149,7 +3188,7 @@ export async function addReconciliationReceipt(purchaseRequestId: string, doc: {
   const cur = coerceReconciliation(pr.reconciliation);
   const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
   const next = { ...cur, receipts: [...(cur.receipts ?? []), clean] };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3165,7 +3204,7 @@ export async function replaceReconciliationReceipt(purchaseRequestId: string, ol
   const clean = { path: doc.path, name: doc.name, uploadedAt: doc.uploadedAt ?? new Date().toISOString() };
   const receipts = (cur.receipts ?? []).map((d) => (d.path === oldPath ? clean : d));
   const next = { ...cur, receipts };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3233,7 +3272,7 @@ export async function escalateReconciliation(purchaseRequestId: string, note?: s
     ...cur,
     escalation: { byName: user.name, role: role ? workflowRoleLabel(role) : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3259,7 +3298,7 @@ export async function approveReconciliation(purchaseRequestId: string, note?: st
     ...cur,
     approval: { byName: user.name, role: isApprover ? workflowRoleLabel("payment_approver") : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3283,7 +3322,7 @@ export async function settleReconciliation(purchaseRequestId: string, note?: str
     ...cur,
     settled: { byName: user.name, role: settleRole ? workflowRoleLabel(settleRole) : admin ? "Admin" : "", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3348,7 +3387,7 @@ export async function escalateReconcileAiRead(purchaseRequestId: string, note?: 
     ...cur,
     aiReadEscalation: { byName: user.name, role: role ? workflowRoleLabel(role) : "Admin", at: new Date().toISOString(), note: note?.trim() || undefined },
   };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3368,7 +3407,7 @@ export async function resetReconcileAiRead(purchaseRequestId: string): Promise<v
   if (!pr) throw new Error("Purchase request not found");
   const cur = coerceReconciliation(pr.reconciliation);
   const next = { ...cur, aiReadCount: 0, aiReadEscalation: undefined };
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { reconciliation: next as unknown as Prisma.InputJsonValue } });
+  await writeReconciliation(pr, next);
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
