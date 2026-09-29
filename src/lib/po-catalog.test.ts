@@ -341,3 +341,55 @@ describe("wiring a product to its supplier by id", () => {
     expect(carriersForLines(two, picked)).toHaveLength(1);
   });
 });
+
+/**
+ * The specification tail, and the numbers it smuggles into the model-code set.
+ *
+ * The owner, on a PO built from an MRF for Nenutec VAVs: *"when creating PO in
+ * nenutec product, supplier shows zenith united corp … and no other choices.
+ * Supplier of Nenutec product is Ideal Controls Incorporated."*
+ *
+ * #551 taught the SKU lookup to peel ` · ` specifications and deliberately left
+ * `matchKey` alone, so the SKU chip read CAT00199 while the supplier box named a
+ * different company — the two lookups disagreed about what the line even was.
+ */
+describe("matchKey — a line's specification must not choose its product", () => {
+  const LINE =
+    'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH';
+  const NENUTEC = [4, 6, 8, 10, 12, 14, 16].map((n) => `nenutec variable air volume ${n}" diameter`);
+  /** Unrelated, and carrying two of the numbers from the line's SPEC tail. */
+  const DECOY = "air circuit breaker 250 a 10 ka";
+
+  it("reads the article at the front, not the numbers at the back", () => {
+    expect(matchKey(LINE, NENUTEC)).toBe('nenutec variable air volume 6" diameter');
+  });
+
+  it.each([
+    ["decoy last", [...NENUTEC, DECOY]],
+    ["decoy first", [DECOY, ...NENUTEC]],
+  ])("is not outranked by an unrelated product that shares those numbers (%s)", (_label, keys) => {
+    // 250 and 10 come from "Duct Diameter: 250 mm (10 in)". They used to pass the
+    // cross-model guard AND add 100 each to the decoy's score, which is how an
+    // air circuit breaker won a Nenutec VAV line.
+    expect(matchKey(LINE, keys)).toBe('nenutec variable air volume 6" diameter');
+  });
+
+  it("does not let the spec tail pick a different SIZE of the same product", () => {
+    // "(10 in)" in the tail makes the 10" product's only code present too.
+    expect(matchKey(LINE, NENUTEC)).not.toBe('nenutec variable air volume 10" diameter');
+  });
+
+  it("still matches when the catalogue spells the size without the inch mark", () => {
+    expect(matchKey(LINE, ["nenutec variable air volume 6 diameter"])).toBe("nenutec variable air volume 6 diameter");
+  });
+
+  /** Peeling must never beat a catalogue entry that really is the whole line. */
+  it("prefers a product whose real name carries the specification", () => {
+    const whole = LINE.toLowerCase();
+    expect(matchKey(LINE, [...NENUTEC, whole])).toBe(whole);
+  });
+
+  it("leaves a line the catalogue does not know unmatched", () => {
+    expect(matchKey(LINE, ["angle bar", "mild steel plate"])).toBeUndefined();
+  });
+});

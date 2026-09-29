@@ -1,3 +1,64 @@
+## 2026-09-29 · The half of #551 I decided not to fix
+
+The owner, on a PO built from an MRF for Nenutec VAVs: *"when creating PO in nenutec product, supplier
+shows zenith united corp … and no other choices. Supplier of Nenutec product is Ideal Controls
+Incorporated."*
+
+Three days ago, in #551, I quoted **this exact line**, fixed the SKU lookup, and wrote down why I was
+not fixing the other caller:
+
+> *`po-catalog`'s `matchKey` calls `itemNameCandidates` to decide which product a PO line is, and from
+> that its supplier and its unit price. Widening the names it will accept would change what a purchase
+> order costs.*
+
+That reasoning protected the fuzzy matcher and left the line itself unmatched, which is how the SKU
+chip came to read `CAT00199` while the supplier box read a different company entirely. Two lookups,
+one line, two answers about what the thing even is. The caution was real; applying it by leaving the
+caller alone was the wrong conclusion.
+
+### Why an air circuit breaker wins a VAV line
+
+What reaches the fuzzy pass is the article **plus its whole specification**:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat
+  · Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH
+```
+
+Every number in that tail — 250, 10, 306, 2294 — joins the line's model-code set. The cross-model
+guard then waves through any product whose OWN codes happen to appear there, and the score adds 100
+per code. So a product carrying **two** of those numbers outranks the product actually named at the
+front of the line, which carries one:
+
+```
+keys = 4" 6" 8" 10" … VAVs                       → nenutec variable air volume 6" diameter
+keys = … + "air circuit breaker 250 a 10 ka"     → air circuit breaker 250 a 10 ka
+```
+
+The same tail also makes the **10"** product's only code present, so even among the Nenutec products
+the size was decided by a number in the spec rather than the one in the name.
+
+### The fix, and why it cannot loosen anything
+
+The peeled names are tried in **step 1**, where the test is EXACT — a catalogue entry that *is* this
+candidate, ignoring punctuation and spacing. That can never select a looser product than the fuzzy
+pass would; it can only stop the fuzzy pass being reached on a line whose article the catalogue knows
+by name. Longest prefix first, so a product whose real name contains ` · ` still matches itself before
+any shortening of it, and a catalogue entry that really is the whole line still wins.
+
+### It was repricing, not just mislabelling
+
+The A/B, same seeded request, same screen, only `matchKey` swapped:
+
+```
+before   ZENITH UNITED ELECTRIC CORP.      ₱558 · ₱558 · ₱558     ← the circuit breaker's price
+after    IDEAL CONTROLS INCORPORATED       ₱28,400 · ₱30,894 · ₱31,894
+```
+
+Which is the failure #552 described and this is a fresh instance of: one eligible supplier is exactly
+the condition that auto-picks, and picking force-overwrites every line's unit price. A ₱91,188 PO was
+being written as ₱3,348.
+
 ## 2026-09-29 · 999 of 1,041, one press
 
 The marker shipped, and the owner's screenshot answered the question I hadn't asked: **999 of 1,041**
