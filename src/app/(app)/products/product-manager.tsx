@@ -12,6 +12,7 @@ import { code128Svg } from "@/lib/code128";
 import { qrSvg } from "@/lib/qr";
 import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
+import { supplierLinkState, weakLinkCount, SUPPLIER_LINK_HINT } from "@/lib/supplier-link";
 import type { ProductRow } from "@/lib/product-catalog";
 import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction, type ProductSaveResult } from "./actions";
 import { BulkImport } from "./bulk-import";
@@ -71,6 +72,28 @@ const noticeFor = (r: ProductSaveResult): Notice =>
   !r.ok ? { kind: "error", text: r.error } : r.applied ? null : { kind: "held", text: r.message };
 
 /**
+ * Says, on the chip, whether this supplier link is wired by ID or only by name.
+ *
+ * The two look identical until the supplier is renamed, and then the difference
+ * shows up as a purchase order made out to the wrong company. A product linked
+ * by name still works — this is not an error, it is a "worth re-picking" — so it
+ * is a quiet marker rather than a warning, and only the genuinely broken case
+ * (a company not in the supplier list at all) is red.
+ */
+function SupplierLinkMark({ link, registered }: { link: ProductSupplierLink; registered: Supplier[] }) {
+  const state = supplierLinkState(link, registered);
+  if (state === "linked") return null;
+  return (
+    <span
+      title={SUPPLIER_LINK_HINT[state]}
+      className={`ml-1 cursor-help font-normal ${state === "unregistered" ? "text-destructive" : "text-amber-600"}`}
+    >
+      · {state === "unregistered" ? "not in supplier list" : "name only"}
+    </span>
+  );
+}
+
+/**
  * Add/remove the suppliers a product can be bought from, each with code + price.
  *
  * `canEditPrices` is the Payment Approver / admin gate, and it now changes the
@@ -90,7 +113,31 @@ function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: 
     const s = suppliers.find((x) => x.id === pick);
     const company = s?.company ?? pick.trim();
     if (!company) return;
-    if (value.some((v) => v.company.toLowerCase() === company.toLowerCase())) { setPick(""); return; }
+    const existing = value.findIndex((v) => v.company.toLowerCase() === company.toLowerCase());
+    if (existing >= 0) {
+      /**
+       * Already listed — so this is someone RE-PICKING a link the row marks as
+       * "name only", to wire it by id. Upgrade it in place.
+       *
+       * It used to just clear the dropdown and do nothing, which left removing
+       * the chip and re-adding it as the only way — and that loses the unit
+       * price, which on a catalogue of a thousand products is a reason not to
+       * fix the link at all. The code and price are kept unless this pick
+       * supplies new ones.
+       */
+      const next = [...value];
+      const was = next[existing];
+      next[existing] = {
+        ...was,
+        supplierId: s?.id ?? was.supplierId,
+        company, // adopt the supplier list's spelling
+        code: code.trim() || was.code,
+        price: Number(price) > 0 ? Number(price) : was.price,
+      };
+      onChange(next);
+      setPick(""); setCode(""); setPrice("");
+      return;
+    }
     onChange([...value, { supplierId: s?.id ?? "", company, code: code.trim() || undefined, price: Number(price) > 0 ? Number(price) : undefined }]);
     setPick(""); setCode(""); setPrice("");
   }
@@ -110,6 +157,7 @@ function SupplierEditor({ value, onChange, suppliers, canEditPrices }: { value: 
           {value.map((v) => (
             <span key={v.company} className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2.5 py-1 text-xs">
               {v.company}{v.code ? ` · ${v.code}` : ""}
+              <SupplierLinkMark link={v} registered={suppliers} />
               {/* The price is editable in place — a multi-supplier import gives
                   every supplier the row's price, so correcting one shouldn't
                   mean removing and re-adding the supplier. */}
@@ -218,7 +266,10 @@ function ProductRowView({ product, canManage, canEditPrices, showPrices, showSup
             {product.suppliers.length === 0 ? <span className="text-muted-foreground">No supplier</span> : (
               <div className="flex flex-wrap gap-1">
                 {product.suppliers.map((s) => (
-                  <Badge key={s.company} variant="secondary" className="font-normal">{s.company}{showPrices && s.price ? ` · ${peso(s.price)}` : ""}</Badge>
+                  <Badge key={s.company} variant="secondary" className="font-normal">
+                    {s.company}{showPrices && s.price ? ` · ${peso(s.price)}` : ""}
+                    <SupplierLinkMark link={s} registered={suppliers} />
+                  </Badge>
                 ))}
               </div>
             )}
@@ -312,7 +363,17 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
   // Text search: filter by name, SKU, category or supplier company.
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const filtered = q === ""
+  /**
+   * Products whose supplier link is matched by name rather than by id, or whose
+   * supplier isn't registered at all. Without a way to ask for them you would
+   * have to open a thousand rows to find the dozen worth re-picking.
+   */
+  const [weakOnly, setWeakOnly] = useState(false);
+  const weakIds = useMemo(
+    () => new Set(products.filter((p) => weakLinkCount(p.suppliers, suppliers) > 0).map((p) => p.id)),
+    [products, suppliers],
+  );
+  const searched = q === ""
     ? products
     : products.filter((p) =>
         p.name.toLowerCase().includes(q) ||
@@ -320,6 +381,7 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
         (p.category ?? "").toLowerCase().includes(q) ||
         p.suppliers.some((s) => s.company.toLowerCase().includes(q)),
       );
+  const filtered = weakOnly ? searched.filter((p) => weakIds.has(p.id)) : searched;
 
   // Sort & group controls.
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -542,6 +604,20 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
             </button>
           )}
         </div>
+        {/* Only offered when there is something to find, and only to viewers who
+            can see suppliers at all. */}
+        {showSuppliers && weakIds.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setWeakOnly((v) => !v)}
+            aria-pressed={weakOnly}
+            title="Products whose supplier is matched by company name rather than by ID, or whose supplier isn't in the supplier list. Open one and re-pick its supplier from the dropdown to wire it by ID."
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-sm ${weakOnly ? "border-amber-500 bg-amber-50 text-amber-800" : "bg-background hover:bg-accent"}`}
+          >
+            <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden />
+            Name-only links ({weakIds.size})
+          </button>
+        )}
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Group by
           <select value={group} onChange={(e) => setGroup(e.target.value as GroupKey)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
