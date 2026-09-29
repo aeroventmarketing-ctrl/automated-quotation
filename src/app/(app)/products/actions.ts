@@ -16,6 +16,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { logActivity } from "@/lib/activity-log";
 import { nextProductSku, revalidateProductCatalogue } from "@/lib/product-catalog";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
+import { planSupplierWiring } from "@/lib/supplier-link";
 import { getSuppliers, rememberSupplier, isPricedSupplierName } from "@/lib/suppliers";
 import { setOfficeResaleProduct } from "@/lib/office-resale";
 import { productChangeSummary, type ProductChangePayload } from "@/lib/product-change";
@@ -382,6 +383,52 @@ export async function removeUnsourcedProducts(): Promise<{ removed: number }> {
   revalidateProductCatalogue();
   revalidatePath("/products");
   return { removed: ids.length };
+}
+
+/**
+ * Fill in the supplier id on every product link that can be resolved from the
+ * supplier list without guessing — the bulk version of re-picking one product.
+ *
+ * *"is there a faster way of editing and renaming the suppliers in products?"* —
+ * with 999 of 1,041 links made before anything read the id, one at a time is not
+ * a way at all.
+ *
+ * The rule lives in `planSupplierWiring` and is deliberately narrow: a link is
+ * wired only when EXACTLY ONE supplier carries that company name. Nothing is
+ * removed, no price is read or written, a company that isn't in the supplier
+ * list is left untouched for a human, and running it twice changes nothing.
+ * Admin / Payment Approver, like the other whole-catalogue buttons.
+ */
+export async function wireSupplierLinks(): Promise<{ products: number; wired: number; leftoverProducts: number }> {
+  const user = await requireProductShaper();
+  const [rows, registry] = await Promise.all([
+    prisma.product.findMany({ where: { active: true }, select: { id: true, suppliers: true } }),
+    getSuppliers(),
+  ]);
+  const plan = planSupplierWiring(
+    rows.map((p) => ({ id: p.id, suppliers: coerceProductSuppliers(p.suppliers) })),
+    registry,
+  );
+  // One statement per product: the link list is a JSON column, so there is no
+  // narrower write than the whole array.
+  for (const u of plan.updates) {
+    await prisma.product.update({
+      where: { id: u.id },
+      data: { suppliers: u.suppliers as unknown as Prisma.InputJsonValue },
+    });
+  }
+  if (plan.updates.length > 0) {
+    await logActivity(user, {
+      action: "products.suppliers.wire",
+      category: "inventory",
+      summary: `Wired ${plan.wired} supplier link${plan.wired === 1 ? "" : "s"} by ID across ${plan.updates.length} product${plan.updates.length === 1 ? "" : "s"}`,
+      entity: "product",
+      href: "/products",
+    });
+  }
+  revalidateProductCatalogue();
+  revalidatePath("/products");
+  return { products: plan.updates.length, wired: plan.wired, leftoverProducts: plan.leftoverProducts };
 }
 
 /** Remove several products at once (soft-delete). Purchaser / admin. */

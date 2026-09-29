@@ -1,3 +1,42 @@
+## 2026-09-29 · 999 of 1,041, one press
+
+The marker shipped, and the owner's screenshot answered the question I hadn't asked: **999 of 1,041**
+products were name-only. *"is there a faster way of editing and renaming the suppliers in products?"*
+Re-picking one at a time is the right tool for one product and no tool at all for a thousand.
+
+### What the button is allowed to do
+
+`planSupplierWiring()` is deliberately narrow, because it runs over the whole catalogue on one press:
+
+- A link is wired only when **exactly one** supplier carries that company name. Two registry rows
+  sharing a name is a tie, and a tie is not broken by taking the first.
+- A company that is **not** in the supplier list is left exactly as it is. No button can invent a
+  supplier record.
+- Nothing is removed, no price is read or written. The only field that changes is the id — plus the
+  company adopting the supplier list's exact spelling, which it already matched apart from case.
+- A dead id (its supplier deleted) is repaired rather than trusted.
+- Running it twice does nothing the second time.
+
+### The count that did not match
+
+First run through the browser reported *"20 left"* under a button that then read **18**. Both were
+right and the report was still wrong: the plan was counting **links** and the button counts
+**products**, and one product can carry several. A number that disagrees with the number next to it is
+a number nobody trusts, so the plan now reports `leftoverProducts` and the two agree.
+
+### Verified in the database, not just on screen
+
+```
+BULK001  {"price":1001,"company":"JOEL LATERO SHOP","supplierId":"sup-joel"}          ← wired, price kept
+BULK010  {"price":1010,"company":"JSL ELECTRIC CORPORATION","supplierId":"sup-jsl"}   ← seeded lowercase; spelling adopted
+ORPH001  {"price":500,"company":"NOBODY TRADING 1","supplierId":""}                   ← untouched, not registered
+DONE001  {"price":777,"company":"JOEL LATERO SHOP","supplierId":"sup-joel"}           ← untouched, already wired
+```
+
+The UI gate (`canAddOrRemoveProducts`) and the server gate (`requireProductShaper` →
+`canSetCataloguePrice`) are the same set — Admin and the Payment Approver — which the role grid
+confirms rather than the code merely asserting it.
+
 ## 2026-09-29 · Which supplier links are wired, and a one-click way to wire the rest
 
 Follow-up to the supplier-id work below. Having made the id do the work, there was no way to see
