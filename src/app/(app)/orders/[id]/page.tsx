@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Store } from "lucide-react";
 import { prisma } from "@/lib/db";
+import { getStockCatalogue } from "@/lib/stock-catalogue";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,7 +122,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     getCurrentUser(),
     getWorkflowRoles(),
     prisma.purchaseRequest.findMany({ where: { quotationId: id }, orderBy: { createdAt: "asc" } }),
-    prisma.stockItem.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true, location: true } }).catch(() => []),
+    // Details cached, quantities live — see `lib/stock-catalogue`. This page
+    // auto-refreshes, and it read the whole warehouse on every render.
+    getStockCatalogue().catch(() => []),
     prisma.user.findMany({ select: { id: true, name: true } }),
     getSuppliers().catch(() => []),
     getPaymentTerms().catch(() => []),

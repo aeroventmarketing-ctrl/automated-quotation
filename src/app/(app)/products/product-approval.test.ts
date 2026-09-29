@@ -33,7 +33,13 @@ vi.mock("@/lib/workflow-roles", () => ({
   WORKFLOW_ROLES: [],
 }));
 vi.mock("@/lib/activity-log", () => ({ logActivity: async () => {} }));
-vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
+// `unstable_cache` passes the function straight through, so these tests still
+// hit the database rather than asserting against a cached first answer.
+vi.mock("next/cache", () => ({
+  revalidatePath: () => {},
+  revalidateTag: () => {},
+  unstable_cache: (fn: (...a: unknown[]) => unknown) => fn,
+}));
 
 process.env.DATABASE_URL = TEST_DB;
 process.env.DIRECT_URL = TEST_DB;

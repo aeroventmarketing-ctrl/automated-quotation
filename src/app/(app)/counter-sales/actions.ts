@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -317,6 +318,7 @@ export async function completeCounterSale(id: string, opts?: { overrideStock?: b
   });
   revalidatePath(`/counter-sales/${id}`);
   revalidatePath("/counter-sales");
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/commissions");
   revalidatePath("/management");
@@ -374,6 +376,7 @@ export async function voidCounterSale(id: string): Promise<void> {
   });
   revalidatePath(`/counter-sales/${id}`);
   revalidatePath("/counter-sales");
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -484,6 +487,7 @@ export async function adminEditCounterSale(id: string, input: Omit<CounterSaleIn
   if (wasCompleted) await ensureCounterSaleCommission(id);
   revalidatePath(`/counter-sales/${id}`);
   revalidatePath("/counter-sales");
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/commissions");
   revalidatePath("/management");
@@ -509,6 +513,7 @@ export async function adminDeleteCounterSale(id: string): Promise<void> {
     await tx.counterSale.delete({ where: { id } });
   });
   revalidatePath("/counter-sales");
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/commissions");
   revalidatePath("/management");

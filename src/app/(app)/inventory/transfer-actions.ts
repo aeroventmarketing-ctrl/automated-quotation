@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import type { User } from "@prisma/client";
@@ -106,6 +107,7 @@ export async function initiateTransfer(input: z.infer<typeof initiateSchema>): P
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -174,6 +176,7 @@ export async function confirmTransferReceipt(transferId: string, slot: "prod_hea
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -208,6 +211,7 @@ export async function cancelTransfer(transferId: string): Promise<void> {
     entity: "inventory",
     href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -253,6 +257,7 @@ export async function requestOfficeTransfer(input: z.infer<typeof requestOfficeS
     summary: `Office transfer requested: ${d.items.length} item${d.items.length === 1 ? "" : "s"} → Office`,
     entity: "inventory", href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -265,6 +270,7 @@ export async function deleteTransfer(transferId: string): Promise<void> {
   if (t.status !== "CANCELLED") throw new Error("Only a cancelled transfer can be deleted.");
   await prisma.stockTransfer.delete({ where: { id: transferId } });
   await logActivity(user, { action: "inventory.transfer.delete", category: "inventory", summary: `Deleted cancelled transfer: ${t.itemName}`, entity: "inventory", href: "/inventory" });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -281,6 +287,7 @@ export async function approveOfficeTransfer(transferId: string): Promise<void> {
   if (t.status !== "REQUESTED") throw new Error("This transfer isn't awaiting approval.");
   await prisma.stockTransfer.update({ where: { id: transferId }, data: { status: "APPROVED", approvedById: user.id, approvedByName: user.name, approvedAt: new Date() } });
   await logActivity(user, { action: "inventory.transfer.approve", category: "inventory", summary: `Office transfer approved: ${t.itemName}`, entity: "inventory", href: "/inventory" });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -324,6 +331,7 @@ export async function releaseOfficeTransfer(transferId: string): Promise<{ error
     throw e;
   }
   await logActivity(user, { action: "inventory.transfer.release", category: "inventory", summary: `Office transfer released from stock: ${name}`, entity: "inventory", href: "/inventory" });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   return {};
 }
@@ -341,6 +349,7 @@ export async function deliverOfficeTransfer(transferId: string): Promise<void> {
   if (t.status !== "RELEASED") throw new Error("This transfer hasn't been released yet.");
   await prisma.stockTransfer.update({ where: { id: transferId }, data: { status: "DELIVERING", deliveredById: user.id, deliveredByName: user.name, deliveredAt: new Date() } });
   await logActivity(user, { action: "inventory.transfer.deliver", category: "inventory", summary: `Office transfer out for delivery: ${t.itemName}`, entity: "inventory", href: "/inventory" });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -380,6 +389,7 @@ export async function receiveOfficeTransfer(transferId: string): Promise<void> {
     name = t.itemName;
   });
   await logActivity(user, { action: "inventory.transfer.received", category: "inventory", summary: `Office transfer received into Office stock: ${name}`, entity: "inventory", href: "/inventory" });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -389,6 +399,7 @@ export async function attachTransferProof(transferId: string, doc: StockDoc): Pr
   const clean = coerceStockDoc(doc);
   if (!clean) throw new Error("Invalid file.");
   await prisma.stockTransfer.update({ where: { id: transferId }, data: { proof: clean as unknown as Prisma.InputJsonValue } });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -396,5 +407,6 @@ export async function removeTransferProof(transferId: string): Promise<void> {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) throw new Error("Only an admin can delete or modify uploaded documents.");
   await prisma.stockTransfer.update({ where: { id: transferId }, data: { proof: Prisma.DbNull } });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }

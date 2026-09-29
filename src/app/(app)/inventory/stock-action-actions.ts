@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { Prisma } from "@prisma/client";
 import type { StockActionKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -178,6 +179,7 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
     entityId: stockItemId,
     href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/my-dashboard");
 }
@@ -236,6 +238,7 @@ async function doApproveStockAction(id: string): Promise<void> {
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/my-dashboard");
 }
@@ -251,6 +254,7 @@ async function doRejectStockAction(id: string, reason?: string): Promise<void> {
     where: { id },
     data: { status: "REJECTED", rejectedByName: user.name, rejectedAt: new Date(), rejectReason: (reason ?? "").trim() || null },
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/my-dashboard");
 }
