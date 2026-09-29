@@ -1,3 +1,49 @@
+## 2026-09-29 · Which supplier links are wired, and a one-click way to wire the rest
+
+Follow-up to the supplier-id work below. Having made the id do the work, there was no way to see
+which products actually carry one — the chip reads `IDEAL CONTROLS INCORPORATED` whether it is wired
+by id or matched by name, and the difference only surfaces as a purchase order made out to the wrong
+company. The owner: *"please do it."*
+
+### Three states, not two
+
+`supplierLinkState()` is the whole rule:
+
+- **linked** — an id, and a supplier that answers to it. Renaming the supplier cannot break this.
+- **name only** — no id (or a DEAD one), but the company name is in the supplier list. Works today;
+  a rename breaks it. Marked amber.
+- **not in supplier list** — neither resolves. Already broken: the PO form cannot offer this company
+  at all. Marked red.
+
+The dead-id case is the one worth pinning: an id whose supplier was deleted must not count as a link
+just because the field is populated. It falls through to the name, like any other unwired record.
+
+### The marker had to come with a way to act on it
+
+A marker on a thousand products that you cannot cheaply act on is a complaint, not a tool. Two things
+make it actionable.
+
+**Finding them.** A "Name-only links (N)" toggle next to the search box, filtering to exactly those
+products. Without it you would open a thousand rows to find the dozen worth re-picking.
+
+**Fixing one.** Re-picking the supplier from the dropdown used to do *nothing at all* — `add()` saw
+the company was already listed, cleared the dropdown and returned. The only route was to remove the
+chip and add it back, which **loses the unit price**, which on this catalogue is a reason not to fix
+the link at all. Picking a supplier already on the list now upgrades that link in place: the id is
+written, the company adopts the supplier list's spelling, and the code and price are kept unless the
+pick supplies new ones.
+
+Proved in the harness through the whole loop, including the database:
+
+```
+before   IDEAL CONTROLS INCORPORATED · ₱31,894.00 · name only
+re-pick  IDEAL CONTROLS INCORPORATED               ← marker gone immediately
+save     IDEAL CONTROLS INCORPORATED · ₱31,894.00  ← price intact
+DB       {"price":31894,"company":"IDEAL CONTROLS INCORPORATED","supplierId":"sup-ideal-controls"}
+```
+
+Nothing is written on its own: a link is only upgraded when someone opens that product and saves it.
+
 ## 2026-09-29 · The supplier id was always there; nothing read it
 
 The owner, looking at Products filtered to "ideal": *"Are we using SKU as reference? Should we use
