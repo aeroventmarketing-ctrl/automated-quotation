@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import {
   assertCataloguePriceOwner,
   canSetCataloguePrice,
@@ -397,6 +398,7 @@ export async function importStockItems(
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   return { created, updated, skipped, errors: errors.slice(0, 20) };
 }
@@ -460,6 +462,7 @@ export async function mergeDuplicateStockItems(): Promise<{ groups: number; remo
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   return { groups, removed };
 }
@@ -499,6 +502,7 @@ export async function mergeStockItemsInto(input: z.infer<typeof mergeIntoSchema>
     summary: `Merged ${others.length} duplicate${others.length === 1 ? "" : "s"} into ${primary.name} (+${addQty} ${primary.unit})`,
     entity: "inventory", href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -513,6 +517,7 @@ export async function removeStockItem(id: string): Promise<void> {
     summary: `Removed stock item ${item.name}${item.sku ? ` (${item.sku})` : ""}`,
     entity: "inventory", href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -527,6 +532,7 @@ export async function removeStockItems(ids: string[]): Promise<{ removed: number
     summary: `Removed ${res.count} stock item${res.count === 1 ? "" : "s"}`,
     entity: "inventory", href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   return { removed: res.count };
 }
@@ -545,6 +551,7 @@ export async function clearAllStockItems(): Promise<{ removed: number }> {
     summary: `Cleared the inventory (${res.count} item${res.count === 1 ? "" : "s"})`,
     entity: "inventory", href: "/inventory",
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   return { removed: res.count };
 }
@@ -559,6 +566,7 @@ export async function assignMissingSkus(): Promise<void> {
       await tx.stockItem.update({ where: { id: m.id }, data: { sku } });
     }
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/inventory/labels");
 }
@@ -631,6 +639,7 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
       });
     }
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -686,6 +695,7 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
       ...(mayPrice ? { unitCost: d.unitCost, sellPrice: d.sellPrice } : {}),
     },
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/inventory/reorder");
 }
@@ -708,6 +718,7 @@ export async function updateStockItemPrices(input: z.infer<typeof priceSchema>):
     where: { id: d.stockItemId },
     data: { unitCost: d.unitCost, sellPrice: d.sellPrice },
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
 }
@@ -733,6 +744,7 @@ export async function reserveStock(input: z.infer<typeof reserveSchema>): Promis
       data: { stockItemId: d.stockItemId, qty: d.qty, forRef: d.forRef, note: d.note || null, byName: user.name },
     });
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -743,6 +755,7 @@ export async function releaseReservation(id: string): Promise<void> {
     where: { id },
     data: { active: false, releasedByName: user.name, releasedAt: new Date() },
   });
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }
 
@@ -794,5 +807,6 @@ export async function adjustStock(input: z.infer<typeof adjustSchema>): Promise<
       href: "/inventory",
     });
   }
+  revalidateStockCatalogue();
   revalidatePath("/inventory");
 }

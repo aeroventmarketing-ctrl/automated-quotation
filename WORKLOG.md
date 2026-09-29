@@ -1,3 +1,68 @@
+## 2026-09-29 · The catalogues are read across requests, not just within one
+
+The owner, from the outside: *"when admin account is always logged in egress usage goes up. What I do
+is I always log in the payment approver account and log in admin account only when necessary."* A
+workaround, and a correct one — for two real costs.
+
+### Why an admin session is the expensive one
+
+`my-dashboard`'s role check is
+
+```js
+const has = (r) => isAdmin(user) || userHasWorkflowRole(assignments, user.id, r);
+```
+
+An admin satisfies **every** workflow role at once, so their dashboard builds the purchaser,
+warehouse, accounting, payment-approver, plant-manager and logistics feeds together where any other
+role builds one. And it carried `AutoRefresh seconds={8}`.
+
+The poll is one COUNT; what is expensive is what it TRIGGERS. Now 30s — nothing on that screen moves
+on an eight-second scale, and returning to the tab still refreshes immediately, which is the only
+case where a wait would be felt.
+
+### Product: cached whole, because it cannot be narrowed
+
+9,600 calls × 1,041 rows in 40 hours. Not narrowable: `po-catalog`'s `matchKey` is fuzzy and
+tokenised across the WHOLE catalogue, so a shorter list would change which product a PO line matches
+and with it the supplier and the unit price — the bug fixed three days earlier. Hence a cache.
+
+`ProductRow` carries no Prisma `Decimal`; every field is a string, a null or a coerced plain object.
+That is what makes it safe through Next's data cache at all.
+
+Invalidated by tag from all 20 write sites, each attached to the `revalidatePath` the writer already
+called. The 300s `revalidate` is a floor, not the mechanism.
+
+### StockItem: split, because quantities must never be stale
+
+`quantity` IS a `Decimal`, and a warehouse hand issuing against a thirty-second-old number is exactly
+the failure this must not introduce. So the wide part is cached and the volatile part is live:
+
+```
+6 calls   SELECT id, quantity FROM StockItem       ← every render
+1 call    SELECT id, sku, name, unit, location …   ← 6 renders, 1 read
+```
+
+The live read also defines **which items exist**, which handles the two cases a TTL would get wrong:
+a deactivated item is absent from it and disappears at once; a created item is present in it but
+missing from the cache, so its details are fetched directly — usually nothing, occasionally one row.
+Only a NAME, SKU or LOCATION can lag, and only until the next write or 120s.
+
+### Tested the hard way
+
+Not through the app — straight into the database, so no invalidation could fire:
+
+```
+update quantity → visible on the next render      ✓
+insert a new item → visible on the next render    ✓  (despite the cached detail list)
+rename a product on /products → shows on /requisitions immediately   ✓
+five loads of /requisitions → Product tuples read: 0, page still 200 ✓
+```
+
+The first measurement I tried was wrong and worth recording: I counted TUPLES, and this change does
+not reduce the tuple count — it reduces the WIDTH of each tuple, and how often the wide one is read.
+`pg_stat_user_tables` cannot see that. `pg_stat_statements` can, which is what the 6-vs-1 above is.
+
+
 ## 2026-09-25 · A reconciliation belongs to the purchase order, not to one request on it
 
 Follow-up to the same report, with the owner's approval to change what the Phase 4 action writes:
