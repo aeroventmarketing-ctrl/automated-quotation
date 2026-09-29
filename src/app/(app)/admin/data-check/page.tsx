@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
 import { scanInheritedWorkflows } from "@/lib/inherited-workflow-scan";
 import { auditPoPrices } from "@/lib/po-price-audit";
+import { auditPoSuppliers } from "@/lib/po-supplier-audit";
 import { formatCurrency } from "@/lib/utils";
 import { ResetInheritedButton } from "./reset-button";
 
@@ -22,9 +23,10 @@ import { ResetInheritedButton } from "./reset-button";
 export const dynamic = "force-dynamic";
 
 export default async function DataCheckPage() {
-  const [{ scanned, findings }, priceAudit] = await Promise.all([
+  const [{ scanned, findings }, priceAudit, supplierAudit] = await Promise.all([
     scanInheritedWorkflows(),
     auditPoPrices(),
+    auditPoSuppliers(),
   ]);
 
   return (
@@ -255,6 +257,113 @@ export default async function DataCheckPage() {
                           <Badge variant="warning">Differs</Badge>
                           <span className="mt-1 block text-xs text-muted-foreground">
                             Not a price any supplier lists for this product.
+                          </span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="mt-8">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Purchase order suppliers vs the product catalogue</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Until recently the PO form chose a line&apos;s product by scoring the <b>whole line</b>,
+            specification and all. A VAV line carrying <i>Duct Diameter: 250 mm (10 in)</i> handed
+            the numbers 250 and 10 to the matcher as though they were model codes, and an unrelated
+            product carrying both could outrank the product actually named at the front of the line.
+            The wrong product means the wrong supplier — and because exactly one eligible supplier is
+            what makes the form fill itself in, and filling in overwrites every unit price, it meant
+            the wrong <b>amounts</b> too.
+          </p>
+          <p>
+            New purchase orders are matched correctly now. These are the ones already issued, which
+            nothing re-checks. Read {supplierAudit.purchaseOrders} purchase order
+            {supplierAudit.purchaseOrders === 1 ? "" : "s"}.
+          </p>
+          <p className="text-xs">
+            <b>
+              Buying from a supplier the catalogue doesn&apos;t list is an ordinary thing to do — a
+              one-off, a stock-out, a better price, a supplier added to Products only later. A row
+              here means the catalogue and the PO disagree about who sells this, which is worth a
+              look. It is not a verdict.
+            </b>
+          </p>
+        </CardContent>
+      </Card>
+
+      {supplierAudit.issues.length === 0 ? (
+        <Card>
+          <CardContent className="flex items-center gap-3 py-8">
+            <Badge variant="success">Clear</Badge>
+            <p className="text-sm">
+              Every purchase order names a supplier the catalogue lists for what it buys.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="overflow-x-auto p-0">
+            <table className="w-full min-w-[880px] text-sm">
+              <thead>
+                <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-3">PO</th>
+                  <th className="px-4 py-3">On the PO</th>
+                  <th className="px-4 py-3">The catalogue says</th>
+                  <th className="px-4 py-3 text-right">PO value</th>
+                  <th className="px-4 py-3 text-right">At catalogue prices</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supplierAudit.issues.map((i) => (
+                  <tr key={i.requestId} className="border-b last:border-0 align-top">
+                    <td className="px-4 py-3">
+                      {i.orderId ? (
+                        <Link href={`/orders/${i.orderId}`} className="font-mono text-xs hover:underline">
+                          {i.poNumber}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs">{i.poNumber}</span>
+                      )}
+                      <span className="block text-xs text-muted-foreground">
+                        {i.date}
+                        {i.members > 1 && <> · combined, {i.members} requests</>}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-destructive">{i.supplier || "—"}</td>
+                    <td className="px-4 py-3">
+                      {i.carriers.join(", ")}
+                      <span className="block text-xs text-muted-foreground">
+                        from {i.matchedLines} of {i.totalLines} line
+                        {i.totalLines === 1 ? "" : "s"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium tabular-nums">
+                      {formatCurrency(i.poTotal)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {i.catalogueTotal === null ? (
+                        <span className="text-xs text-muted-foreground">
+                          not priced
+                          <span className="block">for every line</span>
+                        </span>
+                      ) : (
+                        <>
+                          {formatCurrency(i.catalogueTotal)}
+                          {/* In words, not a sign: `formatCurrency` renders a
+                              negative as "₱-234,668.86", with the minus stranded
+                              after the symbol, and which way round the gap runs
+                              is the whole point of the column. */}
+                          <span className="block text-xs text-muted-foreground">
+                            {formatCurrency(Math.abs(i.catalogueTotal - i.poTotal))}{" "}
+                            {i.catalogueTotal > i.poTotal ? "more than the PO" : "less than the PO"}
                           </span>
                         </>
                       )}

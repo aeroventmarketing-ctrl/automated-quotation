@@ -1,3 +1,53 @@
+## 2026-09-29 · The purchase orders already written
+
+#560 stopped the matcher handing a VAV line to an air circuit breaker. It cannot un-write the purchase
+orders that were issued while it did, and nothing in this app ever re-checks a PO after it is saved —
+not approval, not printing, not the voucher. *"Please do this."*
+
+So: a second card on **Admin → Data check**, beside the price audit that already lives there, listing
+purchase orders whose supplier the catalogue does not name for what they buy.
+
+### What makes a row
+
+Per purchase order, not per line, because the supplier is a PO-level field. A PO is listed when at
+least one of its lines resolves to a catalogued product AND the company on the PO matches none of the
+carriers those lines name. Matching runs through `sameSupplier`, so it follows the ID.
+
+That last point is not a detail. A PO stores its supplier as a **company name only**, so a supplier
+renamed since it was raised would otherwise look like a mismatch on every order it ever appeared on,
+and the audit would be reporting the rename rather than the bug. The PO's company is resolved through
+the registry first, and the comparison is by id.
+
+Combined POs are one document held on every member request, so they are reported once, with a member
+count — the same trap as #555.
+
+### What it refuses to say
+
+- **No opinion** when no line resolves to a catalogued product. Silence beats a guess.
+- **The catalogue total is null unless every line can be priced** from that carrier. A total covering
+  one line of two, printed beside the PO's full value, is a comparison that misleads, and the gap
+  between the two columns is the number people will act on.
+- And on the card itself, in bold: buying from a supplier the catalogue does not list is an ordinary
+  thing to do — a one-off, a stock-out, a better price, a supplier added to Products only later. A row
+  means the two disagree. It is not a verdict.
+
+Sorted by the size of the money gap, which is the order anyone works through them in. A row with no
+comparable total sorts by its own value, so a large PO never hides at the bottom because its prices
+could not be rebuilt.
+
+### Rendered, because that is where these break
+
+Seeded a wrong PO and a correct one, opened the page as Admin, and read it:
+
+```
+PO-AFBM20260000503  ZENITH UNITED ELECTRIC CORP. → IDEAL CONTROLS INCORPORATED
+                    ₱3,348.00 on the PO     ₱182,376.00 at catalogue prices
+```
+
+The correct PO does not appear. One formatting fault only the render could show:
+`formatCurrency(-234668.86)` prints `₱-234,668.86`, with the minus stranded after the symbol, and
+which way the gap runs is the whole point of that column. It says "₱234,668.86 less than the PO" now.
+
 ## 2026-09-29 · Two item codes, the wrong way round
 
 The owner, re-importing a corrected inventory sheet — both rows refused:
