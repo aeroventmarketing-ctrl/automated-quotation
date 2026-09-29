@@ -18,10 +18,16 @@ import {
   catalogPriceFor,
   catalogReferencePriceFor,
   suppliersForDescription,
+  carriersForLines,
+  eligibleSuppliers,
+  sameSupplier,
   unregisteredCarriers,
   withReferencePrices,
   type CatalogPrices,
 } from "./po-catalog";
+
+/** A registered supplier / catalogue link. An id-less one matches by name only. */
+const reg = (company: string, id = "") => ({ id, company });
 
 const KEYS = [
   "induction motor 1 hp, 1ph, 4 pole foot mounted (teco)",
@@ -94,9 +100,9 @@ describe("suppliersForDescription", () => {
   it("offers the suppliers of the matched product only", () => {
     expect(
       suppliersForDescription("INDUCTION MOTOR 2 HP, 1PH, 4 POLE FOOT MOUNTED (TECO) (JOM081)", {
-        "induction motor 1 hp, 1ph, 4 pole foot mounted (teco)": ["WRONG SUPPLIER"],
-        "induction motor 2 hp, 1ph, 4 pole foot mounted (teco)": ["POWERLINE"],
-      }),
+        "induction motor 1 hp, 1ph, 4 pole foot mounted (teco)": [reg("WRONG SUPPLIER")],
+        "induction motor 2 hp, 1ph, 4 pole foot mounted (teco)": [reg("POWERLINE")],
+      }).map((r) => r.company),
     ).toEqual(["POWERLINE"]);
   });
 });
@@ -225,38 +231,113 @@ describe("the article decides, the remark is ignored", () => {
  */
 describe("a carrier the supplier list has never heard of", () => {
   const VAV = 'nenutec variable air volume 6" diameter';
-  const CATALOGUE = { [VAV]: ["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."] };
+  const CATALOGUE = {
+    [VAV]: [
+      { id: "sup-ideal", company: "IDEAL CONTROLS" },
+      { id: "sup-zenith", company: "ZENITH UNITED ELECTRIC CORP." },
+    ],
+  };
   const line = {
     description: 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in)',
     qty: "2", unit: "pc", unitPrice: "",
   };
 
   it("names the carrier that is missing from the supplier list", () => {
-    expect(unregisteredCarriers([line], CATALOGUE, ["ZENITH UNITED ELECTRIC CORP."])).toEqual(["IDEAL CONTROLS"]);
+    expect(unregisteredCarriers(carriersForLines([line], CATALOGUE), [reg("ZENITH UNITED ELECTRIC CORP.", "sup-zenith")])).toEqual(["IDEAL CONTROLS"]);
   });
 
   it("says nothing when every carrier is registered", () => {
-    expect(unregisteredCarriers([line], CATALOGUE, ["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."])).toEqual([]);
+    expect(unregisteredCarriers(carriersForLines([line], CATALOGUE), [reg("IDEAL CONTROLS", "sup-ideal"), reg("ZENITH UNITED ELECTRIC CORP.", "sup-zenith")])).toEqual([]);
   });
 
   it("is not fooled by case or stray spacing on either side", () => {
-    expect(unregisteredCarriers([line], CATALOGUE, ["  ideal controls ", "zenith united electric corp."])).toEqual([]);
+    expect(unregisteredCarriers(carriersForLines([line], CATALOGUE), [reg("  ideal controls "), reg("zenith united electric corp.")])).toEqual([]);
   });
 
   it("reports both when neither is registered", () => {
-    expect(unregisteredCarriers([line], CATALOGUE, [])).toEqual(["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."]);
+    expect(unregisteredCarriers(carriersForLines([line], CATALOGUE), [])).toEqual(["IDEAL CONTROLS", "ZENITH UNITED ELECTRIC CORP."]);
   });
 
   /** "Nobody has said who sells it" is a different problem, with its own message. */
   it("does not report a product that names no carrier at all", () => {
-    expect(unregisteredCarriers([line], { [VAV]: [] }, [])).toEqual([]);
-    expect(unregisteredCarriers([line], { [VAV]: ["", "   "] }, [])).toEqual([]);
-    expect(unregisteredCarriers([line], {}, [])).toEqual([]);
+    expect(unregisteredCarriers(carriersForLines([line], { [VAV]: [] }), [])).toEqual([]);
+    expect(unregisteredCarriers(carriersForLines([line], { [VAV]: [reg(""), reg("   ")] }), [])).toEqual([]);
+    expect(unregisteredCarriers(carriersForLines([line], {}), [])).toEqual([]);
   });
 
   it("reports each company once across several lines", () => {
     const other = { ...line, description: 'NENUTEC VARIABLE AIR VOLUME 4" DIAMETER' };
-    const cat = { ...CATALOGUE, 'nenutec variable air volume 4" diameter': ["Ideal Controls"] };
-    expect(unregisteredCarriers([line, other], cat, ["ZENITH UNITED ELECTRIC CORP."])).toEqual(["IDEAL CONTROLS"]);
+    const cat = { ...CATALOGUE, 'nenutec variable air volume 4" diameter': [reg("Ideal Controls", "sup-ideal")] };
+    expect(unregisteredCarriers(carriersForLines([line, other], cat), [reg("ZENITH UNITED ELECTRIC CORP.", "sup-zenith")])).toEqual(["IDEAL CONTROLS"]);
+  });
+});
+
+/**
+ * Matching a product's supplier by ID.
+ *
+ * The owner: *"Are we using SKU as reference? Should we use Supplier ID to
+ * easily wire everything?"* — No, we were not. Every link in this chain was made
+ * by comparing free text, which is why "IDEAL CONTROLS" and "IDEAL CONTROLS
+ * INCORPORATED" were two different suppliers to the picker, and why renaming a
+ * supplier orphaned every product that named it.
+ *
+ * `Product.suppliers[].supplierId` has been written all along and never read.
+ * These assert what reading it buys — and, just as importantly, that the name
+ * match is still there for the links that have no id.
+ */
+describe("wiring a product to its supplier by id", () => {
+  const VAV = 'nenutec variable air volume 6" diameter';
+  const line = { description: 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER', qty: "2", unit: "pc", unitPrice: "" };
+
+  /** The link was made by PICKING the supplier, so it carries an id. */
+  const picked = { [VAV]: [{ id: "sup-ideal", company: "IDEAL CONTROLS" }] };
+  /** The link was TYPED, so it has no id and only its name can match. */
+  const typed = { [VAV]: [{ id: "", company: "IDEAL CONTROLS" }] };
+
+  it("survives the supplier being renamed", () => {
+    // The registry now spells it out in full; the product still says the old name.
+    const registered = [reg("IDEAL CONTROLS INCORPORATED", "sup-ideal")];
+    expect(eligibleSuppliers(carriersForLines([line], picked), registered)).toEqual(registered);
+    // …and it is not reported as missing, because it was found.
+    expect(unregisteredCarriers(carriersForLines([line], picked), registered)).toEqual([]);
+  });
+
+  /** Today's behaviour, unchanged — this is what the rename used to break. */
+  it("still matches by name when the link has no id", () => {
+    const registered = [reg("IDEAL CONTROLS", "sup-anything-else")];
+    expect(eligibleSuppliers(carriersForLines([line], typed), registered)).toEqual(registered);
+  });
+
+  it("reports a renamed supplier as missing when the link has no id to follow", () => {
+    const registered = [reg("IDEAL CONTROLS INCORPORATED", "sup-ideal")];
+    expect(unregisteredCarriers(carriersForLines([line], typed), registered)).toEqual(["IDEAL CONTROLS"]);
+  });
+
+  /**
+   * The trap an id match invites: a link typed by hand has `id: ""`, and if an
+   * empty id counted as a match it would match the FIRST supplier in the list —
+   * every time, for every hand-typed link.
+   */
+  it("never lets an empty id match anything", () => {
+    const registered = [reg("SOMEBODY ELSE", ""), reg("ANOTHER", "")];
+    expect(eligibleSuppliers(carriersForLines([line], typed), registered)).toEqual([]);
+    expect(sameSupplier({ id: "", company: "A" }, { id: "", company: "B" })).toBe(false);
+  });
+
+  it("matches on either the id or the name, and needs only one", () => {
+    expect(sameSupplier({ id: "x", company: "OLD NAME" }, { id: "x", company: "NEW NAME" })).toBe(true);
+    expect(sameSupplier({ id: "x", company: "SAME" }, { id: "y", company: "same" })).toBe(true);
+    expect(sameSupplier({ id: "x", company: "ONE" }, { id: "y", company: "TWO" })).toBe(false);
+  });
+
+  /** No catalogue entry at all → offer everyone, rather than nobody. */
+  it("does not narrow when the product is not catalogued", () => {
+    const registered = [reg("A", "a"), reg("B", "b")];
+    expect(eligibleSuppliers(carriersForLines([line], {}), registered)).toEqual(registered);
+  });
+
+  it("counts one supplier once, however many lines name it", () => {
+    const two = [line, { ...line, description: 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER' }];
+    expect(carriersForLines(two, picked)).toHaveLength(1);
   });
 });

@@ -7,7 +7,33 @@ import type { POLine } from "@/lib/purchase-order";
 import { itemNameCandidates } from "@/lib/item-sku";
 
 export type CatalogPrices = Record<string, Record<string, number>>; // productNameLower → companyLower → price
-export type CatalogSuppliers = Record<string, string[]>; // productNameLower → supplier company[]
+/**
+ * A supplier a product is linked to — carrying BOTH its id and its name.
+ *
+ * The owner: *"Are we using SKU as reference? Should we use Supplier ID to
+ * easily wire everything?"* Until now every link in this chain was made by
+ * matching free text, and a product's saved supplier was found by comparing
+ * company names. That is why "IDEAL CONTROLS" and "IDEAL CONTROLS INCORPORATED"
+ * were two different suppliers as far as the picker was concerned, and why
+ * renaming a supplier orphaned every product that named it.
+ *
+ * `Product.suppliers` has carried a `supplierId` all along — the product form
+ * writes it whenever a supplier is PICKED rather than typed — and nothing ever
+ * read it. This is that field finally being used.
+ *
+ * The name stays, and is still matched on, because an id only resolves when the
+ * link was made from the registry. A supplier typed by hand has `id: ""`, and a
+ * supplier that predates ids resolves through `derivedSupplierId`. Dropping the
+ * name would turn today's working links into orphans, which is the opposite of
+ * the point.
+ */
+export interface CatalogSupplierRef {
+  /** `Product.suppliers[].supplierId` — empty when the supplier was typed, not picked. */
+  id: string;
+  company: string;
+}
+
+export type CatalogSuppliers = Record<string, CatalogSupplierRef[]>; // productNameLower → suppliers
 
 /**
  * Pseudo-company key inside a CatalogPrices entry holding the product's
@@ -211,17 +237,69 @@ export function withCatalogPrices(lines: POLine[], company: string, catalog: Cat
   });
 }
 
-/** Supplier companies that carry a line's product (order-suffix tolerant). */
-export function suppliersForDescription(description: string, catalog: CatalogSuppliers): string[] {
+/** The suppliers that carry a line's product (order-suffix tolerant). */
+export function suppliersForDescription(description: string, catalog: CatalogSuppliers): CatalogSupplierRef[] {
   const key = matchKey(description, Object.keys(catalog));
   return key ? catalog[key] ?? [] : [];
 }
 
-/** The set of supplier companies (lowercased) that carry any of the given lines' products. */
-export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): Set<string> {
-  const set = new Set<string>();
-  for (const l of lines) for (const co of suppliersForDescription(l.description, catalog)) set.add(co.toLowerCase());
-  return set;
+/**
+ * Every supplier the catalogue names across these lines, deduped.
+ *
+ * The ONE catalogue scan. `matchKey` is tokenised across the whole catalogue —
+ * a thousand products — and these forms re-render on every keystroke in the
+ * company box, so the callers compute this once and hand the result to
+ * `eligibleSuppliers` and `unregisteredCarriers` rather than each asking the
+ * catalogue again.
+ */
+export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): CatalogSupplierRef[] {
+  const out: CatalogSupplierRef[] = [];
+  const seen = new Set<string>();
+  for (const l of lines) {
+    for (const ref of suppliersForDescription(l.description, catalog)) {
+      const key = carrierKey(ref);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(ref);
+    }
+  }
+  return out;
+}
+
+/**
+ * Does this registered supplier carry that product link?
+ *
+ * **By id first, by name second**, and the second is not a fallback to be
+ * removed later — it is what keeps the links that already work working. An id
+ * only exists on a link whose supplier was PICKED from the registry; one typed
+ * by hand carries `id: ""`, and matching those on an empty string would make
+ * every hand-typed link match every supplier.
+ */
+export function sameSupplier(ref: CatalogSupplierRef, s: { id: string; company: string }): boolean {
+  const refId = ref.id.trim();
+  if (refId && refId === s.id.trim()) return true;
+  return ref.company.trim().toLowerCase() === s.company.trim().toLowerCase();
+}
+
+/** A carrier's stable key for deduping — its id where it has one, else its name. */
+const carrierKey = (ref: CatalogSupplierRef): string =>
+  ref.id.trim() || ref.company.trim().toLowerCase();
+
+/**
+ * The registered suppliers that carry these lines' products.
+ *
+ * ONE definition of "eligible", because there were two: the order panel and the
+ * combined-PO card each built this intersection themselves, and they drifted —
+ * only one of them ever told you when a carrier had been dropped. A rule about
+ * which suppliers may be offered for a purchase order should not be written
+ * twice.
+ */
+export function eligibleSuppliers<T extends { id: string; company: string }>(
+  carriers: readonly CatalogSupplierRef[],
+  registered: readonly T[],
+): T[] {
+  if (carriers.length === 0) return [...registered]; // nothing catalogued → no narrowing
+  return registered.filter((s) => carriers.some((ref) => sameSupplier(ref, s)));
 }
 
 /**
@@ -233,7 +311,7 @@ export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): Se
  * the product in Products all along.
  *
  * The picker offers `registered ∩ carriers`. A carrier nobody registered falls
- * out of that intersection, and until now it fell out **without a word**: the
+ * out of that intersection, and until #552 it fell out **without a word**: the
  * form said "Showing 1 supplier that carry these products", which is true of the
  * survivor and silent about the company the product actually names. Worse, one
  * survivor is exactly the condition that triggers the auto-pick — and picking a
@@ -245,21 +323,20 @@ export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): Se
  * fills itself in confidently reads as a form that knows.
  */
 export function unregisteredCarriers(
-  lines: POLine[],
-  catalog: CatalogSuppliers,
-  registeredCompanies: readonly string[],
+  carriers: readonly CatalogSupplierRef[],
+  registered: readonly { id: string; company: string }[],
 ): string[] {
-  const known = new Set(registeredCompanies.map((c) => c.trim().toLowerCase()));
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const l of lines) {
-    for (const co of suppliersForDescription(l.description, catalog)) {
-      const key = co.trim().toLowerCase();
-      // A blank carrier is "nobody has said who sells it", not a missing record.
-      if (!key || known.has(key) || seen.has(key)) continue;
-      seen.add(key);
-      out.push(co.trim());
-    }
+  for (const ref of carriers) {
+    const name = ref.company.trim();
+    // A blank carrier is "nobody has said who sells it", not a missing record.
+    if (!name) continue;
+    if (registered.some((s) => sameSupplier(ref, s))) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
   }
   return out;
 }
