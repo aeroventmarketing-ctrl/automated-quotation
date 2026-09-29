@@ -56,6 +56,16 @@ export const SUPPLIER_COLUMNS = [
 const norm = (s: string) => s.trim().toLowerCase();
 
 /**
+ * The id for a supplier that has none stored, derived from its company name so
+ * it is the SAME on every read.
+ *
+ * Prefixed, so it can never collide with a real `randomUUID()` and so anyone
+ * reading the data can see at a glance that this supplier predates ids and has
+ * not been saved since.
+ */
+export const derivedSupplierId = (company: string): string => `name:${norm(company)}`;
+
+/**
  * Parse a raw EWT value (boolean or a yes/no-ish string) into a tri-state:
  * true / false / undefined (undefined = not specified, so callers can preserve
  * an existing value on a partial import).
@@ -160,7 +170,19 @@ function coerceOne(r: unknown): Supplier | null {
   const company = String(o.company ?? "").trim();
   if (!company) return null;
   return {
-    id: String(o.id ?? randomUUID()),
+    // DERIVED, not minted. `coerceOne` runs on every read, so `randomUUID()`
+    // here gave a supplier that had never been saved since ids were introduced a
+    // DIFFERENT id on every load — and anything wired to that id would be
+    // orphaned by the very next read. Products store `supplierId` when a
+    // supplier is picked (see `product-manager`), so an unstable id is not a
+    // cosmetic problem; it is a link that silently stops resolving.
+    //
+    // A name-derived id is stable across reads, and it is no worse than today
+    // where a rename is concerned: an id-less supplier is matched by name
+    // already, so a rename moves it either way. The moment anything writes the
+    // list (`saveSupplier` re-writes it whole), a real id is persisted and this
+    // fallback stops applying to that record.
+    id: String(o.id ?? "").trim() || derivedSupplierId(company),
     company,
     // Legacy records stored "attention"; carry it over into Contact Person.
     contactPerson: String(o.contactPerson ?? o.attention ?? "").trim(),

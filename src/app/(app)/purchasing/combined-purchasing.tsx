@@ -22,7 +22,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
 import type { CashPayment } from "@/lib/cash-payment";
-import { catalogPriceFor, withCatalogPrices, suppliersForDescription, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -567,18 +567,19 @@ function CombineForm({
   const [err, setErr] = useState<string | null>(null);
 
   // Suppliers that carry at least one of the requested products (from the catalogue).
-  const carrierSet = new Set<string>();
-  for (const l of lines) for (const co of suppliersForDescription(l.description, catalogSuppliers)) carrierSet.add(co.toLowerCase());
-  // Only show suppliers that carry the products; fall back to all when nothing matched.
-  const eligible = carrierSet.size > 0 ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
-  const filtered = carrierSet.size > 0;
+  // One definition of "eligible", shared with the order panel — matched by
+  // supplier ID first, by company name second. These two used to compute it
+  // separately and drifted; only one of them warned about a dropped carrier.
+  const carriers = carriersForLines(lines, catalogSuppliers);
+  const filtered = carriers.length > 0;
+  const eligible = eligibleSuppliers(carriers, suppliers);
   /**
    * Carriers the catalogue names that the supplier list doesn't hold — dropped
    * from `eligible` above without a word. See `unregisteredCarriers`: a product
    * whose real supplier is unregistered leaves one survivor, and one survivor is
    * what auto-picks below — which force-overwrites every line's unit price.
    */
-  const droppedCarriers = unregisteredCarriers(lines, catalogSuppliers, suppliers.map((s) => s.company));
+  const droppedCarriers = unregisteredCarriers(carriers, suppliers);
 
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())

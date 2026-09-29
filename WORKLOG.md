@@ -1,3 +1,98 @@
+## 2026-09-29 · The supplier id was always there; nothing read it
+
+The owner, looking at Products filtered to "ideal": *"Are we using SKU as reference? Should we use
+Supplier ID to easily wire everything?"*
+
+The answer to the first half is yes, and it is fine — SKU is the product's key and the catalogue is
+keyed on it. The answer to the second half is that we were **not** using the supplier id, and the
+field has existed the whole time. `Product.suppliers[]` carries a `supplierId`, written by the
+product form whenever a supplier is *picked* rather than typed. Nothing anywhere read it back. Every
+link from a product to its supplier was remade, on every render, by comparing company names.
+
+That is why `IDEAL CONTROLS` and `IDEAL CONTROLS INCORPORATED` were two different companies as far as
+the PO picker was concerned, and why renaming a supplier in Admin › Suppliers silently orphans every
+product that names it.
+
+### The landmine underneath it
+
+Before any of that could be wired, `coerceSuppliers` had to stop doing this:
+
+```js
+id: String(o.id ?? randomUUID()),
+```
+
+`coerceOne` runs on every **read**. A supplier that predates ids, or one whose record was written
+without one, therefore got a *different* id each time the registry was loaded. Wiring anything to an
+id like that would have produced links that resolve once and are orphaned by the next page load —
+worse than the name matching it replaced, and much harder to see.
+
+It is now derived from the company name, `name:<lowercased company>`: the same on every read,
+prefixed so it can never collide with a real `randomUUID()` and so anyone reading the JSON can see at
+a glance which records predate ids. The first time anything saves the list, a real id is persisted and
+the fallback stops applying to that record.
+
+### By id first, by name second — and the second is not temporary
+
+`sameSupplier(ref, supplier)` matches on id when the link has one, and on company name otherwise. The
+name half stays permanently, because an id only exists on a link whose supplier was picked from the
+registry. A supplier typed by hand carries `id: ""`, and matching those on an empty string would make
+every hand-typed link match every supplier. Dropping the name match would turn today's working links
+into orphans, which is the opposite of the point.
+
+One other thing fell out of this. "Which suppliers may this PO be offered?" was written **twice** —
+once in the order page's PO panel, once in the combined-PO card — and the two had drifted: only one of
+them ever told you when a carrier had been dropped. There is now one `eligibleSuppliers()` and both
+call it.
+
+It takes the carriers, not the lines, on purpose. `matchKey` is tokenised across the whole catalogue —
+a thousand products — and these forms re-render on every keystroke in the company box. The panel was
+already scanning the catalogue three times per render to answer three questions about the same set;
+it now scans once and answers all three from the result.
+
+### The proof: one renamed supplier, two products
+
+Name matching and id matching agree in every ordinary case, so a test that only shows them agreeing
+shows nothing. The harness was seeded with the *disagreement*: registry renamed to `IDEAL CONTROLS
+INCORPORATED`, two products both still naming the old `IDEAL CONTROLS`, one link carrying the
+`supplierId` and one not. Two purchase requests, one PO form each, same page load — so nothing about
+cache timing can explain the difference.
+
+```
+AAA WITH ID (link has supplierId)  → "Showing 1 supplier that carry these products"
+                                      Company name: IDEAL CONTROLS INCORPORATED  (auto-filled)
+                                      Attention / Address / EWT all pulled through
+BBB NO ID   (link has name only)   → "IDEAL CONTROLS carries these products but isn't in the
+                                      supplier list — add it under Admin › Suppliers…"
+                                      Company name: empty
+```
+
+The second row is what the whole app did until today. The first is what the id buys: a rename in
+Admin › Suppliers no longer breaks the link.
+
+The same resolution now runs behind the Purchasing tab's **suggested combines**. Those chips used to
+be labelled with whatever the *product* said, and the label is not decoration — the combine form
+takes it as `presetCompany` and looks the supplier up by it to fill Attention, Address and the EWT
+default. A stale catalogue name found nothing, so the form opened with a company typed into it and
+every other field blank. Resolved through the registry by id:
+
+```
+before   IDEAL CONTROLS · 2 requests →      form: company typed, Attention/Address blank
+after    IDEAL CONTROLS INCORPORATED · 2 →  form: IDEAL CONTROLS INCORPORATED
+                                                   MS REYES - 0917 000 0000
+                                                   MANILA
+```
+
+The A/B was run twice. The first run showed nothing, because the product catalogue is cached since
+#556 and a seed written straight to the database fires no `revalidateTag` — the page was answering
+from a snapshot taken before the products existed. Worth writing down: from here on, a harness check
+that seeds through Prisma needs a cold cache, or it is testing yesterday.
+
+### What this does not do yet
+
+PO **lines** are still matched to products by fuzzy name (`matchKey`), not by SKU or id. That is the
+bigger half of the owner's question and it reaches into frozen Phase 3/4 territory, so it is not in
+this change.
+
 ## 2026-09-29 · The catalogues are read across requests, not just within one
 
 The owner, from the outside: *"when admin account is always logged in egress usage goes up. What I do

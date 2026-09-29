@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SUPPLIER_COLUMNS, mapSupplierHeaders, parseYesNo, coerceSuppliers, isPricedSupplierName } from "./suppliers";
+import { SUPPLIER_COLUMNS, mapSupplierHeaders, parseYesNo, coerceSuppliers, isPricedSupplierName, derivedSupplierId } from "./suppliers";
 
 /**
  * The supplier import's header matcher, and the one trap in it.
@@ -62,6 +62,36 @@ describe("parseYesNo", () => {
 });
 
 describe("coerceSuppliers", () => {
+  /**
+   * The id is now a LINK, not a label: products store `supplierId` and the PO
+   * picker resolves by it. So an id that changes between two reads of the same
+   * unchanged record is not untidy — it is a link that stops resolving.
+   */
+  it("gives a supplier with no stored id the same id on every read", () => {
+    const stored = { list: [{ company: "IDEAL CONTROLS INCORPORATED" }] };
+    const [first] = coerceSuppliers(stored);
+    const [second] = coerceSuppliers(stored);
+    expect(first.id).toBe(second.id);
+    expect(first.id).toBe(derivedSupplierId("IDEAL CONTROLS INCORPORATED"));
+    // Derived, so it can never be mistaken for — or collide with — a real one.
+    expect(first.id.startsWith("name:")).toBe(true);
+  });
+
+  it("keeps a stored id, and does not derive over a blank one twice differently", () => {
+    const [kept] = coerceSuppliers({ list: [{ id: "sup-1", company: "ACME" }] });
+    expect(kept.id).toBe("sup-1");
+    // A blank / whitespace id is "none stored", not an id of its own.
+    for (const id of ["", "   "]) {
+      expect(coerceSuppliers({ list: [{ id, company: "ACME" }] })[0].id).toBe(derivedSupplierId("ACME"));
+    }
+  });
+
+  it("derives the same id for the same company however it is typed", () => {
+    // Casing and surrounding space are not identity; the registry is one list
+    // and two rows differing only in those are the same supplier to a link.
+    expect(derivedSupplierId("  Acme Steel  ")).toBe(derivedSupplierId("ACME STEEL"));
+  });
+
   it("defaults `terms` to false on records saved before the flag existed", () => {
     const [s] = coerceSuppliers({ list: [{ id: "a", company: "ACME" }] });
     expect(s.terms).toBe(false);

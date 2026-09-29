@@ -12,7 +12,7 @@ import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/p
 type EditLine = POLine & { priceReason?: string };
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, suppliersForDescription, unregisteredCarriers, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, eligibleSuppliers, unregisteredCarriers, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -100,9 +100,11 @@ export function PurchaseOrderPanel({
 
   // Only offer suppliers that carry the products on the PO lines (from the
   // catalogue); fall back to all suppliers when none of the products are catalogued.
-  const carrierSet = carriersForLines(lines, catalogSuppliers);
-  const filtered = carrierSet.size > 0;
-  const eligible = filtered ? suppliers.filter((s) => carrierSet.has(s.company.toLowerCase())) : suppliers;
+  // Matched by supplier ID first, by company name second — see `sameSupplier`.
+  // One catalogue scan, three answers: this renders on every keystroke below.
+  const carriers = carriersForLines(lines, catalogSuppliers);
+  const filtered = carriers.length > 0;
+  const eligible = eligibleSuppliers(carriers, suppliers);
   /**
    * Why the list has nothing to suggest — *"supplier cannot be detected in
    * purchasing."*
@@ -123,7 +125,7 @@ export function PurchaseOrderPanel({
    * "detection is broken" into "add GOLDEN PACIFIC INC to the supplier list".
    */
   const namedLines = lines.some((l) => l.description.trim());
-  const carrierNames = [...new Set(lines.flatMap((l) => suppliersForDescription(l.description, catalogSuppliers)))];
+  const carrierNames = [...new Set(carriers.map((r) => r.company))];
   /**
    * Carriers the catalogue names that are NOT in the supplier list — case 2
    * above, but PARTIAL: some carriers registered, some not.
@@ -136,7 +138,7 @@ export function PurchaseOrderPanel({
    * every line's unit price, so the missing registry entry repriced the PO as
    * well as misnaming it.
    */
-  const droppedCarriers = unregisteredCarriers(lines, catalogSuppliers, suppliers.map((s) => s.company));
+  const droppedCarriers = unregisteredCarriers(carriers, suppliers);
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;

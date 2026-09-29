@@ -18,7 +18,7 @@ import { coercePurchaseOrder, poLineFromPRItem, isIssuedFromStockLine, stripToPu
 import { orderBoughtInLines } from "@/lib/department-pnl";
 import { poBatchId, poMemberIds } from "@/lib/purchase-batch";
 import { getProducts } from "@/lib/product-catalog";
-import { REF_PRICE_KEY, matchKey } from "@/lib/po-catalog";
+import { REF_PRICE_KEY, matchKey, sameSupplier } from "@/lib/po-catalog";
 import { getSuppliers } from "@/lib/suppliers";
 import { coerceCheckDocs, canAttachCheck, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy } from "@/lib/voucher-check";
 import { coerceCashPayment } from "@/lib/cash-payment";
@@ -137,8 +137,16 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // Product catalogue → supplier lookup, used to suggest same-supplier combines.
   const products = await getProducts().catch(() => []);
   const scanProducts = products.map((p) => ({ id: p.id, sku: p.sku, name: p.name, unit: p.unit }));
-  const suppliersByProduct = new Map<string, string[]>();
-  for (const p of products) suppliersByProduct.set(p.name.trim().toLowerCase(), p.suppliers.map((s) => s.company).filter(Boolean));
+  // Carries the supplier ID as well as the name — `Product.suppliers` has held
+  // `supplierId` all along (the product form writes it when a supplier is PICKED
+  // rather than typed) and nothing ever read it.
+  const suppliersByProduct = new Map<string, { id: string; company: string }[]>();
+  for (const p of products) {
+    suppliersByProduct.set(
+      p.name.trim().toLowerCase(),
+      p.suppliers.filter((s) => s.company).map((s) => ({ id: s.supplierId ?? "", company: s.company })),
+    );
+  }
   // One answer to "who carries this line", not two. This used to run its own
   // exact-then-substring lookup, which is a different algorithm from the
   // `matchKey` the PO form itself uses — so a line could be offered a supplier in
@@ -151,7 +159,22 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     const desc = poLineFromPRItem(stripToPurchasePrefix(itemStr)).description;
     if (!desc.trim()) return [];
     const key = matchKey(desc, supplierKeys);
-    return key ? suppliersByProduct.get(key) ?? [] : [];
+    if (!key) return [];
+    /**
+     * Resolved through the registry, by ID first — so the chip a purchaser
+     * presses carries the company as the SUPPLIER LIST spells it, not as the
+     * product happens to spell it.
+     *
+     * That name is not decoration: the combine form takes it as `presetCompany`
+     * and looks the supplier up by it to fill in Attention, Address and the EWT
+     * default. A stale name in the catalogue found nothing, so the form opened
+     * with a company typed in and every other field blank. An unregistered
+     * carrier still shows its catalogue name — there is nothing better to show,
+     * and the form now says so in as many words.
+     */
+    return (suppliersByProduct.get(key) ?? []).map(
+      (ref) => suppliers.find((s) => sameSupplier(ref, s))?.company ?? ref.company,
+    );
   };
   // Catalogue prices: product name → supplier company → unit price. Used to
   // pre-fill PO line prices for the purchaser's reference.
