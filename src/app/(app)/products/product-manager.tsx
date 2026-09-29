@@ -14,7 +14,7 @@ import type { Supplier } from "@/lib/suppliers";
 import type { ProductSupplierLink } from "@/lib/products";
 import { supplierLinkState, weakLinkCount, SUPPLIER_LINK_HINT } from "@/lib/supplier-link";
 import type { ProductRow } from "@/lib/product-catalog";
-import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction, type ProductSaveResult } from "./actions";
+import { createProduct, updateProduct, deleteProduct, assignMissingProductSkus, removeUnsourcedProducts, deleteProducts, clearAllProducts, setProductOfficeResaleAction, wireSupplierLinks, type ProductSaveResult } from "./actions";
 import { BulkImport } from "./bulk-import";
 import { ProductScanBox } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -477,6 +477,34 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
     } catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
     finally { setBusy(false); }
   }
+  /**
+   * Fill in the supplier id wherever it can be resolved without guessing.
+   *
+   * Confirmed first because it rewrites links across the whole catalogue, and
+   * reported honestly afterwards: the leftovers are the interesting number —
+   * they are the companies that are not in the supplier list, and no button can
+   * invent those.
+   */
+  async function wireLinks() {
+    if (!window.confirm(
+      `Fill in the supplier ID on every product whose supplier is matched by name only?\n\n` +
+      `This only fills in IDs — no supplier is added or removed and no price is changed. ` +
+      `A company that isn't in the supplier list is left alone.`,
+    )) return;
+    setBusy(true); setErr(null);
+    try {
+      const r = await wireSupplierLinks();
+      router.refresh();
+      const left = r.leftoverProducts;
+      window.alert(
+        `${r.wired} supplier link${r.wired === 1 ? "" : "s"} wired by ID across ${r.products} product${r.products === 1 ? "" : "s"}.` +
+        (left > 0
+          ? `\n\n${left} product${left === 1 ? "" : "s"} left — their supplier isn't in the supplier list (or two suppliers share the name). Add the company under Admin › Suppliers, then run this again.`
+          : ""),
+      );
+    } catch (e) { setErr({ kind: "error", text: e instanceof Error ? e.message : "Failed" }); }
+    finally { setBusy(false); }
+  }
   async function clearAll() {
     if (!window.confirm(`Clear ALL ${products.length} products so you can import a fresh file? They'll be removed from the list (recoverable by an admin).`)) return;
     if (!window.confirm("This removes every product on the list. Continue?")) return;
@@ -617,6 +645,13 @@ export function ProductManager({ products, suppliers, canManage, canEditPrices =
             <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden />
             Name-only links ({weakIds.size})
           </button>
+        )}
+        {/* The bulk fix, beside the thing it fixes. Same gate as the other
+            whole-catalogue buttons. */}
+        {showSuppliers && canAddOrRemoveProducts && weakIds.size > 0 && (
+          <Button size="sm" variant="outline" className="h-8 text-xs" disabled={busy} onClick={wireLinks}>
+            {busy ? "…" : "Wire by supplier ID"}
+          </Button>
         )}
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Group by

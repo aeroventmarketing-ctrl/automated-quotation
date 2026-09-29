@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { supplierLinkState, weakLinkCount } from "./supplier-link";
+import { supplierLinkState, weakLinkCount, planSupplierWiring } from "./supplier-link";
 
 /**
  * The three states a product's supplier link can be in, and the one that is
@@ -60,5 +60,86 @@ describe("supplierLinkState", () => {
   /** An empty registry makes everything unregistered — never "linked". */
   it("never calls anything linked against an empty supplier list", () => {
     expect(supplierLinkState({ supplierId: "sup-ideal", company: "IDEAL CONTROLS" }, [])).toBe("unregistered");
+  });
+});
+
+/**
+ * The bulk backfill. It runs over the whole catalogue in one press, so what it
+ * DOESN'T touch matters more than what it does.
+ */
+describe("planSupplierWiring", () => {
+  const registry = [
+    { id: "sup-ideal", company: "IDEAL CONTROLS INCORPORATED" },
+    { id: "sup-zenith", company: "ZENITH UNITED ELECTRIC CORP." },
+  ];
+  const product = (id: string, suppliers: { supplierId: string; company: string; price?: number }[]) => ({ id, suppliers });
+
+  it("wires a name-only link and leaves everything else on it alone", () => {
+    const plan = planSupplierWiring(
+      [product("p1", [{ supplierId: "", company: "ideal controls incorporated", price: 31894 }])],
+      registry,
+    );
+    expect(plan.wired).toBe(1);
+    expect(plan.updates).toEqual([
+      // The id filled in, the name adopted from the registry, the price untouched.
+      { id: "p1", suppliers: [{ supplierId: "sup-ideal", company: "IDEAL CONTROLS INCORPORATED", price: 31894 }] },
+    ]);
+  });
+
+  it("does not rewrite a product that has nothing to gain", () => {
+    const plan = planSupplierWiring(
+      [product("p1", [{ supplierId: "sup-ideal", company: "IDEAL CONTROLS INCORPORATED" }])],
+      registry,
+    );
+    expect(plan).toEqual({ updates: [], wired: 0, unmatched: 0, ambiguous: 0, leftoverProducts: 0 });
+  });
+
+  it("leaves a company that is not in the supplier list for a human", () => {
+    const plan = planSupplierWiring([product("p1", [{ supplierId: "", company: "JOEL LATERO SHOP" }])], registry);
+    expect(plan.updates).toEqual([]);
+    expect({ wired: plan.wired, unmatched: plan.unmatched, leftoverProducts: plan.leftoverProducts })
+      .toEqual({ wired: 0, unmatched: 1, leftoverProducts: 1 });
+  });
+
+  /** A tie is not resolved by picking the first row. */
+  it("refuses to guess when two suppliers share a company name", () => {
+    const twins = [
+      { id: "sup-a", company: "TWIN TRADING" },
+      { id: "sup-b", company: "Twin Trading" },
+    ];
+    const plan = planSupplierWiring([product("p1", [{ supplierId: "", company: "TWIN TRADING" }])], twins);
+    expect(plan.updates).toEqual([]);
+    expect({ wired: plan.wired, ambiguous: plan.ambiguous }).toEqual({ wired: 0, ambiguous: 1 });
+  });
+
+  it("repairs a dead id rather than trusting it", () => {
+    const plan = planSupplierWiring(
+      [product("p1", [{ supplierId: "sup-deleted", company: "ZENITH UNITED ELECTRIC CORP." }])],
+      registry,
+    );
+    expect(plan.updates[0].suppliers[0].supplierId).toBe("sup-zenith");
+  });
+
+  it("writes the whole link list, wiring what it can and keeping the rest", () => {
+    const plan = planSupplierWiring(
+      [product("p1", [
+        { supplierId: "", company: "IDEAL CONTROLS INCORPORATED" },
+        { supplierId: "", company: "JOEL LATERO SHOP" },
+      ])],
+      registry,
+    );
+    expect(plan.updates[0].suppliers).toEqual([
+      { supplierId: "sup-ideal", company: "IDEAL CONTROLS INCORPORATED" },
+      { supplierId: "", company: "JOEL LATERO SHOP" },
+    ]);
+    expect({ wired: plan.wired, unmatched: plan.unmatched }).toEqual({ wired: 1, unmatched: 1 });
+  });
+
+  it("is a no-op the second time it runs", () => {
+    const products = [product("p1", [{ supplierId: "", company: "IDEAL CONTROLS INCORPORATED" }])];
+    const once = planSupplierWiring(products, registry);
+    const twice = planSupplierWiring(once.updates, registry);
+    expect(twice.updates).toEqual([]);
+    expect(twice.wired).toBe(0);
   });
 });
