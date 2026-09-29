@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateProductCatalogue } from "@/lib/product-catalog";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
@@ -34,6 +35,7 @@ export async function saveSupplierAction(input: z.infer<typeof supplierSchema>):
   await assertAdmin();
   const d = supplierSchema.parse(input);
   const list = await saveSupplier(d);
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return list;
 }
@@ -41,6 +43,7 @@ export async function saveSupplierAction(input: z.infer<typeof supplierSchema>):
 export async function deleteSupplierAction(id: string): Promise<Supplier[]> {
   await assertAdmin();
   const list = await deleteSupplier(id);
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return list;
 }
@@ -49,6 +52,7 @@ export async function deleteSupplierAction(id: string): Promise<Supplier[]> {
 export async function deleteSuppliersAction(ids: string[]): Promise<Supplier[]> {
   await assertAdmin();
   const list = await deleteSuppliers(ids);
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return list;
 }
@@ -57,6 +61,7 @@ export async function deleteSuppliersAction(ids: string[]): Promise<Supplier[]> 
 export async function clearSuppliersAction(): Promise<Supplier[]> {
   await assertAdmin();
   const list = await clearSuppliers();
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return list;
 }
@@ -84,6 +89,7 @@ export async function bulkImportSuppliersAction(input: z.infer<typeof bulkSchema
   await assertAdmin();
   const d = bulkSchema.parse(input);
   const result = await bulkUpsertSuppliers(d.rows);
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return result;
 }
@@ -97,6 +103,7 @@ export async function bulkImportSuppliersAction(input: z.infer<typeof bulkSchema
 export async function importBundledSuppliersAction(): Promise<BulkResult> {
   await assertAdmin();
   const result = await bulkUpsertSuppliers(AEROVENT_SUPPLIERS);
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   return result;
 }
@@ -124,6 +131,7 @@ export async function removeInvalidSuppliersAction(): Promise<{ removedSuppliers
       cleanedProducts++;
     }
   }
+  revalidateProductCatalogue();
   revalidatePath("/admin/suppliers");
   revalidatePath("/products");
   return { removedSuppliers: removed, cleanedProducts, list };

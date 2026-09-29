@@ -27,6 +27,29 @@ import { ManualReconcileCard } from "./manual-reconcile-card";
 import { getLowStock } from "@/lib/low-stock";
 import { StockAlertsCards } from "./stock-alerts-cards";
 
+/**
+ * How often this page asks whether anything changed.
+ *
+ * It was 8 seconds, and this is the most expensive page in the app to rebuild:
+ * `my-dashboard`'s role check is `isAdmin(user) || userHasWorkflowRole(...)`, so
+ * an ADMIN satisfies every workflow role at once and their dashboard builds the
+ * purchaser, warehouse, accounting, payment-approver, plant-manager and logistics
+ * feeds together — where any other role builds one.
+ *
+ * The owner noticed it from the outside: *"when admin account is always logged in
+ * egress usage goes up. What I do is I always log in the payment approver account
+ * and log in admin account only when necessary."* A workaround for a real cost.
+ *
+ * The poll itself is cheap — one COUNT. What is expensive is what it TRIGGERS: a
+ * changed token re-renders the whole page, so on a busy day an open admin tab
+ * rebuilt every feed every eight seconds. Nothing on this screen moves on that
+ * scale; approvals and deliveries are minutes apart. Thirty seconds cuts those
+ * rebuilds by about three quarters and costs the viewer nothing they would
+ * notice — and switching back to the tab still refreshes immediately, which is
+ * the case where waiting would actually be felt.
+ */
+const DASHBOARD_POLL_SECONDS = 30;
+
 export const dynamic = "force-dynamic";
 
 const AREA_ICON: Record<TaskArea, typeof ClipboardList> = {
@@ -476,7 +499,7 @@ export default async function MyDashboardPage() {
   if (finance) {
     return (
       <div className="space-y-6">
-        <AutoRefresh seconds={8} watch="my-dashboard" />
+        <AutoRefresh seconds={DASHBOARD_POLL_SECONDS} watch="my-dashboard" />
         {header}
         {ordersGrid}
         {pendingCard}
@@ -496,7 +519,7 @@ export default async function MyDashboardPage() {
 
   return (
     <div className="space-y-6">
-      <AutoRefresh seconds={8} watch="my-dashboard" />
+      <AutoRefresh seconds={DASHBOARD_POLL_SECONDS} watch="my-dashboard" />
       {header}
 
       {/* Admins / Sales see the Sales Dashboard first, above the production sections. */}

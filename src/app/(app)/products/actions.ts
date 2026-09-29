@@ -14,7 +14,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { nextProductSku } from "@/lib/product-catalog";
+import { nextProductSku, revalidateProductCatalogue } from "@/lib/product-catalog";
 import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products";
 import { getSuppliers, rememberSupplier, isPricedSupplierName } from "@/lib/suppliers";
 import { setOfficeResaleProduct } from "@/lib/office-resale";
@@ -154,6 +154,7 @@ async function park(
     entityId: productId ?? undefined,
     href: "/products",
   });
+  revalidateProductCatalogue();
   revalidatePath("/products");
   revalidatePath("/my-dashboard");
   return PARKED;
@@ -185,7 +186,8 @@ export async function createProduct(input: z.infer<typeof productSchema>): Promi
         },
       });
     });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     return APPLIED;
   });
 }
@@ -205,7 +207,8 @@ export async function updateProduct(input: { id: string } & z.infer<typeof produ
         suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
       },
     });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     return APPLIED;
   });
 }
@@ -218,6 +221,7 @@ export async function updateProduct(input: { id: string } & z.infer<typeof produ
 export async function setProductOfficeResaleAction(id: string, on: boolean): Promise<boolean> {
   await requireProductManager();
   await setOfficeResaleProduct(id, on);
+  revalidateProductCatalogue();
   revalidatePath("/products");
   revalidatePath("/management");
   return on;
@@ -242,7 +246,8 @@ export async function deleteProduct(id: string): Promise<ProductSaveResult> {
       return park(user, "DELETE", id, before);
     }
     await prisma.product.update({ where: { id }, data: { active: false } });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     return APPLIED;
   });
 }
@@ -299,7 +304,8 @@ export async function approveProductChange(id: string): Promise<ProductSaveResul
       entityId: c.productId ?? undefined,
       href: "/products",
     });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     revalidatePath("/my-dashboard");
     return APPLIED;
   });
@@ -324,7 +330,8 @@ export async function rejectProductChange(id: string, reason?: string): Promise<
       entityId: c.productId ?? undefined,
       href: "/products",
     });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     revalidatePath("/my-dashboard");
     return APPLIED;
   });
@@ -345,7 +352,8 @@ export async function withdrawProductChange(id: string): Promise<ProductSaveResu
       where: { id },
       data: { status: "REJECTED", decidedByName: user.name, decidedAt: new Date(), rejectReason: "Withdrawn by the proposer" },
     });
-    revalidatePath("/products");
+    revalidateProductCatalogue();
+  revalidatePath("/products");
     revalidatePath("/my-dashboard");
     return APPLIED;
   });
@@ -371,6 +379,7 @@ export async function removeUnsourcedProducts(): Promise<{ removed: number }> {
   if (ids.length > 0) {
     await prisma.product.updateMany({ where: { id: { in: ids } }, data: { active: false } });
   }
+  revalidateProductCatalogue();
   revalidatePath("/products");
   return { removed: ids.length };
 }
@@ -381,6 +390,7 @@ export async function deleteProducts(ids: string[]): Promise<{ removed: number }
   const clean = [...new Set((ids ?? []).filter((x): x is string => typeof x === "string" && x.length > 0))];
   if (clean.length === 0) return { removed: 0 };
   const res = await prisma.product.updateMany({ where: { id: { in: clean }, active: true }, data: { active: false } });
+  revalidateProductCatalogue();
   revalidatePath("/products");
   return { removed: res.count };
 }
@@ -394,6 +404,7 @@ export async function clearAllProducts(): Promise<{ removed: number }> {
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Only an admin can clear all products.");
   const res = await prisma.product.updateMany({ where: { active: true }, data: { active: false } });
+  revalidateProductCatalogue();
   revalidatePath("/products");
   return { removed: res.count };
 }
@@ -653,6 +664,7 @@ export async function importProducts(
       errors.push(`Product “${g.name}” could not be imported${detail ? `: ${detail}` : "."}`);
     }
   }
+  revalidateProductCatalogue();
   revalidatePath("/products");
   return { created, updated, skipped, errors: errors.slice(0, 20) };
 }
@@ -667,5 +679,6 @@ export async function assignMissingProductSkus(): Promise<void> {
       await tx.product.update({ where: { id: p.id }, data: { sku } });
     });
   }
+  revalidateProductCatalogue();
   revalidatePath("/products");
 }
