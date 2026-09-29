@@ -209,6 +209,40 @@ export async function importStockItems(
   // prices are theirs. `mayPrice` stays as the single expression of the rule
   // rather than a hard-coded `true`, so the two can't drift apart.
   const mayPrice = await canSetCataloguePrice();
+  /**
+   * What name each Item Code ends up with **according to this file** — so a row
+   * can tell whether the item blocking its rename is itself moving out of the
+   * way further down the sheet.
+   *
+   * The owner, re-importing a corrected inventory sheet:
+   *
+   * > Row 2 (“… FIBERGLASS CLOTH - PER METER”): Renaming Item Code "CAT00094"
+   * > (currently “… PER BOX”) … clashes with the existing item CAT00095
+   * > Row 3 (“… FIBERGLASS CLOTH - PER BOX”): Renaming Item Code "CAT00095"
+   * > (currently “… PER METER”) … clashes with the existing item CAT00094
+   *
+   * Two codes whose names are the wrong way round — a SWAP. Each row's rename
+   * was refused because of the other row, and the other row was in the file
+   * doing exactly the reverse. Checked one row at a time against the database as
+   * it stands, a swap can never be performed; the advice it offered ("Merge them
+   * first") would have destroyed one of the two items.
+   *
+   * Last occurrence wins, because rows are applied in order and the last one is
+   * where the code actually lands.
+   */
+  const plannedNameBySku = new Map<string, string>();
+  if (iSku >= 0) {
+    for (let r = 1; r < rows.length; r++) {
+      const sku = (rows[r][iSku] ?? "").trim().toUpperCase();
+      const nm = (rows[r][iName] ?? "").trim();
+      if (sku && nm) plannedNameBySku.set(sku, nm);
+    }
+  }
+  /** Is this item about to be renamed to something else by this very file? */
+  const isVacating = (blocker: { sku: string | null }, claimed: string): boolean => {
+    const planned = blocker.sku ? plannedNameBySku.get(blocker.sku.toUpperCase()) : undefined;
+    return planned != null && planned.toLowerCase() !== claimed.toLowerCase();
+  };
   const errors: string[] = [];
   let created = 0;
   let updated = 0;
@@ -278,7 +312,11 @@ export async function importStockItems(
               where: { name: { equals: name, mode: "insensitive" }, id: { notIn: owners.map((o) => o.id) } },
               select: { sku: true },
             });
-            if (nameTaken) {
+            // …unless that item is itself being renamed by this file — a swap,
+            // or any longer cycle. `name` is not unique in the database (only
+            // `(sku, location)` is), so the two can cross over in file order and
+            // the pair is correct again by the last row.
+            if (nameTaken && !isVacating(nameTaken, name)) {
               throw new Error(
                 `Renaming Item Code "${wantSku}" (currently “${pool[0].name}”) to “${name}” clashes with the existing item ${nameTaken.sku ?? ""}. Merge them first.`,
               );

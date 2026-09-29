@@ -4,7 +4,7 @@
  * Matching tolerates order-reference suffixes on the line description.
  */
 import type { POLine } from "@/lib/purchase-order";
-import { itemNameCandidates } from "@/lib/item-sku";
+import { itemNameCandidates, skuNameCandidates } from "@/lib/item-sku";
 
 export type CatalogPrices = Record<string, Record<string, number>>; // productNameLower → companyLower → price
 /**
@@ -156,10 +156,53 @@ function fuzzyKey(description: string, keys: string[]): string | undefined {
 export function matchKey(description: string, keys: string[]): string | undefined {
   const candidates = itemNameCandidates(description).map((c) => c.trim()).filter(Boolean);
   if (!candidates.length) return undefined;
-  // 1 — a real name, whichever candidate carries it.
-  for (const c of candidates) {
+  /**
+   * 1 — a real name, whichever candidate carries it, **specification segments
+   * peeled**, longest first.
+   *
+   * The owner, again, on the very line #551 quoted: *"when creating PO in
+   * nenutec product, supplier shows zenith united corp … and no other choices.
+   * Supplier of Nenutec product is Ideal Controls Incorporated."*
+   *
+   * #551 taught the SKU lookup to peel ` · ` specifications and deliberately did
+   * NOT teach this one, on the grounds that widening what `matchKey` accepts
+   * changes what a purchase order costs. That reasoning protected the fuzzy
+   * pass and left the line itself unmatched — so the SKU chip read CAT00199
+   * while the supplier box read the wrong company entirely.
+   *
+   * Because what reaches the fuzzy pass is the article PLUS its whole
+   * specification:
+   *
+   * > `NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · … · Duct Diameter: 250 mm
+   * > (10 in) · Airflow Range: 306 – 2294 CMH`
+   *
+   * every number in that tail — 250, 10, 306, 2294 — joins the line's model-code
+   * set. The cross-model guard then waves through any product whose OWN codes
+   * happen to appear there, and the score adds 100 per code, so an unrelated
+   * item carrying two of those numbers outranks the product actually named at
+   * the front of the line. Reproduced exactly: a decoy named `air circuit
+   * breaker 250 a 10 ka` beats `nenutec variable air volume 6" diameter`.
+   *
+   * So the peeled names are tried here, in step 1, where the test is EXACT — a
+   * catalogue entry that IS this candidate, ignoring punctuation and spacing.
+   * That cannot pick a looser product than the fuzzy pass would; it can only
+   * stop the fuzzy pass from being reached on a line whose article the catalogue
+   * knows by name. Longest first, so the most complete name the catalogue
+   * actually holds wins, and an item whose real name contains ` · ` still
+   * matches itself before any shortening of it.
+   */
+  const named = [...new Set(candidates.flatMap((c) => skuNameCandidates(c)))];
+  for (const c of named) {
     const exact = c.toLowerCase();
     if (keys.includes(exact)) return exact;
+  }
+  // …and the same name modulo punctuation / spacing, which is what makes
+  // `6" DIAMETER` and `6 DIAMETER` the same product.
+  const byCanon = new Map<string, string>();
+  for (const k of keys) { const c = canon(k); if (c && !byCanon.has(c)) byCanon.set(c, k); }
+  for (const c of named) {
+    const hit = byCanon.get(canon(c));
+    if (hit) return hit;
   }
   // 2 then 3 — the article first, the whole line only as a fallback.
   const peeled = candidates.slice(1);

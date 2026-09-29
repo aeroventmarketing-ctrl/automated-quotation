@@ -1,3 +1,103 @@
+## 2026-09-29 · Two item codes, the wrong way round
+
+The owner, re-importing a corrected inventory sheet — both rows refused:
+
+```
+Row 2 (“… FIBERGLASS CLOTH - PER METER”): Renaming Item Code "CAT00094"
+  (currently “… PER BOX”) … clashes with the existing item CAT00095
+Row 3 (“… FIBERGLASS CLOTH - PER BOX”):   Renaming Item Code "CAT00095"
+  (currently “… PER METER”) … clashes with the existing item CAT00094
+```
+
+Read the two together and they are one edit: a **swap**. Each row's rename was refused because of the
+other row, and the other row was in the same file doing exactly the reverse.
+
+The guard itself is right — two live items answering to one name makes every name lookup a guess. It
+was checking each row against the database *as it stands*, one row at a time, so it could not see that
+the item in the way was itself moving out of the way. Under that rule a swap is not merely awkward,
+it is unperformable. And the advice it offered — *"Merge them first"* — would have destroyed one of
+the two items the owner was trying to keep.
+
+### The fix is the file, read whole
+
+Before any row is applied, the import now reads the sheet once to learn what name each Item Code ends
+up with. A rename is then refused only when the blocking item is **not** itself being renamed by this
+file. Nothing else about the guard moved.
+
+Ordering needs no cleverness, because `name` is not unique in the database — only `(sku, location)` and
+`(barcode, location)` are. The two rows may cross over in file order; the pair is correct again by the
+last row. Which also means an N-way rotation works for free, and that is tested rather than assumed.
+
+### What is still refused
+
+Two codes given the **same** name in one file is not a swap, it is a duplicate, and it still fails —
+nothing vacates, so two live items would answer to one name afterwards. So does a rename onto a name
+held by an item the file never mentions.
+
+Tested against a real Postgres: the swap, a three-way rotation, both refusals, and the quantities left
+intact on both items — the merge the old message recommended is exactly what must not happen.
+
+## 2026-09-29 · The half of #551 I decided not to fix
+
+The owner, on a PO built from an MRF for Nenutec VAVs: *"when creating PO in nenutec product, supplier
+shows zenith united corp … and no other choices. Supplier of Nenutec product is Ideal Controls
+Incorporated."*
+
+Three days ago, in #551, I quoted **this exact line**, fixed the SKU lookup, and wrote down why I was
+not fixing the other caller:
+
+> *`po-catalog`'s `matchKey` calls `itemNameCandidates` to decide which product a PO line is, and from
+> that its supplier and its unit price. Widening the names it will accept would change what a purchase
+> order costs.*
+
+That reasoning protected the fuzzy matcher and left the line itself unmatched, which is how the SKU
+chip came to read `CAT00199` while the supplier box read a different company entirely. Two lookups,
+one line, two answers about what the thing even is. The caution was real; applying it by leaving the
+caller alone was the wrong conclusion.
+
+### Why an air circuit breaker wins a VAV line
+
+What reaches the fuzzy pass is the article **plus its whole specification**:
+
+```
+NENUTEC VARIABLE AIR VOLUME 6" DIAMETER · Complete with VAV Actuator & Thermostat
+  · Duct Diameter: 250 mm (10 in) · Airflow Range: 306 – 2294 CMH
+```
+
+Every number in that tail — 250, 10, 306, 2294 — joins the line's model-code set. The cross-model
+guard then waves through any product whose OWN codes happen to appear there, and the score adds 100
+per code. So a product carrying **two** of those numbers outranks the product actually named at the
+front of the line, which carries one:
+
+```
+keys = 4" 6" 8" 10" … VAVs                       → nenutec variable air volume 6" diameter
+keys = … + "air circuit breaker 250 a 10 ka"     → air circuit breaker 250 a 10 ka
+```
+
+The same tail also makes the **10"** product's only code present, so even among the Nenutec products
+the size was decided by a number in the spec rather than the one in the name.
+
+### The fix, and why it cannot loosen anything
+
+The peeled names are tried in **step 1**, where the test is EXACT — a catalogue entry that *is* this
+candidate, ignoring punctuation and spacing. That can never select a looser product than the fuzzy
+pass would; it can only stop the fuzzy pass being reached on a line whose article the catalogue knows
+by name. Longest prefix first, so a product whose real name contains ` · ` still matches itself before
+any shortening of it, and a catalogue entry that really is the whole line still wins.
+
+### It was repricing, not just mislabelling
+
+The A/B, same seeded request, same screen, only `matchKey` swapped:
+
+```
+before   ZENITH UNITED ELECTRIC CORP.      ₱558 · ₱558 · ₱558     ← the circuit breaker's price
+after    IDEAL CONTROLS INCORPORATED       ₱28,400 · ₱30,894 · ₱31,894
+```
+
+Which is the failure #552 described and this is a fresh instance of: one eligible supplier is exactly
+the condition that auto-picks, and picking force-overwrites every line's unit price. A ₱91,188 PO was
+being written as ₱3,348.
+
 ## 2026-09-29 · 999 of 1,041, one press
 
 The marker shipped, and the owner's screenshot answered the question I hadn't asked: **999 of 1,041**
