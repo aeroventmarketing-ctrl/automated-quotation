@@ -133,6 +133,62 @@ run("bulk stock import", () => {
     expect(JSON.stringify(await snapshot())).toBe(JSON.stringify(before));
   });
 
+  /**
+   * The owner's file: two codes whose names were the wrong way round.
+   *
+   * Each row's rename was refused because of the other row, and the other row
+   * was in the same file doing exactly the reverse. Row-at-a-time against the
+   * database as it stands, a swap can never be performed — and the advice the
+   * refusal offered ("Merge them first") would have destroyed one of the two.
+   */
+  it("performs a straight swap of two items' names", async () => {
+    const res = await importStockItems(upload(
+      'name,sku\n' +
+      '"VENT CAP - ALPHAAIR - 150mmØ SS201",CAT00100\n' +
+      '"VENT CAP - ALPHAAIR - 100mmØ SS201",CAT00101\n',
+    ));
+    expect(res.errors).toEqual([]);
+    expect(res).toMatchObject({ created: 0, updated: 2 });
+    expect((await byName("VENT CAP - ALPHAAIR - 150mmØ SS201"))?.sku).toBe("CAT00100");
+    expect((await byName("VENT CAP - ALPHAAIR - 100mmØ SS201"))?.sku).toBe("CAT00101");
+    // Two items still, not one merged away, and their stock is intact.
+    const all = await prisma.stockItem.findMany({ where: { sku: { in: ["CAT00100", "CAT00101"] }, active: true } });
+    expect(all).toHaveLength(2);
+    expect(Number(all.find((i) => i.sku === "CAT00100")?.quantity)).toBe(3);
+  });
+
+  it("rotates a three-way cycle of names", async () => {
+    const res = await importStockItems(upload(
+      'name,sku\n' +
+      '"VENT CAP - ALPHAAIR - 150mmØ SS201",CAT00100\n' +
+      '"VENT CAP - ALPHAAIR - 200mmØ SS201",CAT00101\n' +
+      '"VENT CAP - ALPHAAIR - 100mmØ SS201",CAT00102\n',
+    ));
+    expect(res.errors).toEqual([]);
+    expect((await byName("VENT CAP - ALPHAAIR - 150mmØ SS201"))?.sku).toBe("CAT00100");
+    expect((await byName("VENT CAP - ALPHAAIR - 200mmØ SS201"))?.sku).toBe("CAT00101");
+    expect((await byName("VENT CAP - ALPHAAIR - 100mmØ SS201"))?.sku).toBe("CAT00102");
+  });
+
+  it("still refuses when the blocking item is NOT moving", async () => {
+    // CAT00300 "TAKEN NAME" is not in the file, so nothing vacates the name and
+    // the import would leave two live items answering to it.
+    const res = await importStockItems(upload('name,sku\n"TAKEN NAME",CAT00101\n'));
+    expect(res).toMatchObject({ updated: 0, created: 0 });
+    expect(res.errors[0]).toMatch(/CAT00300/);
+  });
+
+  it("still refuses when the file gives two codes the SAME name", async () => {
+    // Not a swap — a duplicate. Both rows claim one name, so afterwards two live
+    // items would answer to it and every name lookup becomes a guess.
+    const res = await importStockItems(upload(
+      'name,sku\n' +
+      '"VENT CAP - ALPHAAIR - 150mmØ SS201",CAT00100\n' +
+      '"VENT CAP - ALPHAAIR - 150mmØ SS201",CAT00102\n',
+    ));
+    expect(res.errors.length).toBeGreaterThan(0);
+  });
+
   it("still creates a genuinely new item, with a generated code", async () => {
     const res = await importStockItems(upload('name,unitCost\n"BRAND NEW WIDGET",7\n'));
     expect(res.errors).toEqual([]);

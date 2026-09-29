@@ -1,3 +1,42 @@
+## 2026-09-29 · Two item codes, the wrong way round
+
+The owner, re-importing a corrected inventory sheet — both rows refused:
+
+```
+Row 2 (“… FIBERGLASS CLOTH - PER METER”): Renaming Item Code "CAT00094"
+  (currently “… PER BOX”) … clashes with the existing item CAT00095
+Row 3 (“… FIBERGLASS CLOTH - PER BOX”):   Renaming Item Code "CAT00095"
+  (currently “… PER METER”) … clashes with the existing item CAT00094
+```
+
+Read the two together and they are one edit: a **swap**. Each row's rename was refused because of the
+other row, and the other row was in the same file doing exactly the reverse.
+
+The guard itself is right — two live items answering to one name makes every name lookup a guess. It
+was checking each row against the database *as it stands*, one row at a time, so it could not see that
+the item in the way was itself moving out of the way. Under that rule a swap is not merely awkward,
+it is unperformable. And the advice it offered — *"Merge them first"* — would have destroyed one of
+the two items the owner was trying to keep.
+
+### The fix is the file, read whole
+
+Before any row is applied, the import now reads the sheet once to learn what name each Item Code ends
+up with. A rename is then refused only when the blocking item is **not** itself being renamed by this
+file. Nothing else about the guard moved.
+
+Ordering needs no cleverness, because `name` is not unique in the database — only `(sku, location)` and
+`(barcode, location)` are. The two rows may cross over in file order; the pair is correct again by the
+last row. Which also means an N-way rotation works for free, and that is tested rather than assumed.
+
+### What is still refused
+
+Two codes given the **same** name in one file is not a swap, it is a duplicate, and it still fails —
+nothing vacates, so two live items would answer to one name afterwards. So does a rename onto a name
+held by an item the file never mentions.
+
+Tested against a real Postgres: the swap, a three-way rotation, both refusals, and the quantities left
+intact on both items — the merge the old message recommended is exactly what must not happen.
+
 ## 2026-09-29 · The half of #551 I decided not to fix
 
 The owner, on a PO built from an MRF for Nenutec VAVs: *"when creating PO in nenutec product, supplier
