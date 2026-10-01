@@ -12,6 +12,7 @@ import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
 import { setHideOrderProgress } from "@/lib/order-progress-visibility";
 import { setNotificationsEnabled } from "@/lib/notification-settings";
+import { ADMIN_EDITED_KEY } from "@/lib/ensure-templates";
 import { setDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { setTestMode } from "@/lib/test-mode";
 import { setNotificationBaseline } from "@/lib/notification-baseline";
@@ -452,20 +453,33 @@ const templateSchema = z.object({
 export async function upsertTemplate(input: z.infer<typeof templateSchema>) {
   await assertAdmin();
   const d = templateSchema.parse(input);
-  let config: object = {};
+  let config: Record<string, unknown> = {};
   if (d.configJson) {
     try {
-      config = JSON.parse(d.configJson);
+      config = JSON.parse(d.configJson) as Record<string, unknown>;
     } catch {
       throw new Error("Config must be valid JSON");
     }
   }
+  /**
+   * A human saved this template, so it is theirs from here on.
+   *
+   * `ensureBuiltinTemplates` runs on every render of the Templates page and
+   * four of the six built-ins force their `terms` back to the code-defined
+   * value — which undid this save between writing it and redrawing the page.
+   * The flag is what tells the seeding to leave the row alone; without it set
+   * here, nothing ever sets it. See `ADMIN_EDITED_KEY`.
+   */
+  const stored = { ...config, [ADMIN_EDITED_KEY]: true } as Prisma.InputJsonObject;
   await prisma.quotationTemplate.upsert({
     where: { layoutKey: d.layoutKey },
-    update: { name: d.name, config, active: d.active },
-    create: { name: d.name, layoutKey: d.layoutKey, config, active: d.active },
+    update: { name: d.name, config: stored, active: d.active },
+    create: { name: d.name, layoutKey: d.layoutKey, config: stored, active: d.active },
   });
   revalidatePath("/admin/templates");
+  // The quotation builder and the PDF read these too, so a terms change has to
+  // reach the pages that print them, not just the admin list.
+  revalidatePath("/quotations");
 }
 
 export async function deleteTemplate(id: string) {
