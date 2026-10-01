@@ -56,6 +56,39 @@ export function sortTemplatesByName<T extends { name: string }>(templates: T[]):
 export const AIR_TERMINALS_NOTE = "All units are made of high quality materials.";
 
 /**
+ * Stamped on a template's config by the admin Templates screen when a human
+ * saves it. While it is set, the seeding below leaves that template's terms and
+ * note alone.
+ *
+ * The owner: *"in Admin Templates tab, tried revising the templates — after
+ * revising I cannot save the revised version."* They could. The save wrote
+ * correctly, and then the page re-rendered — and `ensureBuiltinTemplates` runs
+ * on every render of that page. Four of the six templates carried
+ *
+ * ```js
+ * if (config.terms !== COMPANY.servicesTerms) { …overwrite config.terms… }
+ * ```
+ *
+ * so the edit was reverted between the save and the redraw. Reproduced against a
+ * real database: standard and kdk kept an admin edit, power_roof_ventilator,
+ * wind_driven_roof_vent, air_terminals and services all reverted.
+ *
+ * The sync itself was deliberate — *"these terms are managed in config, not
+ * admin"* — but the admin screen offers a Terms box for every template, so the
+ * screen was inviting an edit the next render would undo. A screen that cannot
+ * keep what it accepts is worse than one that never offered.
+ *
+ * So the rule is ownership, not a blanket on or off: a template nobody has
+ * edited still follows the code, and the first time a human saves one it becomes
+ * theirs. Removing the flag by hand in Advanced config hands it back.
+ */
+export const ADMIN_EDITED_KEY = "adminEdited";
+
+export function isAdminEdited(config: unknown): boolean {
+  return !!config && typeof config === "object" && (config as Record<string, unknown>)[ADMIN_EDITED_KEY] === true;
+}
+
+/**
  * The long Standard (Fans and Blowers) note. If it ever ended up on the KDK
  * template it is replaced with the short KDK note — but the Standard template
  * keeps it (the two templates have different notes by design).
@@ -86,6 +119,7 @@ export async function ensureKdkTemplate(): Promise<void> {
     return;
   }
   const config = (existing.config as Record<string, unknown>) ?? {};
+  if (isAdminEdited(config)) return; // …including a note the admin deliberately cleared
   const patch: Record<string, unknown> = { ...config };
   let changed = false;
   if (typeof config.terms !== "string" || !config.terms) {
@@ -130,6 +164,7 @@ export async function ensureAirTerminalsTemplate(): Promise<void> {
   // Keep the Air Terminals terms in sync with the code-defined terms so updates
   // here reach the live template (these terms are managed in config, not admin).
   const config = (existing.config as Record<string, unknown>) ?? {};
+  if (isAdminEdited(config)) return; // the admin owns this template's terms now
   if (config.terms !== COMPANY.airTerminalsTerms) {
     await prisma.quotationTemplate.update({
       where: { layoutKey: "air_terminals" },
@@ -197,6 +232,7 @@ export async function ensurePowerRoofVentilatorTemplate(): Promise<void> {
   // Keep the terms in sync with the code-defined terms so updates here reach the
   // live template (these terms are managed in config, not admin).
   const config = (existing.config as Record<string, unknown>) ?? {};
+  if (isAdminEdited(config)) return; // the admin owns this template's terms now
   if (config.terms !== COMPANY.powerRoofVentilatorTerms) {
     await prisma.quotationTemplate.update({
       where: { layoutKey: "power_roof_ventilator" },
@@ -228,6 +264,7 @@ export async function ensureServicesTemplate(): Promise<void> {
   // Keep the terms in sync with the code-defined terms so updates here reach the
   // live template (these terms are managed in config, not admin).
   const config = (existing.config as Record<string, unknown>) ?? {};
+  if (isAdminEdited(config)) return; // the admin owns this template's terms now
   if (config.terms !== COMPANY.servicesTerms) {
     await prisma.quotationTemplate.update({
       where: { layoutKey: "services" },
@@ -261,6 +298,7 @@ export async function ensureWindDrivenRoofVentTemplate(): Promise<void> {
   // Keep the terms in sync with the code-defined terms so updates here reach the
   // live template (these terms are managed in config, not admin).
   const config = (existing.config as Record<string, unknown>) ?? {};
+  if (isAdminEdited(config)) return; // the admin owns this template's terms now
   if (config.terms !== COMPANY.windDrivenRoofVentTerms) {
     await prisma.quotationTemplate.update({
       where: { layoutKey: "wind_driven_roof_vent" },

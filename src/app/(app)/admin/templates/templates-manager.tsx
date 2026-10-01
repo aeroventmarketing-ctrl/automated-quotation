@@ -102,6 +102,15 @@ export function TemplatesManager({ templates }: { templates: T[] }) {
               <Label>Default Terms &amp; Conditions (page 2) — one numbered clause per line</Label>
               <Textarea className="font-mono text-xs" rows={12} value={editing.terms ?? ""} onChange={(e) => setEditing({ ...editing, terms: e.target.value })}
                 placeholder={"1. Payment : 50% down payment…\n2. Production time : …\n3. Delivery : …"} />
+              {/* Saving claims the template (see ADMIN_EDITED_KEY). Worth one
+                  line, because the trade-off is real and otherwise invisible:
+                  before this, the built-in terms were re-applied on every render
+                  and an edit here vanished on the next page load. */}
+              <p className="text-xs text-muted-foreground">
+                Saving makes this template yours: built-in wording stops being re-applied to it, so
+                later changes shipped with the app won&apos;t reach it. To hand it back, delete the{" "}
+                <code className="font-mono">&quot;adminEdited&quot;</code> line from Advanced config below.
+              </p>
             </div>
             <div className="space-y-1 md:col-span-2">
               <Label>Advanced config (JSON) — accent color &amp; sections (accent, showSpecs, showSelectionNotes, budgetary, showAbcNote, currency)</Label>

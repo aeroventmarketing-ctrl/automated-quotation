@@ -1,3 +1,59 @@
+## 2026-10-01 · The save worked; the next render undid it
+
+The owner: *"in Admin Templates tab, tried revising the templates — after revising I cannot save the
+revised version of template."*
+
+They could save. `upsertTemplate` wrote the revision correctly every time. Then the page re-rendered —
+and `ensureBuiltinTemplates()` runs on **every render of that page**, where four of the six built-ins
+carried:
+
+```js
+// Keep the terms in sync with the code-defined terms so updates here reach the
+// live template (these terms are managed in config, not admin).
+if (config.terms !== COMPANY.servicesTerms) { …overwrite config.terms… }
+```
+
+So the edit was written and then reverted, in the gap between the save and the redraw. Reproduced
+against a real database before touching anything:
+
+```
+standard                 kept the admin's edit
+power_roof_ventilator    REVERTED to the code default
+wind_driven_roof_vent    REVERTED to the code default
+air_terminals            REVERTED to the code default
+kdk                      kept the admin's edit
+services                 REVERTED to the code default
+```
+
+### The contradiction, not the code
+
+The sync was deliberate and its comment says so: those terms were meant to be code-managed. But the
+admin screen offers a **Terms box for every template**, so the screen was inviting an edit the next
+render would throw away — silently, reporting success and showing no error. A screen that cannot keep
+what it accepts is worse than one that never offered.
+
+### Ownership, not a switch
+
+Turning the sync off would strand every template the moment the wording needs a code-side change.
+Leaving it on is what caused this. So the rule is ownership: a template nobody has edited keeps
+following the code, and **the first time a human saves one it becomes theirs**. `upsertTemplate`
+stamps `adminEdited: true`; the seeders return early on a stamped row. Deleting that line from
+Advanced config hands the template back, and the screen says so in one line under the Terms box —
+the trade-off is real and would otherwise be invisible.
+
+KDK's spec note is covered by the same flag. It only reset the note when the note was *empty*, which
+made "clear this note" impossible for exactly the same reason.
+
+### Checked both ways
+
+The tests run the seeding twice over an admin edit, for all six templates. Backing the fix out again
+fails precisely four of them — `power_roof_ventilator`, `wind_driven_roof_vent`, `air_terminals`,
+`services` — which is the list the reproduction produced. A test that passes with the bug still
+present would have been worth nothing here.
+
+Then the real loop in a browser: open Services, replace the Terms, Save, reload the page, reopen.
+`SURVIVED: true`.
+
 ## 2026-09-29 · The purchase orders already written
 
 #560 stopped the matcher handing a VAV line to an air circuit breaker. It cannot un-write the purchase
