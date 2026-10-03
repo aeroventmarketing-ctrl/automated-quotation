@@ -1,3 +1,54 @@
+## 2026-10-03 · The line records what it is, instead of being guessed at
+
+*"It will be better if products and inventory is referenced by sku."* — approved, so: the second half
+of #563, which that change deliberately left alone.
+
+A material request holds `description` and `remark` as separate fields and looks the code up off a
+clean name, which is why its own card shows `SKU CAT00199`. `mrfItemLine` then glues the two into
+`"<qty> <unit> · <description> (<remark>)"`, and from that point every consumer has to take the
+article back out of a string written for a person to read. #563 fixed one way that went wrong. The
+general problem is that it is a guess at all, and the thing being guessed decides the supplier and the
+price.
+
+### Recorded where it is known, not re-derived where it is not
+
+`PurchaseRequest.itemSkus` (migration 0059): a JSON array aligned **by index** with `items`. Written at
+all four places a purchase-request line is composed — department requisition, bought-in supplier
+requisition, MRF triage, and the incremental per-line path — from the stored `description`, before the
+remark is attached. An unmatched line stores `""` rather than being skipped, because a hole would
+shift every later code onto the wrong line.
+
+`catalogKeyFor` then resolves **by code first, by text second**, and the text half is permanent, not a
+migration step: a line typed by hand has no code, and neither does any request raised before 0059.
+Both still have to resolve. A code naming a product the catalogue no longer holds falls back too.
+
+### The guarantee that nearly got broken
+
+The first cut added `sku` to `POLine` *and* carried it through `coercePurchaseOrder`. A test caught
+it: **"has nowhere to keep an item code, so one cannot be smuggled onto it."** A purchase order is the
+SUPPLIER'S copy, and dropping unlisted keys is exactly what keeps our internal codes off it.
+
+So the code travels to the form, where it decides the supplier and the price, and is dropped from the
+document that is saved and printed. That is now written on the field itself, and pinned by its own
+test.
+
+### Proved on a line whose text lies
+
+Two requests, same description — one naming the 10" — and the 6" product belongs to a different
+supplier than the 10":
+
+```
+CARRIED (code CAT00199)   chip CAT00199   IDEAL CONTROLS INCORPORATED   ₱30,894
+NOCODE  (no code)         chip CAT00201   ZENITH UNITED ELECTRIC CORP.  ₱32,301
+```
+
+The first is the code overruling the text. The second is the old behaviour, still correct for history.
+
+Two false alarms on the way, both mine: a stale product cache (a seed written straight to the database
+fires no `revalidateTag`), and a probe whose ancestor-walk found the wrong card — the same bug as the
+A/B in #557. The server was right in both cases. Worth the habit of confirming the instrument before
+believing what it says about the code.
+
 ## 2026-10-03 · A remark in brackets, and the 6" VAV priced as a 10"
 
 The owner, on MRF #0406: *"In MRF there is an sku but in PO sku is not showing. I noticed that when

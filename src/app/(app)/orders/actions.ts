@@ -5,6 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { resolveItemSkus, skusForLines, buildCatalogueSkuIndex } from "@/lib/pr-item-skus";
+import type { SkuIndex } from "@/lib/item-sku";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
@@ -1317,11 +1319,16 @@ export async function createDepartmentRequisition(
   // a production requisition. Production requisitions always start pending.
   const hasDuctHardware = cleanItems.some((it) => isDuctHardwareStockName(it.description));
   const status = isOffice && !hasDuctHardware ? "APPROVED" : "PENDING_APPROVAL";
+  // Record what each line IS while the clean description is still in hand — see
+  // lib/pr-item-skus. Once `mrfItemLine` glues the remark on, purchasing can
+  // only guess at it.
+  const itemSkus = await resolveItemSkus(cleanItems);
   await prisma.purchaseRequest.create({
     data: {
       kind: "department",
       dept,
       items: cleanItems.map(mrfItemLine) as Prisma.InputJsonValue,
+      itemSkus: itemSkus as Prisma.InputJsonValue,
       note: note.trim() || null,
       createdById: user.id,
       createdByName: user.name,
@@ -1356,6 +1363,8 @@ async function autoRaiseBoughtInRequisition(
 ): Promise<void> {
   const boughtIn = orderBoughtInLines(items);
   if (boughtIn.length === 0) return;
+  // The same description the line is composed from, resolved before it is glued.
+  const itemSkus = await resolveItemSkus(boughtIn.map((b) => ({ description: [b.name, ...b.detail].join(" · ") })));
   const lines = boughtIn.map((b) => {
     // Carry the quotation's specification through to the requisition (and so to
     // the PO): a supplier can't ship the right isolator from "Spring Vibration
@@ -1387,6 +1396,7 @@ async function autoRaiseBoughtInRequisition(
         dept: OFFICE_DEPT_KEY,
         quotationId,
         items: lines as Prisma.InputJsonValue,
+        itemSkus: itemSkus as Prisma.InputJsonValue,
         note: `Bought-in items for order ${quoteNumber}`,
         createdById: user.id,
         createdByName: user.name,
@@ -1966,6 +1976,9 @@ export async function processMaterialRequest(
   const status: MaterialRequest["status"] =
     anyPurchase ? (anyStock ? "partial" : "purchasing") : "issued";
   const orderRef = quote.quoteNumber || "order";
+  // Resolved BEFORE the transaction opens: this reads the catalogue, and holding
+  // a write transaction open across an unrelated read is how pools run dry.
+  const purchaseSkus = await resolveItemSkus(purchaseItems);
 
   await prisma.$transaction(async (tx) => {
     for (const m of issueMatches) {
@@ -1998,6 +2011,7 @@ export async function processMaterialRequest(
           mrfId: mrf.id,
           dept: mrf.dept,
           items: purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue,
+          itemSkus: purchaseSkus as Prisma.InputJsonValue,
           note: mrf.note ?? null,
           createdById: user.id,
           createdByName: user.name,
@@ -2034,6 +2048,12 @@ async function finalizeMrfIfDone(
   wf: OrderWorkflow,
   newItems: MRFItem[],
   user: { id: string; name: string },
+  /**
+   * Built by the caller BEFORE its transaction opened. This runs inside one, and
+   * reading the catalogue from here would hold a write transaction open across
+   * an unrelated query.
+   */
+  skuIndex: SkuIndex,
 ): Promise<void> {
   const pendingRemain = newItems.some((it) => !it.disposition);
   const status: MaterialRequest["status"] = pendingRemain ? "partial" : mrfFinalStatus(newItems);
@@ -2052,6 +2072,9 @@ async function finalizeMrfIfDone(
   const purchaseItems = newItems.filter((it) => it.disposition === "purchase");
   if (purchaseItems.length > 0) {
     const itemLines = purchaseItems.map(mrfItemLine) as Prisma.InputJsonValue;
+    // Aligned with `itemLines`, and rewritten alongside it below — the two must
+    // move together or a later line would carry an earlier line's code.
+    const itemSkus = skusForLines(purchaseItems, skuIndex) as Prisma.InputJsonValue;
     const existing = await tx.purchaseRequest.findFirst({ where: { mrfId: mrf.id }, select: { id: true, status: true } });
     if (!existing) {
       await tx.purchaseRequest.create({
@@ -2060,6 +2083,7 @@ async function finalizeMrfIfDone(
           mrfId: mrf.id,
           dept: mrf.dept,
           items: itemLines,
+          itemSkus,
           note: mrf.note ?? null,
           createdById: user.id,
           createdByName: user.name,
@@ -2067,7 +2091,7 @@ async function finalizeMrfIfDone(
         },
       });
     } else if (existing.status === "PENDING_APPROVAL") {
-      await tx.purchaseRequest.update({ where: { id: existing.id }, data: { items: itemLines } });
+      await tx.purchaseRequest.update({ where: { id: existing.id }, data: { items: itemLines, itemSkus } });
     }
   }
 }
@@ -2107,6 +2131,8 @@ export async function issueMrfLineFromStock(
   if (target.disposition) throw new Error("This line has already been handled — refresh and try again.");
   const req = Number(target.qty || 0);
 
+  const skuIndex = await buildCatalogueSkuIndex();
+
   const result = await prisma.$transaction(async (tx) => {
     const item = await tx.stockItem.findUnique({ where: { id: stockItemId }, select: { id: true, quantity: true, name: true, unitCost: true, location: true } });
     if (!item) throw new Error("Stock item not found.");
@@ -2129,7 +2155,7 @@ export async function issueMrfLineFromStock(
     if (shortfall > 0) replacement.push({ ...target, qty: String(shortfall), disposition: "purchase", issuedQty: undefined });
     if (replacement.length === 0) replacement.push({ ...target, disposition: "purchase", issuedQty: undefined });
     const newItems = [...mrf.items.slice(0, lineIndex), ...replacement, ...mrf.items.slice(lineIndex + 1)];
-    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user);
+    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user, skuIndex);
     return { issued, toPurchase: shortfall };
   });
 
@@ -2152,9 +2178,10 @@ export async function sendMrfLineToPurchasing(quotationId: string, requestId: st
   if (!target) throw new Error("Line not found — refresh and try again.");
   if (target.disposition) throw new Error("This line has already been handled — refresh and try again.");
 
+  const skuIndex = await buildCatalogueSkuIndex();
   await prisma.$transaction(async (tx) => {
     const newItems = [...mrf.items.slice(0, lineIndex), { ...target, disposition: "purchase" as MRFLineDisposition, issuedQty: undefined }, ...mrf.items.slice(lineIndex + 1)];
-    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user);
+    await finalizeMrfIfDone(tx, quotationId, mrf, idx, cls, wf, newItems, user, skuIndex);
   });
 
   revalidatePath("/orders");

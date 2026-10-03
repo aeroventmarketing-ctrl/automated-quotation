@@ -214,9 +214,14 @@ export function matchKey(description: string, keys: string[]): string | undefine
 }
 
 /** The catalogue price for a line description + supplier (order-suffix tolerant). */
-export function catalogPriceFor(description: string, companyLower: string, catalog: CatalogPrices): number | undefined {
+export function catalogPriceFor(
+  description: string,
+  companyLower: string,
+  catalog: CatalogPrices,
+  opts?: { sku?: string; skuKeys?: CatalogSkuKeys },
+): number | undefined {
   if (!companyLower) return undefined;
-  const key = matchKey(description, Object.keys(catalog));
+  const key = catalogKeyFor({ description, sku: opts?.sku }, Object.keys(catalog), opts?.skuKeys);
   return key ? catalog[key]?.[companyLower] : undefined;
 }
 
@@ -234,8 +239,12 @@ export function catalogPriceFor(description: string, companyLower: string, catal
  * price, it is visible, and choosing a supplier immediately refines it to that
  * supplier's own price (see `withCatalogPrices`, which force-overwrites on pick).
  */
-export function catalogReferencePriceFor(description: string, catalog: CatalogPrices): number | undefined {
-  const key = matchKey(description, Object.keys(catalog));
+export function catalogReferencePriceFor(
+  description: string,
+  catalog: CatalogPrices,
+  opts?: { sku?: string; skuKeys?: CatalogSkuKeys },
+): number | undefined {
+  const key = catalogKeyFor({ description, sku: opts?.sku }, Object.keys(catalog), opts?.skuKeys);
   if (!key) return undefined;
   const entry = catalog[key] ?? {};
   const prices = [...new Set(Object.entries(entry).filter(([co, n]) => co !== REF_PRICE_KEY && n > 0).map(([, n]) => n))];
@@ -246,43 +255,91 @@ export function catalogReferencePriceFor(description: string, catalog: CatalogPr
 }
 
 /** The reference (lowest price / unit cost) figure for a line description, if any. */
-export function fallbackPriceFor(description: string, catalog: CatalogPrices): number | undefined {
-  const key = matchKey(description, Object.keys(catalog));
+export function fallbackPriceFor(
+  description: string,
+  catalog: CatalogPrices,
+  opts?: { sku?: string; skuKeys?: CatalogSkuKeys },
+): number | undefined {
+  const key = catalogKeyFor({ description, sku: opts?.sku }, Object.keys(catalog), opts?.skuKeys);
   const ref = key ? catalog[key]?.[REF_PRICE_KEY] : undefined;
   return ref && ref > 0 ? ref : undefined;
 }
 
 /** Seed each blank line's unit price with its unambiguous catalogue reference price. */
-export function withReferencePrices(lines: POLine[], catalog: CatalogPrices): POLine[] {
+export function withReferencePrices(lines: POLine[], catalog: CatalogPrices, skuKeys?: CatalogSkuKeys): POLine[] {
   return lines.map((l) => {
     if (l.unitPrice) return l;
-    const price = catalogReferencePriceFor(l.description, catalog);
+    const price = catalogReferencePriceFor(l.description, catalog, { sku: l.sku, skuKeys });
     return price ? { ...l, unitPrice: String(price) } : l;
   });
 }
 
 /** Fill each line's unit price from the catalogue for the chosen supplier (blanks only unless forced). */
-export function withCatalogPrices(lines: POLine[], company: string, catalog: CatalogPrices, force = false): POLine[] {
+export function withCatalogPrices(
+  lines: POLine[],
+  company: string,
+  catalog: CatalogPrices,
+  force = false,
+  skuKeys?: CatalogSkuKeys,
+): POLine[] {
   const co = company.trim().toLowerCase();
   if (!co) return lines;
   return lines.map((l) => {
     if (l.unitPrice && !force) return l;
-    const price = catalogPriceFor(l.description, co, catalog);
+    const price = catalogPriceFor(l.description, co, catalog, { sku: l.sku, skuKeys });
     if (price) return { ...l, unitPrice: String(price) };
     // The chosen supplier has no saved price — fill a blank line from the
     // reference price (lowest supplier price / inventory unit cost) instead. A
     // price the purchaser already typed is never overwritten by the fallback.
     if (!l.unitPrice) {
-      const ref = fallbackPriceFor(l.description, catalog);
+      const ref = fallbackPriceFor(l.description, catalog, { sku: l.sku, skuKeys });
       if (ref) return { ...l, unitPrice: String(ref) };
     }
     return l;
   });
 }
 
+/**
+ * Product name (lowercased, the key these catalogues use) for each catalogue
+ * code — so a line that KNOWS which product it is can say so instead of being
+ * matched.
+ *
+ * The owner: *"It will be better if products and inventory is referenced by
+ * sku."* Everything here hangs on identifying the product, and `matchKey` is a
+ * good guess over text composed for a human to read. A code recorded upstream,
+ * where the clean description still existed, is not a guess at all.
+ */
+export type CatalogSkuKeys = Record<string, string>; // SKU (upper) → productNameLower
+
+/**
+ * Which catalogue entry a line IS — **by code first, by text second**.
+ *
+ * The text path stays, and not as a temporary measure: a line typed by hand
+ * carries no code, and neither does any purchase request raised before the code
+ * was carried. Both still have to resolve.
+ */
+export function catalogKeyFor(
+  line: { description: string; sku?: string },
+  keys: string[],
+  skuKeys?: CatalogSkuKeys,
+): string | undefined {
+  const sku = (line.sku ?? "").trim().toUpperCase();
+  if (sku && skuKeys) {
+    const known = skuKeys[sku];
+    // Only when the catalogue still holds it — a code for a product since
+    // renamed or removed falls back rather than resolving to nothing.
+    if (known && keys.includes(known)) return known;
+  }
+  return matchKey(line.description, keys);
+}
+
 /** The suppliers that carry a line's product (order-suffix tolerant). */
-export function suppliersForDescription(description: string, catalog: CatalogSuppliers): CatalogSupplierRef[] {
-  const key = matchKey(description, Object.keys(catalog));
+export function suppliersForDescription(
+  description: string,
+  catalog: CatalogSuppliers,
+  opts?: { sku?: string; skuKeys?: CatalogSkuKeys },
+): CatalogSupplierRef[] {
+  const key = catalogKeyFor({ description, sku: opts?.sku }, Object.keys(catalog), opts?.skuKeys);
   return key ? catalog[key] ?? [] : [];
 }
 
@@ -295,11 +352,15 @@ export function suppliersForDescription(description: string, catalog: CatalogSup
  * `eligibleSuppliers` and `unregisteredCarriers` rather than each asking the
  * catalogue again.
  */
-export function carriersForLines(lines: POLine[], catalog: CatalogSuppliers): CatalogSupplierRef[] {
+export function carriersForLines(
+  lines: POLine[],
+  catalog: CatalogSuppliers,
+  skuKeys?: CatalogSkuKeys,
+): CatalogSupplierRef[] {
   const out: CatalogSupplierRef[] = [];
   const seen = new Set<string>();
   for (const l of lines) {
-    for (const ref of suppliersForDescription(l.description, catalog)) {
+    for (const ref of suppliersForDescription(l.description, catalog, { sku: l.sku, skuKeys })) {
       const key = carrierKey(ref);
       if (!key || seen.has(key)) continue;
       seen.add(key);

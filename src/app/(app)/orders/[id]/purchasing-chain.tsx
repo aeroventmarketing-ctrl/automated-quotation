@@ -26,7 +26,7 @@ import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripTo
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import type { CatalogSuppliers, CatalogPrices } from "@/lib/po-catalog";
+import type { CatalogSuppliers, CatalogPrices, CatalogSkuKeys } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
@@ -45,6 +45,8 @@ interface PRRow {
   deptLabel: string;
   mrfNo?: string | null;
   items: string[];
+  /** Catalogue code per line, aligned by index — see PurchaseRequest.itemSkus. */
+  itemSkus?: string[];
   note?: string | null;
   status: string;
   statusLabel: string;
@@ -132,6 +134,7 @@ export function PurchasingChain({
   paymentTerms,
   canManagePO,
   catalogSuppliers = {},
+  catalogSkuKeys = {},
   catalogPrices = {},
   scanProducts = [],
   readOnly = false,
@@ -165,6 +168,7 @@ export function PurchasingChain({
   canManagePO: boolean;
   admin?: boolean;
   catalogSuppliers?: CatalogSuppliers;
+  catalogSkuKeys?: CatalogSkuKeys;
   catalogPrices?: CatalogPrices;
   /** Catalogue for the PO editor's "Scan product barcode" quick-add. */
   scanProducts?: ScanProduct[];
@@ -379,6 +383,13 @@ export function PurchasingChain({
                 // is looked up by name — and it stays a separate element rather
                 // than joining the description, which is what the supplier's
                 // copy prints.
+                /**
+                 * The code recorded when this line was composed, where the clean
+                 * description still existed. `skuFor` stays as the fallback for
+                 * requests raised before that was carried (and for the issued-
+                 * from-stock lines, whose text the warehouse writes here).
+                 */
+                const carried = (r.itemSkus?.[i] ?? "").trim();
                 const issued = parseIssuedFromStockLine(it);
                 if (issued) {
                   return (
@@ -387,7 +398,7 @@ export function PurchasingChain({
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
-                      <ItemSku code={skuFor(issued.desc, skuIndex)} />
+                      <ItemSku code={carried || skuFor(issued.desc, skuIndex)} />
                     </li>
                   );
                 }
@@ -397,11 +408,11 @@ export function PurchasingChain({
                     <li key={i} className="marker:text-amber-600">
                       {line}
                       <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
-                      <ItemSku code={skuFor(poLineFromPRItem(line).description, skuIndex)} />
+                      <ItemSku code={carried || skuFor(poLineFromPRItem(line).description, skuIndex)} />
                     </li>
                   );
                 }
-                return <li key={i}>{it}<ItemSku code={skuFor(poLineFromPRItem(it).description, skuIndex)} /></li>;
+                return <li key={i}>{it}<ItemSku code={carried || skuFor(poLineFromPRItem(it).description, skuIndex)} /></li>;
               })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
@@ -570,6 +581,7 @@ export function PurchasingChain({
                   paymentTerms={paymentTerms}
                   canManageTerms={canManagePO}
                   catalogSuppliers={catalogSuppliers}
+                  catalogSkuKeys={catalogSkuKeys}
                   catalogPrices={catalogPrices}
                   scanProducts={scanProducts}
                   onDone={() => setPoEditId(null)}

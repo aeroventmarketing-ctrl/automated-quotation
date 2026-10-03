@@ -827,6 +827,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     // PO's default lines are built from these same strings — so this is what puts
     // "Foot Mounted · Rated capacity 80 kg" on both the card and the supplier PO.
     const prItems = withSpecDetail(Array.isArray(pr.items) ? (pr.items as string[]) : [], boughtInProductLines);
+    // Aligned by index with `items` — see PurchaseRequest.itemSkus.
+    const prSkus = Array.isArray(pr.itemSkus) ? (pr.itemSkus as unknown[]).map((v) => String(v ?? "")) : [];
     const trail = buildPurchaseTrail(pr);
     const prIsDept = isDeptRequisition(pr);
     const actions = purchaseStepsFrom(status, prIsDept, isPoApproved(pr.chainLog)).map((step) => {
@@ -844,6 +846,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       deptLabel: deptLabel(pr.dept as typeof PRODUCTION_DEPTS[number]["key"]),
       mrfNo: pr.mrfId ? mrfNoById.get(pr.mrfId) ?? null : null,
       items: prItems,
+      itemSkus: prSkus,
       note: pr.note,
       status,
       statusLabel: PR_STATUS_LABEL[status],
@@ -851,7 +854,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       trail,
       actions,
       po: coercePurchaseOrder(pr.po),
-      poDefaultLines: poLinesFromPRItems(prItems),
+      poDefaultLines: poLinesFromPRItems(prItems, prSkus),
       canManagePO,
       isDept: isDeptRequisition(pr),
       returns: buildReturnViews(pr),

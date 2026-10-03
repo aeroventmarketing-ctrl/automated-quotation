@@ -1,0 +1,22 @@
+-- The catalogue code of each purchase-request line, carried rather than re-read.
+--
+-- The owner: "In MRF there is an sku but in PO sku is not showing… It will be
+-- better if products and inventory is referenced by sku."
+--
+-- A material request stores `description` and `remark` as separate fields and
+-- resolves the code off the description, which is why the MRF card shows it.
+-- Purchasing was handed one glued string — `mrfItemLine` writes
+-- "<qty> <unit> · <description> (<remark>)" — and had to take the article back
+-- out of it with a text matcher, which is a guess however good it gets. #563
+-- fixed one way that guess failed (a remark carrying brackets); this removes the
+-- need to guess at all, by recording the answer at the only point where it is
+-- known for certain: the moment the line is composed.
+--
+-- Shape: a JSON array of strings, aligned BY INDEX with `items`, where an entry
+-- is the catalogue code or "" when the line matched no catalogue item. Null for
+-- every row written before this column existed — those still fall back to the
+-- text matcher, so no history is lost and nothing needs backfilling.
+--
+-- Adds a column, creates no table, so no RLS block is needed — PurchaseRequest
+-- already has row level security from 0038_enable_rls.
+ALTER TABLE "PurchaseRequest" ADD COLUMN IF NOT EXISTS "itemSkus" JSONB;

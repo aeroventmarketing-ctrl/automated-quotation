@@ -364,6 +364,11 @@ model PurchaseRequest {
   mrfId            String? // the JSON material-request id it was escalated from
   dept             String? // production department key (null for replenishment)
   items            Json                  @default("[]") // ["GI sheet 24ga x 4", ...]
+  /// Catalogue code per line, aligned BY INDEX with `items` — recorded when the
+  /// line is composed, where the clean description is still available, so
+  /// purchasing never has to read the product back out of display text. Null on
+  /// rows written before 0059; those fall back to the text matcher.
+  itemSkus         Json?
   note             String?
   status           PurchaseRequestStatus @default(PENDING_APPROVAL)
   // Sign-off log for the extended chain steps (sign / release cash / hand to

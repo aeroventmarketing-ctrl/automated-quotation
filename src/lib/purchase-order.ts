@@ -32,6 +32,26 @@ export interface POLine {
   qty: string;
   unit: string;
   unitPrice: string;
+  /**
+   * The catalogue code of the product this line IS — recorded upstream, where
+   * the clean description was still available, rather than read back out of the
+   * description here.
+   *
+   * The owner: *"It will be better if products and inventory is referenced by
+   * sku."* Everything the PO form decides — which suppliers carry these
+   * products, what each line costs — hangs on identifying the product, and that
+   * was a text match against a string composed for a human to read.
+   *
+   * **It travels to the form; it is never saved onto the PO.**
+   * `coercePurchaseOrder` rebuilds each line field by field and does not carry
+   * this one, on purpose: a purchase order is the SUPPLIER'S copy and our
+   * internal item codes have no business on it. That guarantee is pinned by a
+   * test ("has nowhere to keep an item code, so one cannot be smuggled onto
+   * it"), and this field must not break it. So the code is present on the lines
+   * the form opens with — where it decides the supplier and the price — and gone
+   * from the document that is saved and printed.
+   */
+  sku?: string;
   /** Present only when the price was deliberately taken off the catalogue. */
   priceOverride?: POPriceOverride;
 }
@@ -118,6 +138,9 @@ export function coercePurchaseOrder(value: unknown): PurchaseOrder | null {
           qty: String(r.qty ?? ""),
           unit: String(r.unit ?? ""),
           unitPrice: String(r.unitPrice ?? ""),
+          // `sku` is deliberately NOT carried here. See POLine.sku: the saved PO
+          // is the supplier's copy, and dropping unlisted keys is exactly what
+          // keeps our internal item codes out of it.
           // Only a reasoned override survives the round trip; a half-written one
           // is dropped rather than kept as an unexplained flag.
           ...(ov && String(ov.reason ?? "").trim()
@@ -230,10 +253,17 @@ export function toPurchaseLine(item: string): string {
  * (informational only) and strip the "to purchase" marker off the rest so the
  * purchaser sees a clean "qty unit · desc" line.
  */
-export function poLinesFromPRItems(items: string[]): POLine[] {
+export function poLinesFromPRItems(items: string[], skus?: readonly string[] | null): POLine[] {
+  // Aligned BY INDEX with `items`, so the codes must be paired BEFORE the
+  // issued-from-stock lines are filtered out — those do not become PO lines, and
+  // dropping them first would shift every code onto the wrong line.
   return (Array.isArray(items) ? items : [])
-    .filter((s) => !isIssuedFromStockLine(s))
-    .map((s) => poLineFromPRItem(stripToPurchasePrefix(s)));
+    .map((s, i) => ({ s, sku: (skus?.[i] ?? "").trim() }))
+    .filter(({ s }) => !isIssuedFromStockLine(s))
+    .map(({ s, sku }) => {
+      const line = poLineFromPRItem(stripToPurchasePrefix(s));
+      return sku ? { ...line, sku } : line;
+    });
 }
 
 /**
