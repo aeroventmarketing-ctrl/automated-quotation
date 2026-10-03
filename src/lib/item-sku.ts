@@ -78,8 +78,49 @@ export function buildSkuIndex(sources: {
   return index;
 }
 
-/** A trailing `(…)` group — one level, anchored at the end. */
-const TRAILING_PARENTHETICAL = /\s*\([^()]*\)\s*$/;
+/**
+ * Strip one trailing `(…)` group, **counting brackets** rather than forbidding
+ * them.
+ *
+ * This used to be `/\s*\([^()]*\)\s*$/`, and `[^()]*` is the whole bug: a remark
+ * that itself contains brackets could not be peeled at all. The owner, on MRF
+ * #0406:
+ *
+ * > `1 unit · NENUTEC VARIABLE AIR VOLUME 6" DIAMETER (Variable Air Volume ·
+ * > Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in) ·
+ * > Airflow Range: 306 – 2294 CMH)`
+ *
+ * The remark carries `(10 in)`, so the regex could not reach back past it to the
+ * opening bracket, nothing was peeled, and the article never came free of its
+ * remark. *"In MRF there is an sku but in PO sku is not showing. I noticed that
+ * when remarks is added in PO, sku is dropped."* — and a unit of measure in
+ * brackets is about as ordinary as a remark gets.
+ *
+ * It costs more than a chip. The same candidates feed `matchKey`, which decides
+ * which product a PO line IS, and from that its supplier and its unit price.
+ *
+ * Returns the string with the group removed, or null when there is no balanced
+ * trailing group (or nothing would be left in front of it).
+ */
+function peelTrailingGroup(s: string): string | null {
+  const text = s.trimEnd();
+  if (!text.endsWith(")")) return null;
+  let depth = 0;
+  for (let i = text.length - 1; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === ")") depth++;
+    else if (ch === "(") {
+      depth--;
+      if (depth === 0) {
+        const head = text.slice(0, i).trim();
+        // A line that is ENTIRELY a bracketed group has no article in front of
+        // it, so peeling would leave nothing to look up.
+        return head ? head : null;
+      }
+    }
+  }
+  return null; // unbalanced — leave it alone
+}
 
 /** How many trailing groups to peel before giving up. Two is already generous. */
 const MAX_PEEL = 2;
@@ -108,7 +149,7 @@ export function itemNameCandidates(description: string | null | undefined): stri
   const out = [first];
   let s = first;
   for (let i = 0; i < MAX_PEEL; i++) {
-    const next = s.replace(TRAILING_PARENTHETICAL, "").trim();
+    const next = peelTrailingGroup(s);
     if (!next || next === s) break;
     out.push(next);
     s = next;

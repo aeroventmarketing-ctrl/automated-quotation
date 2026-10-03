@@ -1,3 +1,55 @@
+## 2026-10-03 · A remark in brackets, and the 6" VAV priced as a 10"
+
+The owner, on MRF #0406: *"In MRF there is an sku but in PO sku is not showing. I noticed that when
+remarks is added in PO, sku is dropped. It will be better if products and inventory is referenced by
+sku."*
+
+The MRF stores `description` and `remark` as separate fields and resolves the SKU off the description,
+which is why its own card shows `SKU CAT00199`. Purchasing gets one glued string — `mrfItemLine`
+writes `"<qty> <unit> · <description> (<remark>)"` — and has to take the article back out of it. The
+peel was
+
+```js
+const TRAILING_PARENTHETICAL = /\s*\([^()]*\)\s*$/;
+```
+
+and `[^()]*` is the whole bug: a remark that itself contains brackets cannot be peeled at all. This
+remark carries `Duct Diameter: 250 mm (10 in)`, so the regex could never reach back past `(10 in)` to
+the opening bracket. A unit of measure in brackets is about as ordinary as a remark gets.
+
+### It was costing more than a chip
+
+The same candidates feed `matchKey`, which decides which product a line IS, and from that its supplier
+and its unit price. With the remark still glued on, the line's model-code set picks up every number in
+it — including that `10`. The 6" product's code is `6`, the 10" product's is `10`, and both are now
+present, so the two tie and the first key wins. Rendered on the owner's three lines, same screen, only
+the peel swapped:
+
+```
+before   SKU chips: (none)              prices  32301 · 28400 · 32301
+after    CAT00199 CAT00198 CAT00201     prices  30894 · 28400 · 32301
+```
+
+The 6" VAV was being bought at the 10" VAV's price. The supplier happened to survive here only because
+all three products share one; with a decoy from another supplier it is #560 again.
+
+### The fix
+
+`peelTrailingGroup` counts brackets backwards from the end instead of forbidding them, so a balanced
+trailing group comes off whole. An unbalanced tail, or a line that is nothing but a bracketed group, is
+left alone — peeling those would throw away the only text there is. Exact names are still tried first,
+so `FLEX DUCT (INSULATED (R6))` keeps its own code rather than being peeled into another item's.
+
+Backing the old regex out again fails five of the new tests, which is the only reason to trust them.
+
+### What this does NOT do
+
+The owner's second sentence is the bigger one, and it is right: this chain still identifies a product
+by **re-reading text** that was composed for a human. The MRF knew the SKU and threw it away at the
+join. Carrying it instead means changing what a purchase-request item IS — through MRF triage, the
+purchase request, and the PO — which is Phase 3 and Phase 4, so it needs the owner's approval before
+anyone starts. Asked, not assumed.
+
 ## 2026-10-01 · The save worked; the next render undid it
 
 The owner: *"in Admin Templates tab, tried revising the templates — after revising I cannot save the

@@ -260,3 +260,55 @@ describe("skuNameCandidates", () => {
     expect(skuFor("PUMP · INLINE · 2HP", idx)).toBe("PRD1");
   });
 });
+
+/**
+ * A remark that itself contains brackets.
+ *
+ * The owner, on MRF #0406: *"In MRF there is an sku but in PO sku is not
+ * showing. I noticed that when remarks is added in PO, sku is dropped."* The
+ * remark carries a unit of measure in brackets — `Duct Diameter: 250 mm
+ * (10 in)` — and the old peel was `\([^()]*\)$`, which forbids exactly that, so
+ * the article never came free of its remark.
+ */
+describe("a remark with brackets inside it", () => {
+  const CATALOGUE = buildSkuIndex({
+    products: [
+      { name: 'NENUTEC VARIABLE AIR VOLUME 6" DIAMETER', sku: "CAT00199" },
+      { name: 'NENUTEC VARIABLE AIR VOLUME 4" DIAMETER', sku: "CAT00198" },
+      { name: 'NENUTEC VARIABLE AIR VOLUME 10" DIAMETER', sku: "CAT00201" },
+      // A product whose own name ends in a bracketed group that contains one.
+      { name: "FLEX DUCT (INSULATED (R6))", sku: "PRD10601" },
+    ],
+  });
+  const spec = (mm: number, inch: number, from: number, to: number) =>
+    `Variable Air Volume · Complete with VAV Actuator & Thermostat · Duct Diameter: ${mm} mm (${inch} in) · Airflow Range: ${from} – ${to} CMH`;
+
+  it.each([
+    ['NENUTEC VARIABLE AIR VOLUME 6" DIAMETER', spec(250, 10, 306, 2294), "CAT00199"],
+    ['NENUTEC VARIABLE AIR VOLUME 4" DIAMETER', spec(100, 4, 44, 382), "CAT00198"],
+    ['NENUTEC VARIABLE AIR VOLUME 10" DIAMETER', spec(250, 10, 306, 2294), "CAT00201"],
+  ])("finds %s behind its remark", (article, remark, sku) => {
+    expect(skuFor(`${article} (${remark})`, CATALOGUE)).toBe(sku);
+  });
+
+  it("does not let a bracketed size in the remark pick a different size", () => {
+    // The 6" line's remark says "(10 in)". The article is what decides.
+    expect(skuFor(`NENUTEC VARIABLE AIR VOLUME 6" DIAMETER (${spec(250, 10, 306, 2294)})`, CATALOGUE)).toBe("CAT00199");
+  });
+
+  it("still prefers a product whose real name ends in brackets", () => {
+    // Peeling must never beat an exact name, however nested that name's own
+    // brackets are.
+    expect(skuFor("FLEX DUCT (INSULATED (R6))", CATALOGUE)).toBe("PRD10601");
+  });
+
+  it("peels the bracketed group whole, not just its tail", () => {
+    expect(itemNameCandidates("ITEM NAME (a (b) c)")).toEqual(["ITEM NAME (a (b) c)", "ITEM NAME"]);
+  });
+
+  it("leaves an unbalanced or standalone group alone", () => {
+    // Nothing to peel back to, so peeling would lose the only text there is.
+    expect(itemNameCandidates("ITEM NAME (unclosed")).toEqual(["ITEM NAME (unclosed"]);
+    expect(itemNameCandidates("(just a group)")).toEqual(["(just a group)"]);
+  });
+});
