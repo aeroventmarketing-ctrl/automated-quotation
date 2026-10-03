@@ -15,7 +15,7 @@ import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
 import type { PurchaseChainRow } from "@/lib/purchase-chain-row";
 import { advancePurchaseRequest, deletePurchaseRequests } from "../orders/actions";
-import type { CatalogPrices, CatalogSuppliers } from "@/lib/po-catalog";
+import type { CatalogPrices, CatalogSuppliers, CatalogSkuKeys } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { ShowAllCompleted } from "@/components/show-all-completed";
@@ -99,6 +99,7 @@ export function PurchasingWorkspace({
   poDefaultRemarks,
   catalogPrices,
   catalogSuppliers,
+  catalogSkuKeys = {},
   scanProducts,
   admin = false,
   deptRows = [],
@@ -129,6 +130,7 @@ export function PurchasingWorkspace({
   poDefaultRemarks: string;
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
+  catalogSkuKeys?: CatalogSkuKeys;
   scanProducts: ScanProduct[];
   admin?: boolean;
   /** Standalone department requisitions — filtered by the same tab. */
@@ -453,7 +455,7 @@ export function PurchasingWorkspace({
           canManagePO={canManagePO}
           poDefaultRemarks={poDefaultRemarks}
           catalogPrices={catalogPrices}
-          catalogSuppliers={catalogSuppliers}
+          catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys}
           scanProducts={scanProducts}
           admin={admin}
           showAmounts={showAmounts}
@@ -519,7 +521,7 @@ export function PurchasingWorkspace({
                       paymentTerms={paymentTerms}
                       canManagePO={canManagePO}
                       admin={admin}
-                      catalogSuppliers={catalogSuppliers}
+                      catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys}
                       catalogPrices={catalogPrices}
                       scanProducts={scanProducts}
                       hideRequisitionApproval
@@ -568,7 +570,7 @@ export function PurchasingWorkspace({
                       todayYMD={todayYMD}
                   requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
-                  catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                  catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                   showAmounts={showAmounts}
                   showSupplier={showSupplier}
                   showStockCheck={canCheckStock}
@@ -603,7 +605,7 @@ export function PurchasingWorkspace({
                       todayYMD={todayYMD}
                   requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                   suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
-                  catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                  catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                   showAmounts={showAmounts}
                   showSupplier={showSupplier}
                   showStockCheck={canCheckStock}
@@ -647,7 +649,7 @@ export function PurchasingWorkspace({
                       todayYMD={todayYMD}
                     requests={shown} stockItems={stockItems} orderId="" poDefaultRemarks={poDefaultRemarks}
                     suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={admin}
-                    catalogSuppliers={catalogSuppliers} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
+                    catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} catalogPrices={catalogPrices} scanProducts={scanProducts} poRoute="purchasing"
                     showAmounts={showAmounts}
                     showSupplier={showSupplier}
                     showStockCheck={canCheckStock}

@@ -12,7 +12,7 @@ import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/p
 type EditLine = POLine & { priceReason?: string };
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import { carriersForLines, eligibleSuppliers, unregisteredCarriers, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { carriersForLines, eligibleSuppliers, unregisteredCarriers, catalogPriceFor, catalogReferencePriceFor, withCatalogPrices, withReferencePrices, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
 import { savePurchaseOrder, addPaymentTerm } from "../actions";
@@ -46,6 +46,7 @@ export function PurchaseOrderPanel({
   paymentTerms,
   canManageTerms,
   catalogSuppliers = {},
+  catalogSkuKeys = {},
   catalogPrices = {},
   scanProducts = [],
   onDone,
@@ -59,6 +60,7 @@ export function PurchaseOrderPanel({
   paymentTerms: PaymentTerm[];
   canManageTerms: boolean;
   catalogSuppliers?: CatalogSuppliers;
+  catalogSkuKeys?: CatalogSkuKeys;
   catalogPrices?: CatalogPrices;
   scanProducts?: ScanProduct[];
   onDone: () => void;
@@ -81,7 +83,7 @@ export function PurchaseOrderPanel({
     // Auto-fill the PO remarks from the supplier's saved remark (e.g. terms).
     if (s.remarks?.trim()) setRemarks(s.remarks.trim());
     setSupplierOpen(false);
-    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
+    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true, catalogSkuKeys));
     setUnlocked(new Set());
   }
   // Lines the purchaser has deliberately unlocked to type a different price.
@@ -95,14 +97,14 @@ export function PurchaseOrderPanel({
     const base = po?.lines?.length ? po.lines : defaultLines.length ? defaultLines : [{ description: "", qty: "", unit: "", unitPrice: "" }];
     // For a new PO, seed unambiguous catalogue prices so a price shows before a
     // supplier is picked; picking a supplier then refines it to their price.
-    return po ? base.map((l) => ({ ...l, priceReason: l.priceOverride?.reason })) : withReferencePrices(base, catalogPrices);
+    return po ? base.map((l) => ({ ...l, priceReason: l.priceOverride?.reason })) : withReferencePrices(base, catalogPrices, catalogSkuKeys);
   });
 
   // Only offer suppliers that carry the products on the PO lines (from the
   // catalogue); fall back to all suppliers when none of the products are catalogued.
   // Matched by supplier ID first, by company name second — see `sameSupplier`.
   // One catalogue scan, three answers: this renders on every keystroke below.
-  const carriers = carriersForLines(lines, catalogSuppliers);
+  const carriers = carriersForLines(lines, catalogSuppliers, catalogSkuKeys);
   const filtered = carriers.length > 0;
   const eligible = eligibleSuppliers(carriers, suppliers);
   /**
@@ -142,7 +144,7 @@ export function PurchaseOrderPanel({
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
-  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
+  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices, { sku: l.sku, skuKeys: catalogSkuKeys }));
 
   /**
    * The catalogue's price for a line — the chosen supplier's if they list one,
@@ -150,11 +152,12 @@ export function PurchaseOrderPanel({
    * unit cost). Products and Inventory carry the same price, so either source
    * answers the same question.
    */
-  const catalogueListed = (description: string): number | null => {
+  const catalogueListed = (description: string, sku?: string): number | null => {
     if (!description.trim()) return null;
     const co = company.trim().toLowerCase();
-    return (co ? catalogPriceFor(description, co, catalogPrices) : undefined)
-      ?? catalogReferencePriceFor(description, catalogPrices)
+    const opts = { sku, skuKeys: catalogSkuKeys };
+    return (co ? catalogPriceFor(description, co, catalogPrices, opts) : undefined)
+      ?? catalogReferencePriceFor(description, catalogPrices, opts)
       ?? null;
   };
 
@@ -379,7 +382,7 @@ export function PurchaseOrderPanel({
                 <td className="py-1 px-1"><Input className="h-8" value={l.unit} onChange={(e) => setLine(i, "unit", e.target.value)} /></td>
                 <td className="py-1 px-1">
                   {(() => {
-                    const listed = catalogueListed(l.description);
+                    const listed = catalogueListed(l.description, l.sku);
                     // No catalogue price for this product — nothing to hold the
                     // line to, so it stays an ordinary box.
                     const locked = listed != null && !unlocked.has(i);
@@ -445,7 +448,7 @@ export function PurchaseOrderPanel({
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addRow}>+ Add line</Button>
         {canFillPrices && (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices))}>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices, false, catalogSkuKeys))}>
             Fill prices from {company}
           </Button>
         )}

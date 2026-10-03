@@ -22,7 +22,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
 import type { CashPayment } from "@/lib/cash-payment";
-import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers } from "@/lib/po-catalog";
+import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -116,6 +116,7 @@ export function CombinedPurchasing({
   poDefaultRemarks,
   catalogPrices = {},
   catalogSuppliers = {},
+  catalogSkuKeys = {},
   scanProducts = [],
   admin = false,
   showAmounts = true,
@@ -132,6 +133,7 @@ export function CombinedPurchasing({
   poDefaultRemarks: string;
   catalogPrices?: CatalogPrices;
   catalogSuppliers?: CatalogSuppliers;
+  catalogSkuKeys?: CatalogSkuKeys;
   scanProducts?: ScanProduct[];
   admin?: boolean;
   showAmounts?: boolean;
@@ -188,7 +190,7 @@ export function CombinedPurchasing({
       {/* Existing combined POs */}
       {batches.map((b) => (
         <div key={b.anchorId} id={`req-${b.anchorId}`} className={`scroll-mt-24 rounded-lg ${highlightId === b.anchorId ? "ring-2 ring-primary ring-offset-2" : ""}`}>
-          <BatchCardView batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+          <BatchCardView batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
         </div>
       ))}
 
@@ -263,6 +265,7 @@ export function CombinedPurchasing({
               poDefaultRemarks={poDefaultRemarks}
               catalogPrices={catalogPrices}
               catalogSuppliers={catalogSuppliers}
+              catalogSkuKeys={catalogSkuKeys}
               scanProducts={scanProducts}
               onSubmit={(input) => createCombinedPO(buildItems.map((it) => it.id), input)}
               onCancel={stopBuilding}
@@ -275,7 +278,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, scanProducts, admin = false, showAmounts = true, showSupplier = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
   /** Name → item code, for the SKU beside each PO line ON SCREEN. The supplier's
    *  copy is built from `line.description` alone and never sees it. */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
@@ -331,6 +334,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           poDefaultRemarks={poDefaultRemarks}
           catalogPrices={catalogPrices}
           catalogSuppliers={catalogSuppliers}
+          catalogSkuKeys={catalogSkuKeys}
           scanProducts={scanProducts}
           onSubmit={(input) => updateCombinedPO(batch.anchorId, input)}
           onCancel={() => setEditing(false)}
@@ -522,6 +526,7 @@ function CombineForm({
   poDefaultRemarks,
   catalogPrices,
   catalogSuppliers,
+  catalogSkuKeys = {},
   scanProducts = [],
   onSubmit,
   onCancel,
@@ -542,6 +547,7 @@ function CombineForm({
   poDefaultRemarks: string;
   catalogPrices: CatalogPrices;
   catalogSuppliers: CatalogSuppliers;
+  catalogSkuKeys?: CatalogSkuKeys;
   scanProducts?: ScanProduct[];
   onSubmit: (input: { supplier: { company: string; attention: string; address: string }; date: string; lines: POLine[]; ewtPct: number; ewtMode: EwtMode; ewtAmount: number; remarks: string }) => Promise<void>;
   onCancel: () => void;
@@ -554,7 +560,7 @@ function CombineForm({
   const [supplierOpen, setSupplierOpen] = useState(false);
   const [date, setDate] = useState(todayInput());
   // Pre-fill line prices from the catalogue for the chosen supplier.
-  const seededLines = withCatalogPrices(initialLines.length ? initialLines : [{ description: "", qty: "", unit: "", unitPrice: "" }], presetCompany, catalogPrices);
+  const seededLines = withCatalogPrices(initialLines.length ? initialLines : [{ description: "", qty: "", unit: "", unitPrice: "" }], presetCompany, catalogPrices, false, catalogSkuKeys);
   const [lines, setLines] = useState<POLine[]>(seededLines);
   // EWT default: an existing PO uses its stored % ; a fresh PO follows the preset
   // supplier's EWT-capable flag (falling back to "with EWT").
@@ -570,7 +576,7 @@ function CombineForm({
   // One definition of "eligible", shared with the order panel — matched by
   // supplier ID first, by company name second. These two used to compute it
   // separately and drifted; only one of them warned about a dropped carrier.
-  const carriers = carriersForLines(lines, catalogSuppliers);
+  const carriers = carriersForLines(lines, catalogSuppliers, catalogSkuKeys);
   const filtered = carriers.length > 0;
   const eligible = eligibleSuppliers(carriers, suppliers);
   /**
@@ -584,7 +590,7 @@ function CombineForm({
   const matches = company.trim()
     ? eligible.filter((s) => s.company.toLowerCase().includes(company.trim().toLowerCase()) && s.company.toLowerCase() !== company.trim().toLowerCase())
     : eligible;
-  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices));
+  const canFillPrices = company.trim() !== "" && lines.some((l) => !l.unitPrice && catalogPriceFor(l.description, company.trim().toLowerCase(), catalogPrices, { sku: l.sku, skuKeys: catalogSkuKeys }));
 
   function pickSupplier(s: Supplier) {
     setCompany(s.company);
@@ -596,7 +602,7 @@ function CombineForm({
     // Auto-fill the payment terms from the supplier's saved remark (suppliers.xlsx Remarks).
     if (s.remarks?.trim()) setRemarks(s.remarks.trim());
     setSupplierOpen(false);
-    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true));
+    setLines((ls) => withCatalogPrices(ls, s.company, catalogPrices, true, catalogSkuKeys));
   }
 
   // When exactly one supplier carries the products, auto-populate it on open.
@@ -725,7 +731,7 @@ function CombineForm({
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => [...ls, { description: "", qty: "", unit: "", unitPrice: "" }])}>+ Add line</Button>
         {canFillPrices && (
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices))}>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setLines((ls) => withCatalogPrices(ls, company, catalogPrices, false, catalogSkuKeys))}>
             Fill prices from {company}
           </Button>
         )}

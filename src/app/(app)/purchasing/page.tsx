@@ -189,8 +189,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // (inventory's "Unit cost"). Autofills a PO line's unit price when the chosen
   // supplier has no saved price of its own.
   const stockCosts = await prisma.stockItem
-    .findMany({ where: { active: true }, select: { name: true, unitCost: true } })
-    .catch(() => [] as { name: string; unitCost: unknown }[]);
+    .findMany({ where: { active: true }, select: { name: true, sku: true, unitCost: true } })
+    .catch(() => [] as { name: string; sku: string | null; unitCost: unknown }[]);
   const costByName = new Map<string, number>();
   for (const si of stockCosts) {
     const n = si.name.trim().toLowerCase();
@@ -210,6 +210,22 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // Inventory-only items (stocked but not in the product catalogue) still offer
   // their unit cost as the reference price.
   for (const [n, c] of costByName) if (!catalogPrices[n]) catalogPrices[n] = { [REF_PRICE_KEY]: c };
+  /**
+   * Catalogue code → the name these catalogues are keyed by, so a line that
+   * recorded its code when it was composed is resolved by that code instead of
+   * being matched on text. Both series are here: a line's code may be a stock
+   * code or a product code, and `buildSkuIndex` prefers stock where an item is
+   * in both.
+   */
+  const catalogSkuKeys: Record<string, string> = {};
+  for (const p of products) {
+    const sku = (p.sku ?? "").trim().toUpperCase();
+    if (sku && !catalogSkuKeys[sku]) catalogSkuKeys[sku] = p.name.trim().toLowerCase();
+  }
+  for (const si of stockCosts) {
+    const sku = (si.sku ?? "").trim().toUpperCase();
+    if (sku && !catalogSkuKeys[sku]) catalogSkuKeys[sku] = si.name.trim().toLowerCase();
+  }
 
   try {
     // Order-linked requests: everything still moving, plus a PAGE of the orders
@@ -622,6 +638,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               poDefaultRemarks={COMPANY.poDefaultRemarks}
               catalogPrices={catalogPrices}
               catalogSuppliers={Object.fromEntries(suppliersByProduct)}
+              catalogSkuKeys={catalogSkuKeys}
               scanProducts={scanProducts}
               admin={admin}
               deptRows={deptRows}

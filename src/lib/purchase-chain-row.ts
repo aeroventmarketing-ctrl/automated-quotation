@@ -154,6 +154,12 @@ export interface PurchaseChainRow {
   deptLabel: string;
   mrfNo?: string | null;
   items: string[];
+  /**
+   * The catalogue code recorded for each line when it was composed, aligned BY
+   * INDEX with `items`. Empty where the line matched nothing, and empty for
+   * every request raised before 0059 — both fall back to the text matcher.
+   */
+  itemSkus: string[];
   note?: string | null;
   status: PRStatus;
   statusLabel: string;
@@ -241,6 +247,8 @@ export interface PurchaseRequestLike {
   mrfId?: string | null;
   dept: string | null;
   items: unknown;
+  /** `PurchaseRequest.itemSkus` — optional, so callers that don't select it still compile. */
+  itemSkus?: unknown;
   note: string | null;
   status: string;
   po: unknown;
@@ -413,6 +421,7 @@ export function buildPurchaseChainRow(
   const status = pr.status as PRStatus;
   const checkActor = { admin: ctx.admin, paymentApprover: ctx.paymentApprover, accounting: ctx.accounting };
   const prItems = Array.isArray(pr.items) ? (pr.items as string[]) : [];
+  const prSkus = Array.isArray(pr.itemSkus) ? (pr.itemSkus as unknown[]).map((v) => String(v ?? "")) : [];
   const trail = buildPurchaseTrail(pr);
   const returns = buildReturnViews(pr);
   // Inspectors (purchaser / warehouse / plant manager) can flag a return; the
@@ -452,6 +461,7 @@ export function buildPurchaseChainRow(
     deptLabel: requisitionDeptLabel(pr.dept),
     mrfNo: ctx.mrfNo ?? null,
     items: prItems,
+    itemSkus: prSkus,
     note: pr.note,
     status,
     statusLabel: PR_STATUS_LABEL[status],
@@ -459,7 +469,7 @@ export function buildPurchaseChainRow(
     trail,
     actions,
     po: coercePurchaseOrder(pr.po),
-    poDefaultLines: poLinesFromPRItems(prItems),
+    poDefaultLines: poLinesFromPRItems(prItems, prSkus),
     canManagePO: ctx.canManagePO,
     canCancel: ctx.canCancel ?? false,
     canDelete: ctx.canDelete ?? false,
