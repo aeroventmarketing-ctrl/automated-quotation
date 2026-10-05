@@ -11,6 +11,7 @@
  * several Accessories JOs (suffixed a, b, c … on a base number in its own
  * running ACCE-JO series).
  */
+import { isDuctTerminalType } from "@/lib/duct-job-order";
 import { PRODUCT_TAXONOMY } from "@/lib/product-taxonomy";
 
 /** Suggested accessory product types (every Ventilation Accessory except the
@@ -28,8 +29,16 @@ export const ACCESSORY_TYPE_SUGGESTIONS: string[] = Array.from(
   new Set(
     PRODUCT_TAXONOMY.filter(
       // Dampers moved to the Duct department, so they're offered on the Duct panel
-      // (DUCT_DAMPER_TYPES), not here.
-      (e) => e.category === "Ventilation Accessories" && e.group !== "Air Duct" && e.group !== "Dampers" && !EXCLUDED_ACCESSORY_TYPES.has(e.type),
+      // (DUCT_DAMPER_TYPES), not here — and so did the Weather hood
+      // (DUCT_TERMINAL_TYPES), which is an Air Terminal the duct department
+      // fabricates. Offering it here too would let an engineer put it back on the
+      // wrong job order by hand.
+      (e) =>
+        e.category === "Ventilation Accessories" &&
+        e.group !== "Air Duct" &&
+        e.group !== "Dampers" &&
+        !isDuctTerminalType(e.type) &&
+        !EXCLUDED_ACCESSORY_TYPES.has(e.type),
     ).map((e) => e.type),
   ),
 );

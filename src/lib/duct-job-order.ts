@@ -52,6 +52,28 @@ export function isDamperType(type: string): boolean {
   return (DUCT_DAMPER_TYPES as readonly string[]).includes(t) || /damper/i.test(t);
 }
 
+/**
+ * Air Terminals the DUCT department fabricates, not Accessories.
+ *
+ * The owner, on ACCE-JO2600095: *"Weather hood shows in Accessories JO. It
+ * should appear in Duct Department JO."*
+ *
+ * A weather hood is a Ventilation Accessory by taxonomy (group "Air Terminals"),
+ * and everything in that category fell through to the Accessories job order
+ * unless it was named as duct work. Only two things were named: the eight Air
+ * Duct types and the dampers. This is the third — the same arrangement as
+ * `DUCT_DAMPER_TYPES`, which exists because a damper is an accessory the duct
+ * department builds.
+ *
+ * Grilles, diffusers and louvers are NOT here: they stay with Accessories.
+ */
+export const DUCT_TERMINAL_TYPES = ["Weather hood"] as const;
+
+/** True when a segment / quotation type is an Air Terminal the Duct dept builds. */
+export function isDuctTerminalType(type: string): boolean {
+  return (DUCT_TERMINAL_TYPES as readonly string[]).includes((type ?? "").trim());
+}
+
 /** Types that transition between two cross-sections — they show "to" dimensions. */
 const REDUCING_DUCT_TYPES = new Set<string>(["Duct Reducer", "Square to Round Duct"]);
 export function isReducingDuctType(type: string): boolean {
