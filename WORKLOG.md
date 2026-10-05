@@ -1,3 +1,39 @@
+## 2026-10-05 · Fifteen rows, and the read I thought was wasteful
+
+The owner, counting the Materials card: *"MRF is limited to 15 rows only. Check if this is the case."*
+
+It was. A bare `.slice(0, 15)` on the feed, with no "show more" anywhere, so the sixteenth-oldest MRF
+simply was not on the page. Nothing was missing from the database; the list just stopped.
+
+### A correction, before the change
+
+I offered three options and recommended the third: *narrow the read — stop loading every order's line
+items for a feed that only needs MRF rows.* Reading the code properly, that premise was wrong twice
+over.
+
+`classification` is **already** narrowed — #553 subtracts the revision snapshots in Postgres, 14 kB an
+order down to 429 bytes. And `items` is not along for the ride: the task loop calls
+`isStockOnlyOrder`, `isBoughtInOnlyOrder` and `pendingStep` on **every** confirmed order, and those
+read `specsSnapshot` *and* `descriptionSnapshot` (the latter through `isServiceLine`). Dropping either
+would change which lines count as services, and with it the routing decisions this dashboard makes.
+
+So the read stays as it is. That is the second time this week I have guessed at where the egress goes;
+the measurement is still the thing to do, not another hypothesis.
+
+### What did change
+
+`MATERIALS_FEED_ROWS = 50`, named rather than inline, with `RETURNS_FEED_ROWS` kept at 15 — a return
+is rarer than an MRF and fifteen of them is already a long way back.
+
+**Raising it costs no extra reading.** Both feeds are assembled in full from orders the page loads
+anyway; the slice only decides how much of what is already in memory reaches the screen.
+
+And the cap now says so. `materialsTotal` carries the pre-slice count, and the card reads
+**"Materials — MRF Status · showing 50 of 60"** when the two differ. The old cap gave no sign of
+itself, which is why it took a person counting rows to find it — the next one announces itself.
+
+Rendered against 60 seeded MRFs: fifty rows, and the header saying so.
+
 ## 2026-10-05 · The Weather hood belongs to the Duct department
 
 The owner, on ACCE-JO2600095: *"Weather hood shows in Accessories JO. It should appear in Duct

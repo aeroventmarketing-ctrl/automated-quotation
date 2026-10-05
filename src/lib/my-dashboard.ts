@@ -112,6 +112,12 @@ export interface MyDashboard {
   // MRF completed / partially-released notes — shown to Admin, Warehouse,
   // Purchaser and the requesting department.
   materialsFeed: MaterialNote[];
+  /**
+   * How many MRF notes the viewer could see before the feed was cut to
+   * `MATERIALS_FEED_ROWS`. The card says so when the two differ — the previous
+   * cap was silent, which is why it took a person counting rows to find it.
+   */
+  materialsTotal: number;
   // Supplier-return lifecycle — shown to Admin, Purchaser, Warehouse, Plant
   // Manager and Logistics.
   returnsFeed: ReturnNote[];
@@ -144,6 +150,24 @@ export function viewerRoleLabels(user: User, assignments: WorkflowRoleAssignment
   if (isAdmin(user)) labels.unshift("Admin");
   return labels;
 }
+
+/**
+ * How many rows the two dashboard feeds show.
+ *
+ * The owner, counting the Materials card: *"MRF is limited to 15 rows only.
+ * Check if this is the case."* It was — a bare `.slice(0, 15)` on each feed,
+ * with no "show more" anywhere, so the sixteenth-oldest MRF simply was not on
+ * the page. Nothing was missing from the database; the list just stopped.
+ *
+ * Raising it costs NO extra reading. Both feeds are already assembled in full
+ * from orders this page loads anyway — the slice only decides how much of what
+ * is already in memory reaches the screen.
+ *
+ * Returns keeps its own number because it is a different list with a different
+ * rhythm: a return is rarer than an MRF, and fifteen of them is a long way back.
+ */
+const MATERIALS_FEED_ROWS = 50;
+const RETURNS_FEED_ROWS = 15;
 
 const AREA_LABEL: Record<TaskArea, string> = {
   order: "Orders",
@@ -906,8 +930,9 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     pending: visibleTasks,
     activity,
     byArea,
-    materialsFeed: visibleFeed.slice(0, 15),
-    returnsFeed: visibleReturns.slice(0, 15),
+    materialsFeed: visibleFeed.slice(0, MATERIALS_FEED_ROWS),
+    materialsTotal: visibleFeed.length,
+    returnsFeed: visibleReturns.slice(0, RETURNS_FEED_ROWS),
     poSummary,
     commissions,
   };

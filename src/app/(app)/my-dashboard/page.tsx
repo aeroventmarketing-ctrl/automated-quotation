@@ -349,7 +349,18 @@ export default async function MyDashboardPage() {
   // Materials notifications — MRF completed / partially released.
   const materialsCard = data.materialsFeed.length > 0 ? (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-sm">Materials — MRF Status</CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">
+          Materials — MRF Status
+          {/* Say so when the list is cut. The old cap showed no sign of itself,
+              so the only way to notice it was to count the rows. */}
+          {data.materialsTotal > data.materialsFeed.length && (
+            <span className="ml-2 font-normal text-muted-foreground">
+              showing {data.materialsFeed.length} of {data.materialsTotal}
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
       <CardContent>
         <ul className="divide-y">
           {data.materialsFeed.map((m) => (
