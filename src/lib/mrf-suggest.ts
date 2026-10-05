@@ -382,3 +382,37 @@ function buildRows(lines: QuotationLineForMrf[], products: CatalogueProduct[]): 
     };
   });
 }
+
+/**
+ * The rows the MRF form opens with, from the order's suggestions.
+ *
+ * The owner: *"make the remark box blank as standard. Let it be filled by
+ * authorized to fill the remarks box."*
+ *
+ * The description, quantity and unit are the order's answer and are prefilled —
+ * they are facts about what was sold. The **remark is not**: it is what a person
+ * wants to say about this line, and it used to arrive pre-written with the
+ * quotation's whole specification.
+ *
+ * That machine-written remark had two costs. It TRAVELS — `mrfItemLine` glues it
+ * onto the purchase line as `(remark)`, so it reaches the supplier's purchase
+ * order — and it is the text every downstream matcher then had to read the
+ * article back out of, which is the thread running through #551, #563 and #564.
+ *
+ * `MrfSuggestion.remark` is still built and still carried; nothing upstream
+ * changed, including the de-duplication that keys on it. Only the box starts
+ * empty, so whatever reaches the supplier was typed by a person.
+ *
+ * Lives here, not inline in the form, so the rule is a thing that can be read
+ * and tested rather than a literal buried in a component.
+ */
+export function mrfSeedRows(
+  suggestions: readonly MrfSuggestion[],
+): { description: string; qty: string; unit: string; remark: string }[] {
+  return suggestions.map((sg) => ({
+    description: sg.description,
+    qty: sg.qty,
+    unit: sg.unit,
+    remark: "",
+  }));
+}

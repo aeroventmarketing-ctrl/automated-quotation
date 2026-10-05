@@ -7,7 +7,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
-import type { MrfSuggestion } from "@/lib/mrf-suggest";
+import { mrfSeedRows, type MrfSuggestion } from "@/lib/mrf-suggest";
 import { raiseMaterialRequest, processMaterialRequest, cancelMaterialRequest, advancePurchaseRequest, confirmMaterialReceipt, followUpMaterialRequest, informMaterialAvailable, releaseMaterialToRequestor, setMrfReleasedQuantities, resetMaterialReceipt } from "../actions";
 import type { MRFItem } from "@/lib/order-workflow";
 import type { StockOpt } from "./stock-match-panel";
@@ -131,12 +131,9 @@ export function MaterialRequests({
   // Rows the order can prefill, as MRFItems. Padded to three so the form still
   // has room to add to the list.
   const seededRows = useMemo<MRFItem[]>(() => {
-    const seed: MRFItem[] = suggestions.map((sg) => ({
-      description: sg.description,
-      qty: sg.qty,
-      unit: sg.unit,
-      remark: sg.remark ?? "",
-    }));
+    // Description / qty / unit come from the order; the remark starts blank on
+    // purpose — see `mrfSeedRows`.
+    const seed: MRFItem[] = mrfSeedRows(suggestions);
     while (seed.length < 3) seed.push(emptyRow());
     return seed;
   }, [suggestions]);

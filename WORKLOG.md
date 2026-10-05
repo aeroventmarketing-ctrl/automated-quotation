@@ -1,3 +1,48 @@
+## 2026-10-05 · The remark is a person's, not the machine's
+
+The owner, on the MRF form prefilled from an order: *"make the remark box blank as standard. Let it be
+filled by authorized to fill the remarks box."*
+
+Every prefilled row arrived with the quotation's whole specification already typed into its Remark
+box — `Variable Air Volume · Complete with VAV Actuator & Thermostat · Duct Diameter: 250 mm (10 in)
+· Airflow Range: 306 – 2294 CMH`. The description, quantity and unit are the order's answer and are
+facts about what was sold. The remark is not: it is what a person wants to say about this line.
+
+### Why the machine-written one cost more than it looked
+
+It **travels**. `mrfItemLine` glues the remark onto the purchase line as `(remark)`, so it reaches the
+supplier's purchase order — and it is the text every downstream matcher then had to read the article
+back out of. That is the single thread running through #551 (the SKU the Purchasing tab could not
+find), #563 (a remark carrying brackets, which the peel refused) and #564 (the 6" VAV priced as a
+10", because the remark's numbers joined the model-code set).
+
+Each of those was a fix to reading the text better. This removes the text that was never meant to be
+read by a machine in the first place.
+
+### What did NOT change
+
+`MrfSuggestion.remark` is still built and still carried. Nothing upstream moved — including the
+de-duplication in `suggestOfficeMrfRows`, which keys on the remark, so two lines of the same product
+with different specifications stay two rows instead of merging and summing their quantities. That is
+pinned by a test, because blanking at the source would have silently collapsed them.
+
+Only the box starts empty. The rule now lives in `mrfSeedRows` rather than inline in the form, so it
+is a thing that can be read and tested rather than a literal buried in a component.
+
+### On "authorized"
+
+No new permission. The form is already reachable only by an MRF requestor for that department (or an
+admin) — `isMrfRequestorFor` — so the people who can type in the box are exactly the people the owner
+means. Adding a second gate inside an already-gated form would change who acts, which is Phase 3 and
+needs its own approval; flagged rather than assumed.
+
+### The consequence worth stating
+
+The specification no longer reaches the supplier's PO on its own. For a catalogue-matched line the
+product name carries the size (`NENUTEC VARIABLE AIR VOLUME 6" DIAMETER`), and since #563 the line
+also carries its code. For a line the catalogue could not match, the wording is the quotation's own
+and any detail the supplier needs is now the requestor's to type.
+
 ## 2026-10-03 · The line records what it is, instead of being guessed at
 
 *"It will be better if products and inventory is referenced by sku."* — approved, so: the second half
