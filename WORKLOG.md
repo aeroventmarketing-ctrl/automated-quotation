@@ -1,3 +1,41 @@
+## 2026-10-05 · The Weather hood belongs to the Duct department
+
+The owner, on ACCE-JO2600095: *"Weather hood shows in Accessories JO. It should appear in Duct
+Department JO."*
+
+Job-order routing is frozen Phase 2, so this was investigated first and changed only after the owner
+approved the specific move — Weather hood alone.
+
+### Why it landed in Accessories
+
+Everything in the taxonomy category "Ventilation Accessories" goes to the Accessories job order
+**unless it is named as duct work**, and only two things were named: the eight Air Duct types, and the
+dampers. A Weather hood is group "Air Terminals", on neither list, so it fell through.
+
+### Dampers were already the precedent
+
+A damper is a Ventilation Accessory that the DUCT department fabricates — `DUCT_DAMPER_TYPES` exists
+for exactly that, and a damper line becomes a Duct segment carrying its type, its sized dimensions and
+no run length. `DUCT_TERMINAL_TYPES` is the same arrangement for Air Terminals the duct department
+builds, and it currently holds one entry.
+
+Nothing is lost in the move. The Accessories line's dimension labels ("Neck", "With Insect screen")
+were never auto-filled — `accessoryDimensions` emits the size with blank labels for the engineer to
+complete — and the Duct segment has its own free-text **More Details** column for the same purpose.
+
+It is also removed from `ACCESSORY_TYPE_SUGGESTIONS`, so an engineer cannot put it back on the wrong
+job order by hand, and added to the Duct panel's type picker under an "Air Terminals" group so one can
+be added there deliberately.
+
+### The blast radius is the test
+
+Grilles, diffusers and louvers are Air Terminals too and must not move; dampers and Air Duct types must
+stay exactly where they are. Those five assertions pass with or without the change — which is the
+point of them. The five that assert the move fail when `DUCT_TERMINAL_TYPES` is emptied, which is the
+only reason to trust the other five.
+
+Existing job orders are untouched: this changes what new ones generate.
+
 ## 2026-10-05 · The remark is a person's, not the machine's
 
 The owner, on the MRF form prefilled from an order: *"make the remark box blank as standard. Let it be

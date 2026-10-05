@@ -11,7 +11,7 @@
  */
 import { coerceAccessoriesJobOrder, type AccessoriesJobOrder, type AccessoryLine, type AccessoryDimension } from "@/lib/accessories-job-order";
 import { coerceMotorControllerJobOrder, type MotorControllerJobOrder, type MotorControllerLine } from "@/lib/motor-controller-job-order";
-import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, isDamperType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
+import { coerceDuctJobOrder, EMPTY_DUCT_SEGMENT, isDamperType, isDuctTerminalType, type DuctJobOrder, type DuctSegment } from "@/lib/duct-job-order";
 import { coerceFansJobOrder, joProjectCodes, type FansJobOrder } from "@/lib/job-order";
 import { fanTagOf } from "@/lib/fan-body-factors";
 import { findFanMotorHp } from "@/lib/fan-motor-table";
@@ -27,6 +27,12 @@ const isAirDuct = (s: Record<string, unknown>) =>
 // department, not Accessories — they generate a Duct job order.
 const isDamper = (s: Record<string, unknown>) =>
   s.category === "Ventilation Accessories" && isDamperType(str(s.type));
+// …and so is a Weather hood: an Air Terminal by taxonomy, fabricated by the DUCT
+// department. See DUCT_TERMINAL_TYPES. Same arrangement as dampers — a
+// Ventilation Accessory that produces a Duct job order rather than an
+// Accessories one.
+const isDuctTerminal = (s: Record<string, unknown>) =>
+  s.category === "Ventilation Accessories" && isDuctTerminalType(str(s.type));
 // Duct hardware — Duct Angle corner, TDC Cleat, S-clip, C-clip — is produced by
 // Fans & Blowers straight to stock and is always on hand, so it never generates a
 // job order (it's issued from inventory). Vent Cap is bought-in from a supplier —
@@ -85,7 +91,7 @@ const isIsolator = (s: Record<string, unknown>) => s.type === "Spring Vibration 
 // (both go to the Duct JO) and EXCEPT spring vibration isolators (not a job-order
 // product).
 const isAccessory = (s: Record<string, unknown>) =>
-  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isNoJobOrderAccessory(s) && !isIsolator(s);
+  s.category === "Ventilation Accessories" && !isAirDuct(s) && !isDamper(s) && !isDuctTerminal(s) && !isNoJobOrderAccessory(s) && !isIsolator(s);
 
 /**
  * The two labelled dimensions for an accessory line, carried across from the
@@ -194,7 +200,7 @@ export function quotationJobOrderDepts(items: QuoteItemLike[]): Record<JobOrderD
   const depts: Record<JobOrderDept, boolean> = { fans: false, duct: false, accessories: false, motor: false };
   for (const it of items) {
     const s = specsOf(it);
-    if (isAirDuct(s) || isDamper(s)) { depts.duct = true; continue; }
+    if (isAirDuct(s) || isDamper(s) || isDuctTerminal(s)) { depts.duct = true; continue; }
     // Duct hardware (produced to stock, no JO) and Vent Cap (bought-in) never
     // mark a job-order department.
     if (isNoJobOrderAccessory(s)) continue;
@@ -236,9 +242,13 @@ export function buildAutoJobOrders(
   for (const it of items) {
     const s = specsOf(it);
     const qty = it.qty > 0 ? String(it.qty) : "1";
-    if (isDamper(s)) {
-      // A damper is produced by the Duct department — one Duct segment per line,
-      // carrying its type and sized dimensions (dampers have no run length).
+    if (isDamper(s) || isDuctTerminal(s)) {
+      // Produced by the Duct department — one Duct segment per line, carrying its
+      // type and sized dimensions and no run length. A damper, or an Air Terminal
+      // the duct department builds (Weather hood). The accessory fields it leaves
+      // behind were never auto-filled anyway: the Accessories JO carried the same
+      // size with blank labels for the engineer, and the Duct segment's
+      // "More Details" column is where that detail goes now.
       ductSegments.push({
         ...EMPTY_DUCT_SEGMENT,
         type: str(s.type) || "Volume Damper",
