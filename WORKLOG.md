@@ -1,3 +1,42 @@
+## 2026-10-06 · Ten rows, then the word "Show more"
+
+The owner, with three screenshots — **ORDERS (15)**, **PURCHASING (36)**, **Materials — MRF Status
+showing 50 of 58**: *"limit to 10 rows only. Put a clickable show more word at the bottom of 3 tiles
+or box … that when clicked it will show more rows."*
+
+Yesterday's entry raised the Materials cap from 15 to 50 because a cap with no way past it hides work.
+Today is the other half of the same thought: a list that shows everything at once is not more useful
+either — 59 purchasing rows pushed the Purchase Orders summary, the Materials card and the activity
+feed below the fold, so the price of seeing the 59th row was not seeing the next card at all.
+
+### The change
+
+`ShowMoreList` — a client component that renders the first **10** rows and, when there are more, a
+plain clickable word underneath: **"Show 49 more"**, then **"Show less"**. It applies to each area
+group inside *Pending Your Action* (so ORDERS and PURCHASING each get their own) and to the Materials
+feed.
+
+**It fetches nothing.** The rows are built on the server exactly as before and handed over as
+elements; the button only decides how many of them are on screen. A group of ten or fewer gets no
+button at all, so the common case looks untouched.
+
+The Materials header now reads **"latest 50 of 60"** rather than "showing 50 of 60" — with the toggle
+collapsed, only ten are showing, and the 50 is what the page loaded, not what is visible.
+
+### Rendered
+
+Admin Ana's dashboard, against 15 confirmed orders, 59 purchase approvals and 60 seeded MRFs:
+
+| group | collapsed | button | expanded |
+| --- | --- | --- | --- |
+| ORDERS (15) | 10 rows | `Show 5 more` | 15 rows |
+| PURCHASING (59) | 10 rows | `Show 49 more` | 59 rows |
+| CASH REQUESTS (2) | 2 rows | — | — |
+| INVENTORY (1) | 1 row | — | — |
+| Materials (60) | 10 rows | `Show 40 more` | 50 rows |
+
+Each toggles independently; the role grid is unchanged (no permission touched).
+
 ## 2026-10-05 · Fifteen rows, and the read I thought was wasteful
 
 The owner, counting the Materials card: *"MRF is limited to 15 rows only. Check if this is the case."*

@@ -26,6 +26,7 @@ import { UnreconciledCard } from "./unreconciled-card";
 import { ManualReconcileCard } from "./manual-reconcile-card";
 import { getLowStock } from "@/lib/low-stock";
 import { StockAlertsCards } from "./stock-alerts-cards";
+import { ShowMoreList } from "./show-more-list";
 
 /**
  * How often this page asks whether anything changed.
@@ -310,7 +311,12 @@ export default async function MyDashboardPage() {
                   <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     <Icon className={`h-3.5 w-3.5 ${AREA_COLOR[a.area]}`} /> {a.label} <span className="text-muted-foreground/70">({a.count})</span>
                   </div>
-                  {data.pending.filter((t) => t.area === a.area).map((t) => <TaskRow key={t.key} t={t} />)}
+                  {/* Ten rows per area, then "Show N more" — a 36-row purchasing
+                      group used to push every card below it off the screen. */}
+                  <ShowMoreList
+                    className="space-y-1.5"
+                    rows={data.pending.filter((t) => t.area === a.area).map((t) => <TaskRow key={t.key} t={t} />)}
+                  />
                 </div>
               );
             })}
@@ -356,14 +362,16 @@ export default async function MyDashboardPage() {
               so the only way to notice it was to count the rows. */}
           {data.materialsTotal > data.materialsFeed.length && (
             <span className="ml-2 font-normal text-muted-foreground">
-              showing {data.materialsFeed.length} of {data.materialsTotal}
+              latest {data.materialsFeed.length} of {data.materialsTotal}
             </span>
           )}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="divide-y">
-          {data.materialsFeed.map((m) => (
+        <ShowMoreList
+          as="ul"
+          className="divide-y"
+          rows={data.materialsFeed.map((m) => (
             <li key={m.key}>
               <Link href={m.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
                 <Boxes className="h-4 w-4 shrink-0 text-teal-600" />
@@ -380,7 +388,7 @@ export default async function MyDashboardPage() {
               </Link>
             </li>
           ))}
-        </ul>
+        />
       </CardContent>
     </Card>
   ) : null;
