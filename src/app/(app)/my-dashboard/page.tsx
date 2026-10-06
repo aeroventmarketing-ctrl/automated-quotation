@@ -433,8 +433,14 @@ export default async function MyDashboardPage() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="max-h-96 divide-y overflow-y-auto">
-          {data.poSummary.map((po) => (
+        {/* Ten rows and a word, like the other three lists. This one used to be
+            a scroll box inside the card: 85 rows reachable only by a nested
+            scrollbar, which scrolls the page out from under you as often as it
+            scrolls the list. */}
+        <ShowMoreList
+          as="ul"
+          className="divide-y"
+          rows={data.poSummary.map((po) => (
             <li key={po.key}>
               <Link href={po.href} className="flex items-center gap-3 rounded-md px-1 py-2.5 hover:bg-accent">
                 <div className="min-w-0 flex-1">
@@ -455,7 +461,7 @@ export default async function MyDashboardPage() {
               </Link>
             </li>
           ))}
-        </ul>
+        />
       </CardContent>
     </Card>
   ) : null;
