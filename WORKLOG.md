@@ -1,3 +1,22 @@
+## 2026-10-06 · The fourth list, and the scrollbar inside the card
+
+The owner, on the Purchase Orders — Summary card (85 rows): *"copy the behavior made in MRF and other
+2 we have done before."*
+
+That card was the one list of the four that already had an answer to its own length — a `max-h-96
+overflow-y-auto` scroll box — and it was the worse answer. A scroll area nested in a page that also
+scrolls hands the wheel to whichever of the two the pointer happens to be over, so reaching PO 85
+means first not scrolling the page by accident; and the rows below the fold are invisible in every
+sense, including to a browser's find-in-page.
+
+It now behaves exactly like the other three: ten rows, then **"Show 10 more"**, then **"Show less"**.
+The inner scrollbar is gone — the card is as tall as what it is showing.
+
+Rendered as Admin Ana against the harness's 20 POs: ten rows and `Show 10 more` collapsed, twenty
+rows and `Show less` open, back to ten on a second press, and no scroll box in the card at either
+size. The other three lists on the page were unchanged by it (`Show 5 more`, `Show 35 more`,
+`Show 40 more` all still there).
+
 ## 2026-10-06 · Ten rows, then the word "Show more"
 
 The owner, with three screenshots — **ORDERS (15)**, **PURCHASING (36)**, **Materials — MRF Status
