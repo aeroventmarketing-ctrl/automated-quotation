@@ -347,6 +347,16 @@ export function PurchasingWorkspace({
   // requests and delete them together. Only those two tabs offer it, and the
   // server re-checks each status before deleting anything.
   const bulkDeleteTab = admin && (tab === "rejected" || tab === "cancelled");
+  /**
+   * "N in stock" beside every item line — the owner's *"In purchasing pending
+   * and approved tab, show the available quantity in each row."*
+   *
+   * Those two tabs and no others: Pending and Approved are where somebody is
+   * still deciding whether to buy the thing. Budgeted, Rejected and Cancelled
+   * are records of a decision already taken, and today's shelf count says
+   * nothing about them.
+   */
+  const showOnHand = tab === "pending" || tab === "approved";
   const deletableIds = bulkDeleteTab
     ? [...filteredGroups.flatMap((g) => g.rows), ...shownDeptRows, ...shownReplenRows]
         .filter((r) => r.status === "REJECTED" || r.status === "CANCELLED")
@@ -530,6 +540,7 @@ export function PurchasingWorkspace({
                       allowClosedSelection={bulkDeleteTab}
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
+                      showOnHand={showOnHand}
                       adminManage={admin}
                       highlightId={highlightId}
                     />
@@ -575,6 +586,7 @@ export function PurchasingWorkspace({
                   showSupplier={showSupplier}
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
+                  showOnHand={showOnHand}
                   adminManage={admin}
                   highlightId={highlightId}
                   {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
@@ -610,6 +622,7 @@ export function PurchasingWorkspace({
                   showSupplier={showSupplier}
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
+                  showOnHand={showOnHand}
                   adminManage={admin}
                   highlightId={highlightId}
                   {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
