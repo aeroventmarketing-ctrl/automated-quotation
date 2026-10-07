@@ -1,3 +1,63 @@
+## 2026-10-07 · How many we already have, beside what we are about to buy
+
+The owner, on MRF #0441 in the Purchasing workspace: *"In purchasing pending and approved tab, show
+the available quantity in each row. Get the details in inventory tab. For example if Induction Motor
+5.5HP, 3PH or SKU CAT00182 show 0 in stock if no stock is available or 2 in stock if 2 items is
+available."*
+
+There was already an answer on that card — a **"Check stock availability"** button that opens a search
+box you type into, one item at a time. For a seven-line requisition that is seven searches before the
+first decision, which is why the question being asked of the screen ("do we have to buy this?") was
+not actually being answered by it.
+
+### No new reading
+
+`listStockItemsWithAvailability()` is **already loaded** by the purchasing page — it feeds the
+receive/issue panels — and already handed to `PurchasingChain` as `stockItems`. So this is a join
+between two lists that are both in memory: `buildOnHandIndex` once per render, a map lookup per line.
+
+### Three states, and the third is the point
+
+- **`2 unit in stock`** (green) — counted, free to issue.
+- **`0 unit in stock`** (red) — the item is on the shelf list with none left.
+- **`Not in inventory`** (grey, dashed) — *no inventory item answers to this line at all.*
+
+Null is not zero. Printing "0 in stock" for an unmatched line would quietly claim the warehouse had
+been asked and had answered, and the two mean different things to whoever has to decide whether a
+second purchase is a duplicate. Both still read as "this has to be bought", so the row scans the same
+way; it is the colour and the hover that separate a counted zero from an unanswered question.
+
+"Available" is **on hand minus active reservations** — what could be issued this minute, not a total
+that includes units already promised to another job.
+
+### Matching: code first, then name
+
+The code is the line's recorded identity (`PurchaseRequest.itemSkus`, written when the description was
+still clean), so an exact code beats any name similarity. The name pass reuses `skuNameCandidates` —
+the same peeling the SKU chip uses — so a line and its own code never disagree about which item they
+are.
+
+### Where it shows
+
+`showOnHand` is off by default and switched on by the workspace's **Pending** and **Approved** tabs
+only. Those are the tabs where somebody is still deciding whether to buy; Budgeted, Rejected and
+Cancelled are records of a decision already taken, and today's shelf count says nothing about them.
+The order page's read-only Phase 4 card is untouched.
+
+### Rendered
+
+Admin Ana, Allan Ramos (Purchaser), Rey Gil (Payment Approver) and Michelle Cotura (Accounting) all
+see the same thing on the harness:
+
+| line | badge | matched by |
+| --- | --- | --- |
+| `1 unit · INDUCTION MOTOR 2 HP, 1PH, 4 POLE` · SKU CAT00182 | `0 unit in stock` | name |
+| `1 unit · NENUTEC VARIABLE AIR VOLUME 10" DIAMETER …` · SKU CAT00199 | `2 unit in stock` | **code** — the bin is labelled differently |
+| `2 pc · CUTTING DISC 4in (for grinder)` | `12 pc in stock` | name, with the remark peeled |
+| `10 pc · HARNESS OFFICE PAPER` · SKU PRD10004 | `Not in inventory` | — |
+
+Pending: 1 badge. Approved: 9. Budgeted, Rejected, Cancelled: none. Role grid unchanged.
+
 ## 2026-10-06 · The fourth list, and the scrollbar inside the card
 
 The owner, on the Purchase Orders — Summary card (85 rows): *"copy the behavior made in MRF and other

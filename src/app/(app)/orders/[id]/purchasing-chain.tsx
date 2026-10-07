@@ -30,6 +30,8 @@ import type { CatalogSuppliers, CatalogPrices, CatalogSkuKeys } from "@/lib/po-c
 import type { ScanProduct } from "@/lib/product-scan";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
+import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
+import { StockOnHand } from "@/components/stock-on-hand";
 
 interface ActionOpt {
   key: string;
@@ -149,6 +151,7 @@ export function PurchasingChain({
   showSupplier = true,
   showStockCheck = false,
   canIssueStock = false,
+  showOnHand = false,
   adminManage = false,
   highlightId,
   todayYMD,
@@ -212,6 +215,15 @@ export function PurchasingChain({
   showStockCheck?: boolean;
   /** Warehouse/admin may also issue requisition lines from stock (requisitions tab). */
   canIssueStock?: boolean;
+  /**
+   * Show "N in stock" beside every item line, from `stockItems`.
+   *
+   * Off by default and switched on by the Purchasing workspace's Pending and
+   * Approved tabs, which is where the owner asked for it — those are the tabs
+   * where somebody is deciding whether to buy. A tab that is only a record of
+   * what already happened gains nothing from today's shelf count.
+   */
+  showOnHand?: boolean;
   /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
   adminManage?: boolean;
   /** A request id to scroll to / highlight (deep-link from a notification). */
@@ -231,6 +243,11 @@ export function PurchasingChain({
    * passes neither simply gets no codes rather than an error.
    */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
+  /**
+   * Code / name → quantity on hand, from the very same inventory list. Built
+   * only where it is shown, since every row consults it for every line.
+   */
+  const onHandIndex = useMemo(() => buildOnHandIndex(showOnHand ? stockItems : []), [showOnHand, stockItems]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
@@ -391,28 +408,43 @@ export function PurchasingChain({
                  */
                 const carried = (r.itemSkus?.[i] ?? "").trim();
                 const issued = parseIssuedFromStockLine(it);
+                /**
+                 * How many the warehouse has of this line, from the inventory
+                 * this screen already loaded — the owner's *"show the available
+                 * quantity in each row. Get the details in inventory tab."*
+                 * `showOnHand` keeps it to the screens that asked for it.
+                 */
+                const onHand = (desc: string, code: string | null) =>
+                  showOnHand ? <StockOnHand on={onHandFor(desc, code, onHandIndex)} /> : null;
                 if (issued) {
+                  const code = carried || skuFor(issued.desc, skuIndex);
                   return (
                     <li key={i} className="marker:text-emerald-600">
                       {issued.desc}
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
-                      <ItemSku code={carried || skuFor(issued.desc, skuIndex)} />
+                      <ItemSku code={code} />
+                      {onHand(issued.desc, code)}
                     </li>
                   );
                 }
                 if (isToPurchaseLine(it)) {
                   const line = stripToPurchasePrefix(it);
+                  const desc = poLineFromPRItem(line).description;
+                  const code = carried || skuFor(desc, skuIndex);
                   return (
                     <li key={i} className="marker:text-amber-600">
                       {line}
                       <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
-                      <ItemSku code={carried || skuFor(poLineFromPRItem(line).description, skuIndex)} />
+                      <ItemSku code={code} />
+                      {onHand(desc, code)}
                     </li>
                   );
                 }
-                return <li key={i}>{it}<ItemSku code={carried || skuFor(poLineFromPRItem(it).description, skuIndex)} /></li>;
+                const desc = poLineFromPRItem(it).description;
+                const code = carried || skuFor(desc, skuIndex);
+                return <li key={i}>{it}<ItemSku code={code} />{onHand(desc, code)}</li>;
               })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
