@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   canCancelPurchase,
+  isBudgetCommitted,
   isDeptRequisition,
   statusBucket,
   DEPT_REQUISITION_WHERE,
@@ -63,14 +64,16 @@ describe("a department / material requisition", () => {
 /**
  * Who may cancel a purchase.
  *
- * The owner, 15 September: *"Add an option to cancel PO in approved Purchasing
- * tab for purchaser role"* — and, asked how far that should reach, chose the
- * narrowest reading of it twice over: **only before a PO is prepared**, and
- * **single-request POs only**.
+ * The owner asked for it twice. On **15 September**: *"Add an option to cancel PO
+ * in approved Purchasing tab for purchaser role"* — built then as the narrowest
+ * reading, only before a PO existed and never on a combined one. On **7 October**,
+ * looking at a PO on screen: *"Allow cancellation of PO in approved tab or after
+ * creating or generating a PO for purchaser role"*, stopping at *"once it is in
+ * the Budgeted tab"*, combined POs included.
  *
- * So the table below is mostly about what the Purchaser still may NOT do. Those
- * rows are the feature: a permission is defined by its edge, and this one was
- * drawn deliberately tight.
+ * A permission is defined by its edge, so the edge is asserted from both sides:
+ * the last status the Purchaser may cancel at and the first they may not, one
+ * press apart.
  */
 describe("who may cancel a purchase", () => {
   const ADMIN: PurchaseCancelActor = { admin: true, purchaser: false, requestor: false };
@@ -79,12 +82,7 @@ describe("who may cancel a purchase", () => {
   const BYSTANDER: PurchaseCancelActor = { admin: false, purchaser: false, requestor: false };
 
   /** An order-linked request, so the bucket follows the status alone. */
-  const at = (status: PRStatus, over: { poPrepared?: boolean; combined?: boolean } = {}) => ({
-    status,
-    bucket: statusBucket(status),
-    poPrepared: over.poPrepared ?? false,
-    combined: over.combined ?? false,
-  });
+  const at = (status: PRStatus) => ({ status, bucket: statusBucket(status) });
 
   describe("before it is approved", () => {
     it("the requestor, the Purchaser and an admin may all call it off", () => {
@@ -97,55 +95,86 @@ describe("who may cancel a purchase", () => {
     });
   });
 
-  describe("approved, with no purchase order written yet — the new window", () => {
-    it("the Purchaser may cancel it", () => {
+  /**
+   * The window the owner widened on 7 October: *"Allow cancellation of PO in
+   * approved tab or after creating or generating a PO for purchaser role"*, and
+   * where it stops — *"Purchaser cannot cancel the PO once it is in the Budgeted
+   * tab"*, combined POs included.
+   *
+   * It used to be approved-and-no-PO-and-not-combined. Each row below that reads
+   * "now true" was false until then, and they are the whole of the change.
+   */
+  describe("anywhere in the Approved tab", () => {
+    it("the Purchaser may cancel an approved request with no PO yet", () => {
       expect(canCancelPurchase(at("APPROVED"), PURCHASER)).toBe(true);
     });
+
+    it("…and one that already HAS a purchase order — now true", () => {
+      // A PO is a document the Purchaser wrote; nothing has been paid against it.
+      expect(canCancelPurchase(at("APPROVED"), PURCHASER)).toBe(true);
+    });
+
+    it("…and once Accounting has prepared the voucher & check — now true", () => {
+      // VOUCHER_READY is the other status living in the Approved tab.
+      expect(statusBucket("VOUCHER_READY")).toBe("approved");
+      expect(isBudgetCommitted("VOUCHER_READY")).toBe(false);
+      expect(canCancelPurchase(at("VOUCHER_READY"), PURCHASER)).toBe(true);
+    });
+
     it("the requestor still may not — it left their hands at approval", () => {
       expect(canCancelPurchase(at("APPROVED"), REQUESTOR)).toBe(false);
+      expect(canCancelPurchase(at("VOUCHER_READY"), REQUESTOR)).toBe(false);
     });
+
     it("nor may a bystander", () => {
       expect(canCancelPurchase(at("APPROVED"), BYSTANDER)).toBe(false);
     });
   });
 
-  describe("the two edges the owner drew", () => {
-    it("a PO has been prepared → admin only, even at APPROVED", () => {
-      expect(canCancelPurchase(at("APPROVED", { poPrepared: true }), PURCHASER)).toBe(false);
-      expect(canCancelPurchase(at("APPROVED", { poPrepared: true }), ADMIN)).toBe(true);
+  /**
+   * Where it stops. The tab split and the permission are the same line, so the
+   * rule is asserted against `isBudgetCommitted` itself rather than against a
+   * second list of statuses that could fall out of step with it.
+   */
+  describe("from the Budgeted tab on", () => {
+    const budgeted: PRStatus[] = [
+      "VOUCHER_SIGNED", "CASH_RELEASED", "WITH_PURCHASER", "CASH_CONFIRMED",
+      "TASKED", "LOGISTICS_CONFIRMED", "PURCHASED", "CHECKED", "DELIVERED",
+      "RECEIVED", "PLANT_APPROVED",
+    ];
+
+    it("every one of them counts as budget committed", () => {
+      for (const s of budgeted) expect(isBudgetCommitted(s), s).toBe(true);
+      // …and nothing in the Approved tab does.
+      for (const s of ["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as PRStatus[]) {
+        expect(isBudgetCommitted(s), s).toBe(false);
+      }
     });
 
-    /** Cancelling a combined PO cancels every department's request on it. */
-    it("a combined PO → admin only", () => {
-      expect(canCancelPurchase(at("APPROVED", { combined: true }), PURCHASER)).toBe(false);
-      expect(canCancelPurchase(at("APPROVED", { combined: true }), ADMIN)).toBe(true);
-    });
-
-    it("and everything further down the chain stays admin only", () => {
-      const later: PRStatus[] = [
-        "VOUCHER_READY", "VOUCHER_SIGNED", "CASH_RELEASED", "WITH_PURCHASER",
-        "CASH_CONFIRMED", "TASKED", "LOGISTICS_CONFIRMED", "PURCHASED",
-        "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED",
-      ];
-      for (const s of later) {
+    it("the Purchaser may not cancel there; an admin still may", () => {
+      for (const s of budgeted) {
         expect(canCancelPurchase(at(s), PURCHASER), s).toBe(false);
         expect(canCancelPurchase(at(s), ADMIN), s).toBe(true);
       }
+    });
+
+    it("the cut is exactly the signing of the voucher & check", () => {
+      // The pair either side of the line, named: one press apart, opposite answers.
+      expect(canCancelPurchase(at("VOUCHER_READY"), PURCHASER)).toBe(true);
+      expect(canCancelPurchase(at("VOUCHER_SIGNED"), PURCHASER)).toBe(false);
     });
   });
 
   /**
    * A department MRF at APPROVED is only Plant-Manager-approved; it sits in the
-   * PENDING tab awaiting the Approver. The owner asked for the APPROVED tab, so
-   * this one is untouched — and it is the case a status-only rule would have got
-   * wrong, because the status says APPROVED while the tab says pending.
+   * PENDING tab awaiting the Approver. The owner asked about the APPROVED tab
+   * both times, so this one is untouched — and it is the case a status-only rule
+   * would get wrong, because the status says APPROVED while the tab says pending.
    */
   it("a department MRF still awaiting purchase approval is unchanged", () => {
     const ctx = {
       status: "APPROVED" as PRStatus,
       bucket: statusBucket("APPROVED", { isDept: true, poApproved: false }),
-      poPrepared: false,
-      combined: false,
     };
     expect(ctx.bucket).toBe("pending");
     expect(canCancelPurchase(ctx, PURCHASER)).toBe(false);

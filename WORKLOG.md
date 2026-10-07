@@ -1,3 +1,65 @@
+## 2026-10-07 · The Purchaser's cancel reaches the purchase order
+
+The owner, looking at a PO on the Approved tab: *"Allow cancellation of PO in approved tab or after
+creating or generating a PO for purchaser role."*
+
+This is the **second** time they have asked for this. On 15 September: *"Add an option to cancel PO in
+approved Purchasing tab for purchaser role"* — and I built the narrowest reading of it that could be
+called correct: approved, **no PO written yet**, and **never** a combined one. The cancel button
+therefore vanished at exactly the moment the Purchaser was most likely to want it, because writing the
+PO is what makes you notice the supplier is wrong.
+
+That is the lesson worth keeping: a permission scoped to its smallest defensible version is not a
+safe default, it is a half-answer that gets asked again.
+
+### Where the line is now
+
+Asked how far it should reach, the owner drew it: **"Purchaser cannot cancel the PO once it is in the
+Budgeted tab"**, combined POs included.
+
+So the boundary is where the **money is committed**, not where the paperwork starts:
+
+| | Purchaser | Admin |
+| --- | --- | --- |
+| Pending (`PENDING_APPROVAL`) | ✅ (also the requestor) | ✅ |
+| Approved, no PO | ✅ | ✅ |
+| Approved, **PO written** | ✅ *(was ❌)* | ✅ |
+| Approved, **combined PO** | ✅ *(was ❌)* | ✅ |
+| **Voucher & check prepared** (`VOUCHER_READY`) | ✅ *(was ❌)* | ✅ |
+| **Voucher & check signed** onward — the Budgeted tab | ❌ | ✅ |
+| Received into stock / already closed | ❌ | ❌ |
+
+A PO is a document the Purchaser wrote and may unwrite. A signed voucher is cash released against it,
+and unwinding that is an admin's job.
+
+### One predicate, not two comparisons
+
+`isBudgetCommitted(status)` — `VOUCHER_SIGNED` onward — is now **both** the Budgeted tab's split and
+the Purchaser's cancel boundary. The owner described the permission in terms of the tab, so the tab
+and the permission share a definition rather than two copies of the same comparison that could later
+be moved apart. `PurchaseCancelContext` lost `poPrepared` and `combined` entirely: fields a rule no
+longer reads are fields that quietly go stale.
+
+### The confirmations now say what goes
+
+Cancelling reaches further, so the question asks for more:
+
+- a request with a PO: **"Cancel PO-AFBM2026000999? The purchase order is withdrawn and the request
+  goes to Cancelled."**
+- a combined PO: **"Cancel combined PO-AFBM2026000770? This withdraws all 2 requests on it (Office).
+  They go to Cancelled and have to be raised again."** — the count and the departments, in the
+  question rather than in the aftermath.
+
+### Proved end to end
+
+Not just the button: Allan Ramos (Purchaser) pressed Cancel on an approved request **carrying
+PO-AFBM2026000999**, and the row is now `CANCELLED · decidedByName "Allan Ramos"` in the database. The
+server action and the page share `canCancelPurchase`, so the button and the door cannot disagree.
+
+Counted across the tabs — Purchaser: 0 cancels on Pending, **8** on Approved, **0** on Budgeted;
+Admin: 8 on Approved and **14** on Budgeted; Accounting: none anywhere. The combined card offers its
+Cancel to the Purchaser and the admin, not to Accounting. Role grid unchanged.
+
 ## 2026-10-07 · How many we already have, beside what we are about to buy
 
 The owner, on MRF #0441 in the Purchasing workspace: *"In purchasing pending and approved tab, show

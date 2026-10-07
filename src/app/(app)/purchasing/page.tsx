@@ -85,16 +85,13 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   // Who may cancel — the rule is `canCancelPurchase` in `lib/purchasing`, shared
   // with the server action that does the work. Before approval: the requestor,
-  // the Purchaser or an admin. Once approved: an admin, plus the Purchaser on a
-  // single request that has no PO written for it yet (the owner's 15 September
-  // ask, scoped by them to exactly that).
+  // the Purchaser or an admin. Anywhere in the Approved tab: an admin or the
+  // Purchaser, PO or no PO, combined or not. From Budgeted on: an admin only.
   const cancelCtxFor = (pr: { status: string; po?: unknown; chainLog?: unknown; kind?: string | null; mrfId?: string | null }) => {
     const status = pr.status as PRStatus;
     return {
       status,
       bucket: statusBucket(status, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }),
-      poPrepared: coercePurchaseOrder(pr.po) != null,
-      combined: poMemberIds(pr.po).length > 1,
     };
   };
   const canCancelPr = (pr: { status: string; createdById: string; po?: unknown; chainLog?: unknown; kind?: string | null; mrfId?: string | null }): boolean =>
@@ -423,12 +420,10 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         return { key: step.key, label: step.label, canAct: canAct(role), roleLabel: `${workflowRoleLabel(role)}${names.length ? ` (${names.join(", ")})` : ""}` };
       });
       const bRequestor = viewer != null && members.some((m) => m.createdById === viewer.id);
-      // A batch is a combined PO by construction, so the Purchaser's new window
-      // never opens here — cancelling one would cancel every department on it.
-      const canCancel = canCancelPurchase(
-        { ...cancelCtxFor(anchor), combined: members.length > 1 },
-        { admin, purchaser: isPurchaser, requestor: bRequestor },
-      );
+      // A batch is a combined PO by construction. Since 7 October the Purchaser
+      // may cancel one too — it withdraws every request on it, which is why the
+      // confirmation names them.
+      const canCancel = canCancelPurchase(cancelCtxFor(anchor), { admin, purchaser: isPurchaser, requestor: bRequestor });
       const canDelete = canDeleteStatus(status);
       // Supplier returns ride on the anchor request (the whole PO).
       const returns = buildReturnViews(anchor);

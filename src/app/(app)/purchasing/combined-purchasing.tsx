@@ -301,7 +301,18 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   }
   const cancellable = batch.canCancel;
   async function cancel() {
-    if (!window.confirm(`Cancel combined ${batch.poNumber}? This withdraws all ${batch.members.length} requests.`)) return;
+    // Name what goes with it. This PO covers other departments' requests, and
+    // since the Purchaser may now cancel one themselves, the count and the
+    // departments belong in the question rather than in the aftermath.
+    const depts = [...new Set(batch.members.map((m) => m.deptLabel).filter(Boolean))];
+    if (
+      !window.confirm(
+        `Cancel combined ${batch.poNumber}? This withdraws all ${batch.members.length} requests on it` +
+          (depts.length ? ` (${depts.join(", ")}).` : ".") +
+          "\n\nThey go to Cancelled and have to be raised again.",
+      )
+    )
+      return;
     setBusy("cancel"); setErr(null);
     try { await cancelPurchaseRequest(batch.anchorId); router.refresh(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Failed"); }

@@ -87,10 +87,6 @@ export interface PurchaseCancelContext {
   status: PRStatus;
   /** Which tab it sits in — a department MRF at APPROVED may still be pending. */
   bucket: PRBucket;
-  /** A purchase order has already been written for it (`pr.po` holds one). */
-  poPrepared: boolean;
-  /** This PO covers more than one request, so cancelling kills them all. */
-  combined: boolean;
 }
 
 /**
@@ -104,19 +100,27 @@ export interface PurchaseCancelContext {
  * **Before approval**, the person who raised the request, the Purchaser and an
  * admin may all call it off. Nothing has been promised to anybody yet.
  *
- * **Once approved**, the Purchaser keeps exactly one window, which the owner
- * asked for on 15 September: *"Add an option to cancel PO in approved Purchasing
- * tab for purchaser role."* It is deliberately the narrowest reading of that —
- * a purchase that is **approved and has no purchase order written for it yet**.
- * The reasoning, in the owner's own choice of scope:
+ * **Once approved**, the Purchaser may cancel anywhere in the Approved tab —
+ * with or without a purchase order written, and on a combined PO too.
  *
- *  - Once a PO exists it carries a number, a supplier and a voucher moving
- *    behind it. Cancelling then unwinds other people's work — the Approver's
- *    signature, Accounting's voucher, released cash — so it stays with an admin.
- *  - A **combined** PO covers several departments' requests, and cancelling it
- *    cancels every one of them. One press by one Purchaser should not be able to
- *    wipe out three other departments' requests, so combined POs stay with an
- *    admin too.
+ * That window was narrower until 7 October. The owner first asked for it on 15
+ * September (*"Add an option to cancel PO in approved Purchasing tab for
+ * purchaser role"*) and it was built as the tightest possible reading: approved,
+ * no PO yet, not combined. Then, with a PO on screen: *"Allow cancellation of PO
+ * in approved tab or after creating or generating a PO for purchaser role"* —
+ * and, asked where exactly it should stop, **"Purchaser cannot cancel the PO once
+ * it is in the Budgeted tab"**, combined POs included.
+ *
+ * So the line is drawn where the **money is committed**, not where the paperwork
+ * starts. A PO is a document the Purchaser wrote and may unwrite; a signed
+ * voucher is cash released against it, and that is an admin's to undo. The
+ * boundary is `isBudgetCommitted` — literally the same predicate that moves a row
+ * out of Approved and into the Budgeted tab, so what the owner can see and what
+ * the rule permits cannot drift apart.
+ *
+ * A **combined** PO still cancels every department's request riding on it. That
+ * is now the Purchaser's to do, and the confirmation says how many requests and
+ * which departments go with it rather than leaving it to be discovered.
  *
  * An admin's reach is unchanged: anything `isCancellable` allows, right up to
  * the moment the goods are received into stock.
@@ -129,7 +133,22 @@ export function canCancelPurchase(ctx: PurchaseCancelContext, who: PurchaseCance
     // hands even though it still shows as pending — the Approver owns it next.
     return ctx.status === "PENDING_APPROVAL" && (who.purchaser || who.requestor);
   }
-  return who.purchaser && ctx.status === "APPROVED" && !ctx.poPrepared && !ctx.combined;
+  return who.purchaser && !isBudgetCommitted(ctx.status);
+}
+
+/**
+ * Has the budget been committed — i.e. is this row in the **Budgeted** tab?
+ *
+ * True from `VOUCHER_SIGNED` onward: the voucher and check are signed, so cash
+ * is released against this purchase and undoing it is no longer a matter of
+ * tearing up a document.
+ *
+ * The Purchasing workspace's tab split and the Purchaser's cancel window are the
+ * same line, and this is it — one predicate, so moving the tab boundary moves
+ * the permission with it instead of leaving the two to disagree.
+ */
+export function isBudgetCommitted(status: PRStatus): boolean {
+  return prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED");
 }
 
 export interface PurchaseStepDef {
