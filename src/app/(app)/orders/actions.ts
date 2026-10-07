@@ -3465,14 +3465,11 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   // draws the button from, so the button and the door can never disagree.
   // Checked against EVERY member: cancelling a combined PO cancels all of them,
   // so it is only allowed when each one on its own could be cancelled.
-  const combined = targetIds.length > 1;
   const allowed = members.every((m) =>
     canCancelPurchase(
       {
         status: m.status as PRStatus,
         bucket: statusBucket(m.status as PRStatus, { isDept: isDeptRequisition(m), poApproved: isPoApproved(m.chainLog) }),
-        poPrepared: coercePurchaseOrder(m.po) != null,
-        combined,
       },
       { admin, purchaser, requestor },
     ),
@@ -3480,7 +3477,7 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   if (!allowed) {
     throw new Error(
       members.some((m) => (m.status as PRStatus) !== "PENDING_APPROVAL")
-        ? "Only an admin can cancel this — the Purchaser's window closes once a purchase order is prepared, and a combined PO covers other departments' requests."
+        ? "Only an admin can cancel this — the Purchaser's window closes once the voucher & check are signed and the budget is committed."
         : "Only the requestor, the purchaser, or an admin can cancel this.",
     );
   }

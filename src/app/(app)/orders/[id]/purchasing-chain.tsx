@@ -282,7 +282,19 @@ export function PurchasingChain({
     setInternalSel(allSelected ? new Set() : new Set(poRows.map((r) => r.id)));
 
   async function cancel(prId: string) {
-    if (!window.confirm("Cancel this purchase order / request?")) return;
+    // Name the PO when there is one. The Purchaser may now call off a request
+    // that already HAS a purchase order, so "this" is no longer unambiguous:
+    // the number is what they would quote to the supplier afterwards.
+    const row = requests.find((r) => r.id === prId);
+    const poNo = row?.po?.poNumber?.trim();
+    if (
+      !window.confirm(
+        poNo
+          ? `Cancel ${poNo}? The purchase order is withdrawn and the request goes to Cancelled.`
+          : "Cancel this request? It goes to Cancelled and has to be raised again.",
+      )
+    )
+      return;
     setBusy(prId + "cancel");
     setErr(null);
     try { await cancelPurchaseRequest(prId); router.refresh(); }

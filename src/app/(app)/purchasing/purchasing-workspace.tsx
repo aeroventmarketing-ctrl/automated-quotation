@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Search, Eye, Printer, Trash2, CalendarClock } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { statusBucket, prMainIndex, type PRBucket, type PRStatus } from "@/lib/purchasing";
+import { statusBucket, isBudgetCommitted, type PRBucket, type PRStatus } from "@/lib/purchasing";
 import { poTotals } from "@/lib/purchase-order";
 import { checkNumbers } from "@/lib/voucher-check";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -54,7 +54,11 @@ const TABS: { key: Tab; label: string }[] = [
 /** Bucket for a request/PO, splitting "approved" into approved vs budgeted. */
 function displayBucket(status: PRStatus, ctx?: { isDept?: boolean; poApproved?: boolean }): DisplayBucket {
   const b = statusBucket(status, ctx);
-  if (b === "approved" && prMainIndex(status) >= prMainIndex("VOUCHER_SIGNED")) return "budgeted";
+  // `isBudgetCommitted` is also where the Purchaser's cancel window closes — the
+  // owner drew both at the same place ("Purchaser cannot cancel the PO once it is
+  // in the Budgeted tab"), so they share one predicate rather than two copies of
+  // the same comparison that could later be moved apart.
+  if (b === "approved" && isBudgetCommitted(status)) return "budgeted";
   return b;
 }
 
