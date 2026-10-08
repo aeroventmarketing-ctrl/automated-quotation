@@ -13,6 +13,7 @@ import { StockTransfers } from "./stock-transfers";
 import { isProductionHead, isPurchaserRole, coerceStockDoc, isOfficeTransfer, nextOfficeTransferApprover, type StockTransferView } from "@/lib/stock-transfer";
 import { getApproverDirectory } from "@/lib/approver-directory";
 import { ArrowLeftRight } from "lucide-react";
+import { stockAvailable, stockStatus, stockValue } from "@/lib/stock-figures";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function InventoryPage() {
   // here is what let a run of correct-looking changes shut the Payment Approver
   // out of the page they approve on.
   const {
-    canView, canManageItems, canCreateItems, canDeleteItems, canProposeEdit, canScan,
+    canView, canManageItems, canCreateItems, canDeleteItems, canProposeEdit, canScan, canEditStockRecord,
     showPrices, showSellPrice, showHeaderTools, pendingFirst, chainNote, canViewApprovalHistory,
   } = a;
   const admin = isAdmin(viewer);
@@ -234,7 +235,7 @@ export default async function InventoryPage() {
 
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
-              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} chainNote={chainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} pendingByItem={pendingByItem} />
+              <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} chainNote={chainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} canEditStockRecord={canEditStockRecord} pendingByItem={pendingByItem} />
             </CardContent>
           </Card>
 
@@ -280,9 +281,9 @@ async function loadItems() {
     const sellPrice = Number(i.sellPrice);
     const resv = byItem.get(i.id) ?? [];
     const reserved = Math.round(resv.reduce((a, r) => a + r.qty, 0) * 1000) / 1000;
-    const available = Math.round((quantity - reserved) * 1000) / 1000;
-    const status: "ok" | "low" | "out" =
-      quantity <= 0 ? "out" : reorderLevel > 0 && quantity <= reorderLevel ? "low" : "ok";
+    // Shared with the edit panel's live preview — see lib/stock-figures.
+    const available = stockAvailable(quantity, reserved);
+    const status = stockStatus(quantity, reorderLevel);
     return {
       id: i.id,
       sku: i.sku,
@@ -295,7 +296,7 @@ async function loadItems() {
       reorderLevel,
       unitCost,
       sellPrice,
-      value: Math.round(quantity * unitCost * 100) / 100,
+      value: stockValue(quantity, unitCost),
       reserved,
       available,
       reservations: resv,

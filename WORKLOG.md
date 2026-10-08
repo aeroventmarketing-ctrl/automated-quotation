@@ -1,3 +1,69 @@
+## 2026-10-08 · The whole row, editable — for the two who approve it
+
+The owner, on the Inventory edit panel: *"Add an option to change name, unit, on hand, reserved,
+available, unit cost, sell price, value and status in inventory tab for admin and payment approver
+only."*
+
+### Three of the nine aren't stored
+
+Available, Value and Status have no column. They follow — Available = On hand − Reserved, Value = On
+hand × Unit cost, Status from On hand against Reorder at. Asked how "changing" them should work, the
+owner chose **"Recalculate live"**: edit the inputs, and the panel shows the three as they will read
+after Save. They then cannot disagree with the stock.
+
+So the formulas moved into `lib/stock-figures` and the list and the preview both call them. The
+preview is not an approximation of the row — it is the row.
+
+### On hand is still a movement
+
+Typing a new On hand writes a **"Set to" `StockMovement`** — "Set on the item list (Edit)", with the
+editor's name — never a bare overwrite of `quantity`. Tomorrow's figure is explained by the history
+instead of simply being different.
+
+And On hand / Reserved are sent **only if they were changed in the panel**. The page may be minutes
+old; re-sending the number it loaded would silently undo a receipt or an issue the warehouse made in
+the meantime. Saving a price on an item no longer risks rewinding its stock.
+
+### Reserved is a correction, not an overwrite
+
+Reserved is the sum of reservations, each naming the order holding it. The owner chose **"Correction
+entry"** (`lib/reserved-correction`):
+
+- **raising** it adds one reservation, *"Inventory correction"*, for the difference;
+- **lowering** it releases correction entries first (newest first), then the **oldest** order
+  reservations — and the last one touched is **reduced in place**, keeping its order number, its
+  original holder and its date, with the reduction written into its note.
+
+### Who
+
+`canEditStockRecord` in `catalogue-access` — `isCataloguePriceOwner`, i.e. Admin and Payment Approver,
+the two whose edits already apply at once. The server refuses the four fields from anyone else on the
+same test, rather than dropping them. The grid moved one new row, and a deliberate mutation
+(`|| canManageItems`) was caught by it on the Warehouse cell before being reverted.
+
+### Rendered
+
+| | Name / Unit / On hand / Reserved | live preview |
+| --- | --- | --- |
+| Admin Ana | ✅ | ✅ |
+| Rey Gil (Payment Approver) | ✅ | ✅ |
+| Willy Ho (Warehouse) | — the old Edit | — |
+| Allan Ramos (Purchaser) | — the old Edit | — |
+| Michelle Cotura (Accounting) | no Edit | — |
+
+Admin on BELT B-50 (4 on hand, 2 reserved for AFBM00003128J): the preview went 2 / ₱840 / OK →
+typing 7 and 1 → 6 / ₱1,470 / OK → typing 1 and 3 → **−2, red, Low, "More reserved than on hand."**
+Saved at 7 / 1 with a new name and unit, the database holds: `ADJUSTMENT +3 → 7 · Set on the item
+list (Edit) · Admin Ana`; the order's reservation **2 → 1 in place**, still Willy Ho's, still for
+AFBM00003128J; and an APPLIED action reading *"name → BELT B-50 V-BELT, unit pc → pcs, on hand 4 → 7,
+reserved 2 → 1"*.
+
+Payment Approver on GI SHEET 24GA, Reserved 0 → 3: one `Inventory correction` reservation of 3 under
+Rey Gil, On hand untouched and **no** movement written, because it wasn't changed.
+
+Not exercised: a forged request from a non-owner carrying the four fields. The server refuses it on the
+same predicate the grid asserts, but no browser path can send it, so it was not driven end to end.
+
 ## 2026-10-07 · The Purchaser's cancel reaches the purchase order
 
 The owner, looking at a PO on the Approved tab: *"Allow cancellation of PO in approved tab or after
