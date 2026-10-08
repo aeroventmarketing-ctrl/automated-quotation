@@ -69,6 +69,10 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
   canProposeEdit: only("admin", "warehouse", "purchaser", "paymentApprover"),
   // Setting a price outright belongs to the price owner.
   canEditPrices: only("admin", "paymentApprover"),
+  // Name / unit / on hand / reserved, typed straight in — the owner's "admin and
+  // payment approver only". NOT the Warehouseman, who manages the stock but
+  // proposes; NOT the Purchaser, who edits by request.
+  canEditStockRecord: only("admin", "paymentApprover"),
   // A spreadsheet is the catalogue in bulk, in or out.
   canTransferFiles: only("admin", "paymentApprover"),
   // Goods receipt on deliveries keeps the Purchaser on the scan box.

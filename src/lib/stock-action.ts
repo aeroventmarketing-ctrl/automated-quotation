@@ -32,6 +32,17 @@ export interface EditPayload {
   reorderLevel: number;
   unitCost: number;
   sellPrice: number;
+  /*
+   * The full record — the price owner (Admin / Payment Approver) only; the
+   * server refuses these from anyone else. Absent means "leave as it is", so an
+   * older pending edit without them still applies exactly as it did.
+   */
+  name?: string;
+  unit?: string;
+  /** New on-hand quantity — applied as a recorded "Set to" movement, never a bare write. */
+  quantity?: number;
+  /** New reserved total — applied as a correction entry; see `planReservedCorrection`. */
+  reserved?: number;
 }
 export interface AdjustPayload {
   kind: "RECEIPT" | "ISSUE" | "ADJUSTMENT";

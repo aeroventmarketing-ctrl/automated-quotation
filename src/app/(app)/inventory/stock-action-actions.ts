@@ -20,6 +20,7 @@ import {
   type ReservePayload,
   type TransferPayload,
 } from "@/lib/stock-action";
+import { planReservedCorrection, CORRECTION_REF } from "@/lib/reserved-correction";
 
 /**
  * Result of a stock-action server action. We RETURN the reason on failure rather
@@ -65,11 +66,19 @@ async function viewerParties(): Promise<{ user: NonNullable<Awaited<ReturnType<t
   };
 }
 
-function summaryFor(kind: StockActionKind, item: { name: string; unit: string; quantity: unknown }, payload: unknown): string {
+function summaryFor(kind: StockActionKind, item: { name: string; unit: string; quantity: unknown }, payload: unknown, reservedNow?: number): string {
   const on = Number(item.quantity as number);
   if (kind === "EDIT") {
     const d = payload as EditPayload;
-    return `Edit ${item.name}: location ${d.location || "—"}, reorder ${d.reorderLevel}, unit cost ${peso(d.unitCost)}, sell ${peso(d.sellPrice)}, category ${d.category || "—"}`;
+    // The full-record fields only appear when they actually change, so an
+    // ordinary price edit reads exactly as it always has.
+    const extra = [
+      d.name && d.name !== item.name ? `name → ${d.name}` : null,
+      d.unit && d.unit !== item.unit ? `unit ${item.unit} → ${d.unit}` : null,
+      d.quantity !== undefined && d.quantity !== on ? `on hand ${on} → ${d.quantity}` : null,
+      d.reserved !== undefined && reservedNow !== undefined && d.reserved !== reservedNow ? `reserved ${reservedNow} → ${d.reserved}` : null,
+    ].filter(Boolean);
+    return `Edit ${item.name}: ${extra.length ? `${extra.join(", ")}, ` : ""}location ${d.location || "—"}, reorder ${d.reorderLevel}, unit cost ${peso(d.unitCost)}, sell ${peso(d.sellPrice)}, category ${d.category || "—"}`;
   }
   if (kind === "ADJUST") {
     const d = payload as AdjustPayload;
@@ -104,13 +113,42 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
   let payload: unknown;
   if (kind === "EDIT") {
     const d = payloadRaw as EditPayload;
-    payload = {
+    const edit: EditPayload = {
       category: (d.category ?? "").trim() || null,
       location: (d.location ?? "").trim() || null,
       reorderLevel: Number(d.reorderLevel) || 0,
       unitCost: Number(d.unitCost) || 0,
       sellPrice: Number(d.sellPrice) || 0,
-    } satisfies EditPayload;
+    };
+    // The full record: name, unit, on hand, reserved. The owner's "admin and
+    // payment approver only" — the same test `canEditStockRecord` draws the
+    // fields from, so a request crafted by anyone else is refused here rather
+    // than quietly dropped.
+    const full = d.name !== undefined || d.unit !== undefined || d.quantity !== undefined || d.reserved !== undefined;
+    if (full && !p.priceOwner) {
+      throw new Error("Only an Admin or the Payment Approver can change the name, unit, on hand or reserved.");
+    }
+    if (d.name !== undefined) {
+      const name = String(d.name).trim();
+      if (!name) throw new Error("The item needs a name.");
+      edit.name = name;
+    }
+    if (d.unit !== undefined) {
+      const unit = String(d.unit).trim();
+      if (!unit) throw new Error("The item needs a unit.");
+      edit.unit = unit;
+    }
+    if (d.quantity !== undefined) {
+      const q = Number(d.quantity);
+      if (!Number.isFinite(q) || q < 0) throw new Error("On hand can't be negative.");
+      edit.quantity = round3(q);
+    }
+    if (d.reserved !== undefined) {
+      const r = Number(d.reserved);
+      if (!Number.isFinite(r) || r < 0) throw new Error("Reserved can't be negative.");
+      edit.reserved = round3(r);
+    }
+    payload = edit;
   } else if (kind === "ADJUST") {
     const d = payloadRaw as AdjustPayload;
     if (!["RECEIPT", "ISSUE", "ADJUSTMENT"].includes(d.kind)) throw new Error("Invalid adjustment type.");
@@ -150,7 +188,13 @@ async function doProposeStockAction(kind: StockActionKind, stockItemId: string, 
   // Only a request raised by the price owner applies on the spot — they are the
   // final approver, so there is nobody left to wait for.
   const applyNow = stockActionComplete(proposedRole, warehouseAt, purchaserAt, approverAt);
-  const sum = summaryFor(kind, item, payload);
+  // The reserved total as it stands, so the history can say "reserved 3 → 1".
+  let reservedNow: number | undefined;
+  if (kind === "EDIT" && (payload as EditPayload).reserved !== undefined) {
+    const agg = await prisma.stockReservation.aggregate({ where: { stockItemId, active: true }, _sum: { qty: true } });
+    reservedNow = round3(Number(agg._sum.qty ?? 0));
+  }
+  const sum = summaryFor(kind, item, payload, reservedNow);
   await prisma.$transaction(async (tx) => {
     const created = await tx.stockAction.create({
       data: {
@@ -268,8 +312,59 @@ async function applyAction(tx: Prisma.TransactionClient, a: { kind: StockActionK
     const d = a.payload as EditPayload;
     await tx.stockItem.update({
       where: { id: item.id },
-      data: { category: d.category, location: d.location, reorderLevel: d.reorderLevel, unitCost: d.unitCost, sellPrice: d.sellPrice },
+      data: {
+        category: d.category, location: d.location, reorderLevel: d.reorderLevel, unitCost: d.unitCost, sellPrice: d.sellPrice,
+        ...(d.name ? { name: d.name } : {}),
+        ...(d.unit ? { unit: d.unit } : {}),
+      },
     });
+
+    // On hand, typed straight in. Still a MOVEMENT — "Set to", with who and
+    // why — so the item's history explains the new figure instead of the
+    // quantity simply being different tomorrow.
+    if (d.quantity !== undefined) {
+      const current = Number(item.quantity);
+      const delta = round3(d.quantity - current);
+      if (delta !== 0) {
+        await tx.stockItem.update({ where: { id: item.id }, data: { quantity: d.quantity } });
+        await tx.stockMovement.create({
+          data: { stockItemId: item.id, kind: "ADJUSTMENT", delta, balanceAfter: d.quantity, reason: "Set on the item list (Edit)", byName },
+        });
+      }
+    }
+
+    // Reserved, typed straight in: a correction entry, never an overwrite —
+    // the reservations are what tie stock to the orders holding it.
+    if (d.reserved !== undefined) {
+      const active = await tx.stockReservation.findMany({
+        where: { stockItemId: item.id, active: true },
+        select: { id: true, qty: true, forRef: true, createdAt: true, note: true },
+      });
+      const plan = planReservedCorrection(
+        active.map((r) => ({ id: r.id, qty: Number(r.qty), forRef: r.forRef, createdAt: r.createdAt })),
+        d.reserved,
+      );
+      const now = new Date();
+      if (plan.add > 0) {
+        await tx.stockReservation.create({
+          data: { stockItemId: item.id, qty: plan.add, forRef: CORRECTION_REF, note: "Reserved figure set on the item list (Edit)", byName },
+        });
+      }
+      if (plan.release.length) {
+        await tx.stockReservation.updateMany({
+          where: { id: { in: plan.release } },
+          data: { active: false, releasedByName: byName, releasedAt: now },
+        });
+      }
+      if (plan.reduce) {
+        const r = active.find((x) => x.id === plan.reduce!.id);
+        const stamp = `Reduced ${plan.reduce.from} → ${plan.reduce.to} by ${byName} (inventory correction, ${now.toISOString().slice(0, 10)})`;
+        await tx.stockReservation.update({
+          where: { id: plan.reduce.id },
+          data: { qty: plan.reduce.to, note: r?.note ? `${r.note} · ${stamp}` : stamp },
+        });
+      }
+    }
     return;
   }
 

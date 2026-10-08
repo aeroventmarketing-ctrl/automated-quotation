@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight, BellRing } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { stockAvailable, stockStatus, stockValue } from "@/lib/stock-figures";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
@@ -97,7 +98,32 @@ function LocationField({ value, onChange, locations, className }: { value: strin
   );
 }
 
-function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, showSellPrice = true, canEditPrices, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; chainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
+/**
+ * Available, Value and Status as they WILL read once this edit is saved —
+ * computed from the boxes above as they are typed. The owner chose to have these
+ * three recalculate rather than be typed, so this is where they can be seen
+ * changing. Same functions as the list itself (lib/stock-figures), so the
+ * preview is the row that appears after Save.
+ */
+function LivePreview({ onHand, reserved, unitCost, reorder, unit, showPrices }: { onHand: string; reserved: string; unitCost: string; reorder: string; unit: string; showPrices: boolean }) {
+  const q = Number(onHand) || 0;
+  const r = Number(reserved) || 0;
+  const available = stockAvailable(q, r);
+  const status = stockStatus(q, Number(reorder) || 0);
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-1 text-xs">
+      <span className="text-muted-foreground">After saving:</span>
+      <span>Available <b className={`tabular-nums ${available < 0 ? "text-destructive" : ""}`}>{fmt(available)}</b>{unit.trim() ? ` ${unit.trim()}` : ""}</span>
+      {showPrices && <span>Value <b className="tabular-nums">{peso(stockValue(q, Number(unitCost) || 0))}</b></span>}
+      <span className="inline-flex items-center gap-1">Status
+        {status === "out" ? <Badge variant="destructive">Out</Badge> : status === "low" ? <Badge variant="warning">Low</Badge> : <Badge variant="success">OK</Badge>}
+      </span>
+      {available < 0 && <span className="text-destructive">More reserved than on hand.</span>}
+    </div>
+  );
+}
+
+function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, showSellPrice = true, canEditPrices, canEditStockRecord = false, locations, scanTarget, scanNonce, pending = [], selectable = false, selected = false, onToggle }: { item: Item; canManage: boolean; canProposeEdit: boolean; chainNote: string; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; canEditStockRecord?: boolean; locations: string[]; scanTarget: string | null; scanNonce: number; pending?: StockActionView[]; selectable?: boolean; selected?: boolean; onToggle?: () => void }) {
   const router = useRouter();
   // Two shapes of action cell:
   //   canManage — the Warehouse / admin: Label, Reserve, Edit, Adjust.
@@ -140,6 +166,11 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
   const [reorder, setReorder] = useState(String(item.reorderLevel));
   const [unitCost, setUnitCost] = useState(String(item.unitCost));
   const [sellPrice, setSellPrice] = useState(String(item.sellPrice));
+  // The full record — Admin / Payment Approver only (`canEditStockRecord`).
+  const [name, setName] = useState(item.name);
+  const [unit, setUnit] = useState(item.unit);
+  const [onHand, setOnHand] = useState(String(item.quantity));
+  const [reservedIn, setReservedIn] = useState(String(item.reserved));
   // Reserve fields
   const [resvQty, setResvQty] = useState("");
   const [resvRef, setResvRef] = useState("");
@@ -175,7 +206,27 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
     run(() => unwrap(proposeStockAction("ADJUST", item.id, { kind, qty: n, reason })).then(() => { setQty(""); setReason(""); }));
   }
   function saveMeta() {
-    run(() => unwrap(proposeStockAction("EDIT", item.id, { category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 })));
+    const base = { category, location, reorderLevel: Number(reorder) || 0, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 };
+    if (!canEditStockRecord) {
+      run(() => unwrap(proposeStockAction("EDIT", item.id, base)));
+      return;
+    }
+    if (!name.trim()) { setErr("The item needs a name."); return; }
+    if (!unit.trim()) { setErr("The item needs a unit."); return; }
+    const q = Number(onHand);
+    const r = Number(reservedIn);
+    if (!Number.isFinite(q) || q < 0) { setErr("On hand can't be negative."); return; }
+    if (!Number.isFinite(r) || r < 0) { setErr("Reserved can't be negative."); return; }
+    // On hand and Reserved are sent ONLY when they were changed here. The page
+    // may be minutes old; re-sending the figure it loaded would quietly undo a
+    // receipt or an issue the warehouse made in the meantime.
+    run(() => unwrap(proposeStockAction("EDIT", item.id, {
+      ...base,
+      name: name.trim(),
+      unit: unit.trim(),
+      ...(q !== item.quantity ? { quantity: q } : {}),
+      ...(r !== item.reserved ? { reserved: r } : {}),
+    })));
   }
   function savePrices() {
     run(() => updateStockItemPrices({ stockItemId: item.id, unitCost: Number(unitCost) || 0, sellPrice: Number(sellPrice) || 0 }));
@@ -296,6 +347,14 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
         <TableRow>
           <TableCell colSpan={colSpan} className="bg-muted/30">
             <div className="flex flex-wrap items-end gap-2 py-1">
+              {canEditStockRecord && (
+                <>
+                  <label className="text-xs text-muted-foreground">Name<Input className="h-8 w-64" value={name} onChange={(e) => setName(e.target.value)} /></label>
+                  <label className="text-xs text-muted-foreground">Unit<Input className="h-8 w-20" value={unit} onChange={(e) => setUnit(e.target.value)} /></label>
+                  <label className="text-xs text-muted-foreground">On hand<Input className="h-8 w-24" type="number" step="any" min={0} value={onHand} onChange={(e) => setOnHand(e.target.value)} /></label>
+                  <label className="text-xs text-muted-foreground">Reserved<Input className="h-8 w-24" type="number" step="any" min={0} value={reservedIn} onChange={(e) => setReservedIn(e.target.value)} /></label>
+                </>
+              )}
               <label className="text-xs text-muted-foreground">Location<div><LocationField value={location} onChange={setLocation} locations={locations} /></div></label>
               {showPrices && <label className="text-xs text-muted-foreground">Unit cost (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={unitCost} onChange={(e) => setUnitCost(e.target.value)} /></label>}
               {showSell && <label className="text-xs text-muted-foreground">Sell price (₱)<Input className="h-8 w-28" type="number" step="any" min={0} value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} /></label>}
@@ -306,6 +365,7 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
               </Button>
               {err && <span className="text-xs text-destructive">{err}</span>}
             </div>
+            {canEditStockRecord && <LivePreview onHand={onHand} reserved={reservedIn} unitCost={unitCost} reorder={reorder} unit={unit} showPrices={showPrices} />}
             {/* An edit carries the money columns, so it runs the owner's approval
                 chain — and how long that chain is depends on who is standing here.
                 Said in the panel rather than only in the pending card, so nobody
@@ -434,7 +494,7 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
   );
 }
 
-export function InventoryManager({ items, canManage, canProposeEdit = canManage, chainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, pendingFirst = false, locations, showPrices, showSellPrice = true, canEditPrices, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; chainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; pendingFirst?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
+export function InventoryManager({ items, canManage, canProposeEdit = canManage, chainNote = "", admin = false, canDelete = admin, canScan = canManage, canCreate = true, canTransferFiles = false, pendingFirst = false, locations, showPrices, showSellPrice = true, canEditPrices, canEditStockRecord = false, pendingByItem = {} }: { items: Item[]; canManage: boolean; canProposeEdit?: boolean; chainNote?: string; admin?: boolean; canDelete?: boolean; canScan?: boolean; canCreate?: boolean; canTransferFiles?: boolean; pendingFirst?: boolean; locations: string[]; showPrices: boolean; showSellPrice?: boolean; canEditPrices: boolean; canEditStockRecord?: boolean; pendingByItem?: Record<string, StockActionView[]> }) {
   const showSell = showPrices && showSellPrice;
   const router = useRouter();
   // Multi-select for bulk delete — admin only, matching the `removeStockItems`
@@ -910,7 +970,7 @@ export function InventoryManager({ items, canManage, canProposeEdit = canManage,
                       </TableCell>
                     </TableRow>
                   )}
-                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} chainNote={chainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
+                  {g.rows.map((it) => <StockRow key={it.id} item={it} canManage={canManage} canProposeEdit={canProposeEdit} chainNote={chainNote} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={canEditPrices} canEditStockRecord={canEditStockRecord} locations={locations} scanTarget={scanTarget} scanNonce={scanNonce} pending={pendingByItem[it.id] ?? []} selectable={selectable} selected={selected.has(it.id)} onToggle={() => toggleOne(it.id)} />)}
                 </Fragment>
               ))}
             </TableBody>

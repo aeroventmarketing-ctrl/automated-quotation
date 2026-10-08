@@ -42,6 +42,11 @@ export interface InventoryAccess {
   canProposeEdit: boolean;
   /** Per-row Set price (a price owner who is not a stock manager). */
   canEditPrices: boolean;
+  /**
+   * The full record in the Edit panel — name, unit, on hand and reserved, on top
+   * of the price / location / reorder fields everyone with Edit already gets.
+   */
+  canEditStockRecord: boolean;
   /** Import from file + Download Excel / CSV. */
   canTransferFiles: boolean;
   /** The scan → jump / receive / issue box. */
@@ -109,6 +114,15 @@ export function inventoryAccess(user: User | null | undefined, roles: WorkflowRo
     // people who hold the stock.
     canProposeEdit: !isSales && (canManageItems || has("purchaser") || priceOwner),
     canEditPrices: canEditPrices(user, roles),
+    // Owner's instruction: *"Add an option to change name, unit, on hand,
+    // reserved, available, unit cost, sell price, value and status in inventory
+    // tab for admin and payment approver only."* The price owner, exactly — the
+    // two whose edit applies at once, being the final approver. Anyone else who
+    // could type a new on-hand figure would be bypassing the very chain they
+    // otherwise have to run, so this is not offered down the line as a proposal.
+    // `stock-action-actions` refuses these fields from anyone else on the same
+    // test (`isCataloguePriceOwner`).
+    canEditStockRecord: priceOwner,
     canTransferFiles: priceOwner,
     // The Purchaser keeps the scan box for goods receipt on deliveries. This does
     // NOT grant the per-row manage actions.
