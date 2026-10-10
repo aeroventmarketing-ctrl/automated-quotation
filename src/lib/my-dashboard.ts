@@ -13,7 +13,8 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor } from "@/lib/order-workflow";
+import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
+import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
 import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -190,6 +191,17 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // roles for an Office request. Same definition the server gate uses.
   const isMrfRequestor = (dept: Parameters<typeof isMrfRequestorFor>[0]) =>
     isMrfRequestorFor(dept, user.role, isAdmin(user), (r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+  // Account names, for routing an Office MRF's "Confirm materials received" to
+  // the person who raised it. Fetched only if such a task is actually met, and
+  // once: one column of a table measured in dozens of rows.
+  let accountNameCache: ReadonlySet<string> | null = null;
+  const accountNames = async (): Promise<ReadonlySet<string>> => {
+    if (!accountNameCache) {
+      const rows = await prisma.user.findMany({ select: { name: true } }).catch(() => [] as { name: string }[]);
+      accountNameCache = accountNameSet(rows.map((r) => r.name));
+    }
+    return accountNameCache;
+  };
   const holdsAnyRole = WORKFLOW_ROLE_KEYS.some((k) => userHasWorkflowRole(assignments, user.id, k as WorkflowRoleKey));
   const restricted = await isClientRestricted(user, assignments);
   const maskClient = (name: string | null | undefined): string | null => (restricted ? CLIENT_HIDDEN : name ?? null);
@@ -323,7 +335,16 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
         // The requesting department confirms receipt of the released materials.
-        if ((m.status === "issued" || m.status === "partial") && !m.confirmedAt && isMrfRequestor(m.dept)) {
+        // For an Office MRF that is the person who RAISED it (plus Admin) — not
+        // every one of the five Office seats; see lib/mrf-confirm-task.
+        if (
+          (m.status === "issued" || m.status === "partial") && !m.confirmedAt &&
+          showsConfirmReceiptTask(
+            { office: isOfficeDept(m.dept), raisedByName: m.raisedByName },
+            { name: user.name, admin: isAdmin(user), mayConfirm: isMrfRequestor(m.dept) },
+            await accountNames(),
+          )
+        ) {
           tasks.push({
             key: `mrf-confirm:${q.id}:${m.id}`, area: "order", areaLabel: AREA_LABEL.order,
             title: q.quoteNumber, action: `Confirm materials received · MRF #${m.formNo}`,

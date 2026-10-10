@@ -1,3 +1,53 @@
+## 2026-10-10 · Confirm what you asked for, not what your seat could
+
+The owner, on the Purchaser's dashboard: *"In my dashboard, show only the task related to each role
+except for admin role."* — over a list of *"Confirm materials received · MRF #0420 / #0351 / #0404 /
+#0436 / #0324"*.
+
+### Why the Purchaser had them
+
+Every one was an **Office** MRF. Office has no production head, so five seats count as its requestor —
+Admin, Sales, Engineer, Purchaser, Payment Approver (`isOfficeMrfRequestor`, an earlier owner ruling).
+The dashboard handed each of them **every** Office confirmation, whoever had actually raised the
+request. The Purchaser was being asked to confirm receipt of materials other people had ordered.
+
+Two leaks of this shape were found; the owner was asked about both:
+
+- **Office MRF confirmation** → *"Who raised it"*: only the raiser, plus Admin. **Changed.**
+- **Sales-owned steps** (Sales 2nd QC, POD approval…), which show to every Sales and Engineer user on
+  every order → *"Leave as is"*. **Unchanged.**
+
+### The change
+
+`lib/mrf-confirm-task` decides whose dashboard lists the task. It is **narrower than, never wider
+than** the server's rule: the viewer must still pass `isMrfRequestor`, and then, for an Office MRF, must
+be the person named in `raisedByName` (or Admin). Production-department MRFs are untouched — they
+already go to exactly one role, that department's head.
+
+It changes **who is told**, not **who may act**. `confirmMaterialReceipt` and the order page still
+accept any of the five Office seats (frozen Phase 3 gating, not touched), so a colleague can still
+confirm on someone's behalf — the Purchaser keeps *Office Request Received* on the order page.
+
+**The orphan guard.** An MRF records its raiser by name, stamped from the account name. If no account
+answers to that name any more — renamed, removed — narrowing would leave the task on Admin's list
+alone. So an unresolvable raiser falls back to every Office seat, as before. The account names are
+read once, and only when an unconfirmed Office MRF is actually met.
+
+### Rendered
+
+Two Office MRFs, both released and unconfirmed: #9001 raised by Sam Sales, #9002 by a name no account
+holds.
+
+| dashboard | #9001 (Sam Sales) | #9002 (orphan) |
+| --- | --- | --- |
+| Admin | shown | shown |
+| Sam Sales | **shown** | shown |
+| Purchaser | **hidden** | shown |
+| Payment Approver | **hidden** | shown |
+| Engineer | **hidden** | shown |
+
+And on the order page the Purchaser still has *Office Request Received* on #9001.
+
 ## 2026-10-08 · The whole row, editable — for the two who approve it
 
 The owner, on the Inventory edit panel: *"Add an option to change name, unit, on hand, reserved,
