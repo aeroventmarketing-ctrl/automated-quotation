@@ -1,3 +1,115 @@
+## 2026-10-11 · The Purchaser Plan — Sales joins, and the two columns split
+
+The owner: *"Add sales role who can see the Purchaser Plan tile, sales role can add and edit client
+due date. Purchaser role cannot add and edit the client due date. Engineer role, admin role and
+payment approver can edit and add client due date."*
+
+One edit flag became two, `canEditType` and `canEditClientDue`, in the same single rule
+(`purchaser-plan-access`) the tile, page and server actions all read:
+
+| | sees | Type | Client due date |
+| --- | --- | --- | --- |
+| Admin · Payment Approver · Engineer | ✓ | ✓ | ✓ |
+| Purchaser | ✓ | ✓ | **—** |
+| Sales | **✓** | — | **✓** |
+| everyone else | — | — | — |
+
+Sales was granted the Client due date and nothing else, so Type stays with the four who had it.
+Holding two seats gives the union. The server refuses each field on its own flag, so the read-only
+cells are enforced, not just hidden.
+
+**A correction made on the way.** I first said a plain Sales user is redirected away from My
+Dashboard and would never see the tile. The comment I'd read says so, but the code it sits above
+doesn't: `hasRole` includes the SALES and ENGINEER account roles. The tile reaches them, and the
+render below shows it.
+
+Rendered: Admin, Payment Approver and Engineer can edit both columns. The Purchaser sees the tile with
+Type editable and Client due read-only; Sales sees the tile with Type read-only and Client due
+editable. Warehouse and Accounting get no tile and are refused the page. Sam Sales set #0450's Client
+due to Nov 5, and the Purchaser saw it read-only with the whole trail underneath: Sam Sales, Admin Ana,
+Elena Cruz. A deliberate grant of the Client due date to the Purchaser failed the grid before it was
+reverted.
+
+## 2026-10-11 · The Purchaser Plan — every editor, not just the last
+
+The owner, on the "who last set it" stamp: *"Record every person who made the edit for tracking
+purposes."*
+
+The stamp answered *who touched this most recently*. It could not answer *who else did*, and each new
+edit overwrote the last person's name — exactly the information you want when a due date turns out to
+be wrong.
+
+So the plan now keeps **`PurchaserPlanEdit`** (added to migration 0060, which hadn't been applied yet;
+the file stays safe to re-run): one row per change — field, from, to, who (id and name), when.
+**Append-only**: nothing ever updates or deletes a row, so the trail can't be rewritten. The change
+and its trail row are written in **one transaction**, so there is no state where a value changed and
+the trail doesn't say who did it. Re-saving a value that's already there writes nothing — a trail full
+of "Oct 24 → Oct 24" would bury the changes that matter.
+
+On the page, each field keeps its latest-editor stamp and gains **History (N)**, which opens every
+change newest first: *"Oct 24, 2026 → Oct 30, 2026 · Admin Ana · Oct 11, 11:53 AM"*.
+
+Rendered: four people changed MRF #0450 in turn — Allan Ramos (Type → Purchase to supplier), Rey Gil
+(→ For fabrication), Elena Cruz (Client due → Oct 24), Admin Ana (→ Oct 30) — then the Purchaser
+re-saved "For fabrication" unchanged. The table holds exactly those four rows, with their from/to, and
+nothing for the re-save; History (2) under each field listed all of them, newest first.
+
+## 2026-10-11 · The Purchaser Plan
+
+The owner uploaded *PURCHASER TABLE updated.xlsx* and asked for it as a live table behind a dashboard
+tile, for the Purchaser, Engineer, Admin and Payment Approver: Type · Order no. · Ordered date ·
+Account holder · MRF no. · MRF status · Purchase due date · Client due date.
+
+### What the workbook settled before anything was asked
+
+Two tabs. **"Test 1"** is the requested layout — eight columns. **"Copy 1"** carries sample rows, and
+they answer the biggest question on their own: it is **one row per MRF** (order 3747A appears four
+times, for MRFs 0450–0453). Copy 1 also has Company name; Test 1 drops it — consistent with the
+Purchaser already seeing "Client hidden" — so the plan follows Test 1 and shows no client.
+
+### What the owner ruled
+
+- **Rows**: open MRFs only — completed and cancelled ones drop off.
+- **Ordered date**: the first payment (a terms client's PO date) — `saleRecognitionDate`, the date the
+  system already dates a sale by.
+- **MRF status**: the **Purchasing tab name** (Pending / Approved / Budgeted / Completed / Rejected /
+  Cancelled), computed with the workspace's own `statusBucket` + `isBudgetCommitted`, so a
+  Plant-Manager-approved MRF reads Pending here exactly as it does in Purchasing. An MRF that never
+  reached Purchasing says where it is: Requested / Issued from stock / Partly issued. A split
+  requisition reports the request furthest behind.
+- **Who edits**: all four roles, and **show who edited and when** — every Type and Client due date
+  carries its editor and timestamp underneath.
+
+Decided without asking: **Account holder** is the quotation's prepared-by salesperson, the person
+commissions credit; **Purchase due date** is the due date set in Purchasing ("Add one"), the earliest
+if an MRF was split; **Order no.** opens the MRF itself (`/orders/{id}/mrf/{mrfId}`); default order is
+Purchase due date, soonest first — the column the owner's sheet carries its sort arrow on.
+
+### Built
+
+- `PurchaserPlanEntry` (migration **0060**, RLS block included): only the two human columns, each with
+  by/at. Everything else is read live, never copied, so it cannot go stale.
+- `lib/purchaser-plan` (pure rules, 20 tests) · `lib/purchaser-plan-access` (one gate for tile, page and
+  actions; grid test across 11 seats, which caught a deliberate widening to the Warehouse) ·
+  `lib/purchaser-plan-data` (reuses My Dashboard's narrowed, slimmed order query — no new egress
+  fingerprint).
+- The tile's number is counted in the loop My Dashboard already runs, so it costs no read.
+- The page reads on click, so the plan's data never rides along on every dashboard load.
+
+### Rendered
+
+| | tile | page |
+| --- | --- | --- |
+| Purchaser · Engineer · Admin · Payment Approver | "3 · Purchaser Plan" | 3 rows |
+| Sales · Warehouse · Accounting | none | refused |
+
+Before the migration: rows shown, with a banner naming 0060 — nothing crashes. After it: the Purchaser
+set MRF #0450 to *For fabrication* and Client due *Oct 24, 2026*; both read "Allan Ramos · Oct 11,
+11:40 AM" and survived a reload. #0453 (Budgeted, due Oct 8) sorts above #0450 (Approved, due Oct 13);
+#0451 (Requested, no due date) sits last; completed #0452 is absent. The Order no. link opened the MRF
+for the Purchaser, Engineer and Payment Approver. The table was measured to fit its card with no
+horizontal scroll.
+
 ## 2026-10-10 · Confirm what you asked for, not what your seat could
 
 The owner, on the Purchaser's dashboard: *"In my dashboard, show only the task related to each role

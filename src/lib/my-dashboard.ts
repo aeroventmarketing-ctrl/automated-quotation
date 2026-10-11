@@ -15,6 +15,8 @@ import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
 import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
+import { isPlanOpenMrf } from "@/lib/purchaser-plan";
+import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
 import { getAlertGoLive, alertPasses } from "@/lib/alert-golive";
@@ -119,6 +121,8 @@ export interface MyDashboard {
    * cap was silent, which is why it took a person counting rows to find it.
    */
   materialsTotal: number;
+  /** The Purchaser Plan tile — null for anyone it isn't for. */
+  purchaserPlan: { openMrfs: number } | null;
   // Supplier-return lifecycle — shown to Admin, Purchaser, Warehouse, Plant
   // Manager and Logistics.
   returnsFeed: ReturnNote[];
@@ -218,6 +222,10 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // Seen in full by the materials-handling roles and by every role that can
   // request an MRF for any department: Admin, Warehouse, Purchaser and the Plant
   // Manager. Individual department heads additionally see their own dept's MRFs.
+  // The Purchaser Plan tile: its count is the open MRFs on the paid orders this
+  // loop already walks, so the tile costs no read of its own.
+  const seesPurchaserPlan = purchaserPlanAccess(user, assignments).canView;
+  let planOpenMrfs = 0;
   const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager") || user.role === "SALES" || user.role === "ENGINEER";
   // Linked purchase-request status per MRF — so a "purchasing" MRF can say
   // whether its item has been received into stock yet.
@@ -316,6 +324,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
       const wf = readOrderWorkflow(q.classification);
+      if (seesPurchaserPlan) planOpenMrfs += wf.materialRequests.filter((m) => isPlanOpenMrf(m.status)).length;
       // The order's creation instant — a go-live gate applied to every pending
       // action below, so an order created before launch never demands action even
       // if a later stage stamp (during testing) made its `since` post-launch.
@@ -953,6 +962,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     byArea,
     materialsFeed: visibleFeed.slice(0, MATERIALS_FEED_ROWS),
     materialsTotal: visibleFeed.length,
+    purchaserPlan: seesPurchaserPlan ? { openMrfs: planOpenMrfs } : null,
     returnsFeed: visibleReturns.slice(0, RETURNS_FEED_ROWS),
     poSummary,
     commissions,
