@@ -233,13 +233,17 @@ export function PurchaserPlanTable({
           <History row={r} field="type" />
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">
-          <Link href={r.href} className="font-mono text-xs font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
+          <Link href={r.orderHref} className="font-mono text-xs font-semibold text-primary hover:underline" title={`Open order ${r.orderNo}`}>
             {r.orderNo}
           </Link>
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.orderedDate) ?? <span className="text-muted-foreground">—</span>}</td>
         <td className="px-2.5 py-2">{r.accountHolder}</td>
-        <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">#{r.mrfNo}</td>
+        <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
+          <Link href={r.mrfHref} className="font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
+            #{r.mrfNo}
+          </Link>
+        </td>
         <td className="px-2.5 py-2"><Badge variant={STATUS_VARIANT[r.mrfStatus] ?? "secondary"} className="max-w-[11rem] whitespace-normal text-left font-normal leading-tight">{r.mrfStatus}</Badge></td>
         <td className="px-2.5 py-2">
           {r.receivedOn ? (
