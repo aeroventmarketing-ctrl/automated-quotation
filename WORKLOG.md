@@ -1,3 +1,23 @@
+## 2026-10-11 · Purchase Plan: the ten coming due, then "Show N more"
+
+The owner: *"show the 10 soon to due rows with show more button at the bottom same as"* the Rejected /
+Cancelled box.
+
+The main table now shows **ten rows, then "Show N more"** (and "Show less" once open) — the same word
+and the same place as the box below it. The cap counts rows, not groups: with a grouping on, the first
+ten rows are kept in their groups and a group past the tenth row waits for the button. Search and sort
+apply first; the button counts what they left.
+
+Making the first ten the *soon to due* ones needed one rule in the sort. Sorting by Purchase due date
+used to put a row whose purchase was **already received** in date order with everything else — and a
+received row usually has the oldest date, so it took the top slots as if it were most overdue. Now the
+due-date sort ranks **still owed** first, then **received**, then **no due date**, in both directions;
+within each class the date order is unchanged.
+
+Rendered as Purchaser with 14 open MRFs (3 received, 10 owed, 1 with no date): "14 open MRFs", rows
+Sep 9 (overdue 32 days) → Oct 5 → Oct 12 → … → Nov 15, then "Show 4 more"; clicked → 14 rows, the
+no-date MRF last; "Show less" → 10.
+
 ## 2026-10-11 · MRF no. lands on the MRF's card, not its printable form
 
 The owner, after clicking an MRF no. on the Purchase Plan and getting the printable "Consumables, Tools

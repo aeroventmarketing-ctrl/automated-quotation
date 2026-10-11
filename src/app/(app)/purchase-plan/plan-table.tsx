@@ -77,6 +77,9 @@ const LATE_CLASS = "border-slate-300 bg-slate-100 text-slate-700 dark:border-sla
 const TONE_NAME: Record<DueTone, string> = { overdue: "Red", due3: "Amber", due7: "Yellow", ontime: "Green" };
 const TONES: DueTone[] = ["overdue", "due3", "due7", "ontime"];
 
+/** Rows shown before "Show N more" — the same ten as the Rejected / Cancelled box. */
+const FIRST_ROWS = 10;
+
 /** Per-viewer convenience: the last sort / group chosen, kept in this browser only. */
 const VIEW_KEY = "purchase-plan:view";
 type View = { sortKey: PlanSortKey; dir: SortDir; groupKey: PlanGroupKey };
@@ -167,6 +170,25 @@ export function PurchaserPlanTable({
       : rows;
   }, [rows, query]);
   const groups = useMemo(() => groupPlan(filtered, view.groupKey, view.sortKey, view.dir), [filtered, view]);
+
+  // Ten rows, then "Show N more" — the owner: "show the 10 soon to due rows with
+  // show more button at the bottom". The first ten in whatever order is chosen
+  // (by default the soonest still-owed purchases); with grouping on, it is the
+  // first ten rows across the groups, under their own headings.
+  const [expanded, setExpanded] = useState(false);
+  const hiddenCount = Math.max(0, filtered.length - FIRST_ROWS);
+  const shownGroups = useMemo(() => {
+    if (expanded || hiddenCount === 0) return groups;
+    let left = FIRST_ROWS;
+    const out: typeof groups = [];
+    for (const g of groups) {
+      if (left <= 0) break;
+      const rs = g.rows.slice(0, left);
+      out.push({ ...g, rows: rs });
+      left -= rs.length;
+    }
+    return out;
+  }, [groups, expanded, hiddenCount]);
 
   function patch(key: string, fields: Partial<PurchaserPlanRow>) {
     setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...fields } : r)));
@@ -370,7 +392,7 @@ export function PurchaserPlanTable({
                   {rows.length === 0 ? "No open MRFs on paid orders." : "Nothing matches that search."}
                 </td></tr>
               )}
-              {groups.map((g) => (
+              {shownGroups.map((g) => (
                 <Fragment key={g.key}>
                   {view.groupKey !== "none" && (
                     <tr className="bg-muted/40">
@@ -385,6 +407,11 @@ export function PurchaserPlanTable({
             </tbody>
           </table>
         </div>
+        {hiddenCount > 0 && (
+          <button type="button" onClick={() => setExpanded((v) => !v)} className="text-xs font-semibold text-primary hover:underline" aria-expanded={expanded}>
+            {expanded ? "Show less" : `Show ${hiddenCount} more`}
+          </button>
+        )}
       </CardContent>
     </Card>
   );
