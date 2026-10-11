@@ -24,6 +24,7 @@ import {
   isPlanType,
   planMrfStatus,
   earliestPurchaseDue,
+  receivedOn,
   manilaDay,
   sortPlanRows,
   type PlanPr,
@@ -48,7 +49,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     slimClassificationByOrder(),
     prisma.purchaseRequest.findMany({
       where: { mrfId: { not: null } },
-      select: { mrfId: true, status: true, kind: true, chainLog: true, purchaseDueAt: true },
+      select: { mrfId: true, status: true, kind: true, chainLog: true, purchaseDueAt: true, receivedAt: true },
     }),
     prisma.purchaserPlanEntry.findMany().catch(() => {
       tableMissing = true;
@@ -103,6 +104,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         mrfNo: m.formNo,
         mrfStatus: planMrfStatus(m.status, mine),
         purchaseDue: earliestPurchaseDue(mine),
+        receivedOn: receivedOn(mine),
         type: e && isPlanType(e.type) ? e.type : null,
         typeByName: e?.typeByName ?? null,
         typeAt: e?.typeAt ? e.typeAt.toISOString() : null,

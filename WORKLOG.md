@@ -1,3 +1,56 @@
+## 2026-10-11 · Judged at Receive & Add Stock, not at Item Bought
+
+The owner, on the entry below: *"Better reference for this is when warehouseman press the button
+Receive & Add to stock."*
+
+I had used **Item Bought** (`purchasedAt`), reading the schema's "when the purchase has to be made
+by" literally. The owner's reference is the one that matters on the floor: the purchase is done when
+it lands in stock, where the department can be served from it. So `receivedOn` now reads
+`receivedAt` — stamped by Receive & Add Stock, by the single and combined receive actions alike — and
+**only on a COMPLETED request**, so a receipt that was rolled back never counts. (An Office
+requisition linked to an order skips warehouse receiving and is stamped when it's checked, which is
+also when it completes.)
+
+The consequence worth stating: **bought but not yet received keeps counting down**, and goes red past
+its due date — it is still owed. Rendered: #0280, bought Oct 10 and not yet received, is back to red
+"Overdue by 2 days"; the three received rows read "Received Sep 7 · on time", "Received Sep 12 · 3
+days late" (grey) and "Received Sep 17 · on time". Still fits at 1500px and 1366px.
+
+## 2026-10-11 · "Completed" was the purchase, not the MRF
+
+The owner, over a Purchase Plan full of green **Completed** badges flagged *Overdue by 33 days*: *"how
+do we know or what is our basis for us to say that the MRF is completed?"*
+
+We didn't — and that was my labelling. Two different "completed"s:
+
+- an **MRF** is completed only when the requesting department presses *Request Received* with every
+  item released (`confirmMaterialReceipt`, orders/actions.ts) — and then it leaves the plan;
+- a **purchase request** is COMPLETED at the Warehouse's *Receive & Add Stock*, the last purchasing step.
+
+The plan showed the second under a column headed "MRF status", on rows that are on the plan precisely
+because the MRF is still open. So it said "done" about things that weren't, and then painted them red
+for a deadline that had already been met or missed.
+
+**Status.** When the purchase is complete, the column now says where the MRF actually is:
+*Received in stock · awaiting release* (Warehouse to release), *Partly released*, or *Released ·
+awaiting confirmation* (department to confirm). They sort and group after Budgeted, in that order.
+
+**Colour.** `purchaseDueAt` is documented as *when the purchase has to be made by*, so the event it
+is measured against is **Item Bought** (`purchasedAt`) — not arrival in stock, which is what I first
+offered the owner; the schema comment corrected me before any code was written. Once bought, the
+countdown stops: green *Bought Sep 7 · on time*, or a **grey** pill with *Bought Sep 12 · 3 days late*
+in red text. Grey, not red: red means "act now", and there is nothing left to act on. A split MRF counts
+as bought when its last live request is.
+
+Owner's choice: the rows **stay on the plan** — they are still open work, just not purchasing work.
+
+**Rendered** with five rows mirroring the screenshot: #0262 received, not released → "Received in stock ·
+awaiting release", green "Bought Sep 7 · on time"; #0272 released, unconfirmed, bought 3 days after due
+→ "Released · awaiting confirmation", grey "3 days late"; #0276 partly released, bought on the due day →
+green; #0280 bought a day late but not yet received → "Budgeted", grey "1 day late"; #0284 not bought →
+still red "Overdue by 2 days". The longer labels first pushed Client due date off the card; they now
+wrap, and all eight columns fit at 1500px and 1366px — checked in the picture as well as the measure.
+
 ## 2026-10-11 · Purchase Plan: renamed, sortable, groupable, and coloured by due date
 
 The owner: *"1. rename purchaser plan to purchase plan · 2. Add an option to sort, group and arrange

@@ -63,6 +63,13 @@ export interface PlanPr {
   chainLog?: unknown;
   /** The due date set in Purchasing. */
   purchaseDueAt?: Date | string | null;
+  /**
+   * Stamped when the Warehouseman presses **Receive & Add Stock** — the step
+   * that completes the request. (An Office requisition linked to an order skips
+   * warehouse receiving — its goods go straight to the client — and is stamped
+   * when it is checked instead, which is also when it completes.)
+   */
+  receivedAt?: Date | string | null;
 }
 
 const TAB_LABEL = {
@@ -104,6 +111,11 @@ export function planMrfStatus(mrfStatus: MaterialRequestStatus | string, prs: re
   const pool = live.length ? live : prs;
   if (pool.length) {
     const behind = [...pool].sort((a, b) => rank(a.status) - rank(b.status))[0];
+    // A purchase that is Completed has been received into stock — but the MRF it
+    // serves is still open, or it wouldn't be on the plan. Saying "Completed"
+    // here read as if the MRF were done (the owner: "how do we know … that the
+    // MRF is completed?"). Name where it actually is instead.
+    if (behind.status === "COMPLETED") return afterReceipt(mrfStatus);
     return purchasingTabName(behind);
   }
   switch (mrfStatus) {
@@ -114,6 +126,25 @@ export function planMrfStatus(mrfStatus: MaterialRequestStatus | string, prs: re
     default: return "—";
   }
 }
+/**
+ * The MRF's own stage once its purchase is in stock. An MRF is only COMPLETED
+ * when the requesting department presses "Request Received" with every item
+ * released — so between the goods arriving and that press there are three
+ * honest states:
+ *
+ *   purchasing → Received in stock · awaiting release   (Warehouse to release)
+ *   partial    → Partly released                         (more to release)
+ *   issued     → Released · awaiting confirmation        (department to confirm)
+ */
+export const RECEIVED_AWAITING_RELEASE = "Received in stock · awaiting release";
+export const PARTLY_RELEASED = "Partly released";
+export const RELEASED_AWAITING_CONFIRMATION = "Released · awaiting confirmation";
+function afterReceipt(mrfStatus: MaterialRequestStatus | string): string {
+  if (mrfStatus === "issued") return RELEASED_AWAITING_CONFIRMATION;
+  if (mrfStatus === "partial") return PARTLY_RELEASED;
+  return RECEIVED_AWAITING_RELEASE;
+}
+
 // Off-chain statuses (rejected / cancelled) sort last.
 const rank = (s: PRStatus) => {
   const i = prMainIndex(s);
@@ -135,6 +166,29 @@ export const manilaDay = (d: Date | string | null | undefined): string | null =>
 export function earliestPurchaseDue(prs: readonly PlanPr[]): string | null {
   const days = prs.map((p) => manilaDay(p.purchaseDueAt ?? null)).filter((d): d is string => !!d).sort();
   return days[0] ?? null;
+}
+
+/**
+ * The Manila day the MRF's purchase was **received into stock** — or null
+ * until every live request has been.
+ *
+ * The owner chose the reference: *"Better reference for this is when
+ * warehouseman press the button Receive & Add to stock."* That is the moment
+ * the purchase actually lands where the requesting department can be served
+ * from, so it is what the due date is judged against — not "Item Bought", which
+ * is what I had first used from the schema's wording.
+ *
+ * Only a request that is COMPLETED counts, so a receipt that was rolled back
+ * (the rollback clears `receivedAt`, and the status) never counts. A split MRF
+ * is received when its LAST live request is, so that is the date returned.
+ */
+export function receivedOn(prs: readonly PlanPr[]): string | null {
+  const live = prs.filter((p) => p.status !== "REJECTED" && p.status !== "CANCELLED");
+  if (live.length === 0) return null;
+  if (live.some((p) => p.status !== "COMPLETED")) return null;
+  const days = live.map((p) => manilaDay(p.receivedAt ?? null));
+  if (days.some((d) => !d)) return null;
+  return (days as string[]).sort().at(-1)!;
 }
 
 /** A Client due date as typed: a real calendar day, or nothing. */
@@ -160,6 +214,8 @@ export interface PurchaserPlanRow {
   mrfNo: string;
   mrfStatus: string;
   purchaseDue: string | null;
+  /** When the purchase was received into stock (all of it), or null until then. */
+  receivedOn: string | null;
   type: PlanTypeKey | null;
   typeByName: string | null;
   typeAt: string | null;
@@ -255,6 +311,28 @@ export function purchaseDueTone(dueYMD: string | null, todayYMD: string): DueTon
   return "ontime";
 }
 
+/**
+ * Once the purchase is RECEIVED INTO STOCK, the countdown no longer applies:
+ * there is nothing left to do by the due date. The owner saw "Overdue by 33
+ * days" in red on items already in stock — a false alarm. Instead the cell says
+ * how it went: received on or before the due date → on time (green); after it →
+ * late (a neutral grey, with the days said in words). Grey rather than red: red
+ * means "act now", and there is nothing left to act on.
+ *
+ * Until the Warehouse receives it, the countdown runs on — a purchase that has
+ * been bought but not yet received is still owed, and still goes red.
+ */
+export type DoneTone = "ontime" | "late";
+export function purchaseDoneTone(dueYMD: string | null, receivedYMD: string): DoneTone {
+  if (!dueYMD) return "ontime";
+  return daysUntil(dueYMD, receivedYMD) < 0 ? "late" : "ontime";
+}
+/** "on time", "2 days late" — the line under "Received Sep 8". */
+export function doneSummary(dueYMD: string | null, receivedYMD: string): string {
+  const late = dueYMD ? -daysUntil(dueYMD, receivedYMD) : 0;
+  return late > 0 ? `${late} day${late === 1 ? "" : "s"} late` : "on time";
+}
+
 export const DUE_TONE_LABEL: Record<DueTone, string> = {
   overdue: "Overdue",
   due3: "Due within 3 days",
@@ -307,7 +385,11 @@ export const PLAN_GROUP_OPTIONS: { key: PlanGroupKey; label: string }[] = [
  * means earliest stage first — not alphabetical, where Approved would come
  * before Requested.
  */
-const STATUS_ORDER = ["Requested", "Issued from stock", "Partly issued", "Purchasing", "Pending", "Approved", "Budgeted", "Completed", "Rejected", "Cancelled"];
+const STATUS_ORDER = [
+  "Requested", "Issued from stock", "Partly issued", "Purchasing", "Pending", "Approved", "Budgeted",
+  "Received in stock · awaiting release", "Partly released", "Released · awaiting confirmation",
+  "Completed", "Rejected", "Cancelled",
+];
 const statusRank = (s: string) => {
   const i = STATUS_ORDER.indexOf(s);
   return i < 0 ? STATUS_ORDER.length : i;
