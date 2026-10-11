@@ -107,7 +107,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
           mrfId: m.id,
           orderNo: q.quoteNumber,
           orderHref: `/orders/${q.id}`,
-          mrfHref: `/orders/${q.id}/mrf/${m.id}`,
+          mrfHref: `/orders/${q.id}#mrf-${m.id}`,
           orderedDate,
           accountHolder: q.preparedBy?.name ?? "—",
           mrfNo: m.formNo,
@@ -122,9 +122,10 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         mrfId: m.id,
         orderNo: q.quoteNumber,
         // The owner: Order no. "should be redirected to the workflow of the order
-        // number"; MRF no. "redirected to specific MRF".
+        // number"; MRF no. "redirected to specific MRF" — that MRF's card in the
+        // order's Phase 3 · Materials, not the printable form.
         orderHref: `/orders/${q.id}`,
-        mrfHref: `/orders/${q.id}/mrf/${m.id}`,
+        mrfHref: `/orders/${q.id}#mrf-${m.id}`,
         orderedDate,
         accountHolder: q.preparedBy?.name ?? "—",
         mrfNo: m.formNo,
