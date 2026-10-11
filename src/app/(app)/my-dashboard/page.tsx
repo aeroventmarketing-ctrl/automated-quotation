@@ -16,7 +16,7 @@ import { getFinanceMonitor } from "@/lib/finance-monitor";
 import { UnreconciledPaymentsCard, CashVouchersCard, FinanceStatsRow } from "@/components/finance-monitor-cards";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText } from "lucide-react";
+import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText, ClipboardCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport } from "../management/pnl-actions";
@@ -204,7 +204,7 @@ export default async function MyDashboardPage() {
   // `data.commissions` is in the condition, not just the row: a salesperson with
   // nothing pending has an empty `byArea`, and without this the whole row — and
   // with it their commissions tile — silently disappeared.
-  const ordersGrid = (data.byArea.length > 0 || manualReconCard || data.commissions) && (
+  const ordersGrid = (data.byArea.length > 0 || manualReconCard || data.commissions || data.purchaserPlan) && (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
       {data.byArea.map((a) => {
         const Icon = AREA_ICON[a.area];
@@ -222,6 +222,22 @@ export default async function MyDashboardPage() {
           </Link>
         );
       })}
+      {/* Purchaser Plan — the owner's PURCHASER TABLE, live. For the Purchaser,
+          Engineers, the Payment Approver and admins (lib/purchaser-plan-access).
+          The number is the open MRFs on paid orders — the plan's row count. */}
+      {data.purchaserPlan && (
+        <Link href="/purchaser-plan" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+          <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+            <CardContent className="flex items-center gap-3 py-4">
+              <ClipboardCheck className="h-6 w-6 text-orange-600" />
+              <div>
+                <div className="text-2xl font-bold tabular-nums leading-none">{data.purchaserPlan.openMrfs}</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Purchaser Plan</div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      )}
       {/* Commissions — sits immediately right of the area tiles. A salesperson
           sees only their OWN figure (the engine is asked for their id, so no
           one else's earnings are ever loaded); Accounting / the Payment Approver

@@ -356,6 +356,28 @@ enum PurchaseRequestStatus {
   CANCELLED // withdrawn by the purchaser before receiving
 }
 
+/// The Purchaser Plan — the two columns PEOPLE fill in, per MRF. Everything else
+/// on the plan (order no., payment date, account holder, MRF no./status, purchase
+/// due date) is read live from the order and its purchase requests, never copied
+/// here, so it cannot go stale. Each field carries who set it and when.
+model PurchaserPlanEntry {
+  id              String    @id @default(cuid())
+  quotationId     String
+  mrfId           String    @unique
+  /// "purchase_to_supplier" | "for_fabrication"
+  type            String?
+  typeByName      String?
+  typeAt          DateTime?
+  /// Manila calendar day, YYYY-MM-DD.
+  clientDueDate   String?
+  clientDueByName String?
+  clientDueAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([quotationId])
+}
+
 model PurchaseRequest {
   id               String                @id @default(cuid())
   quotationId      String? // null for replenishment (stock top-up, not tied to an order)
