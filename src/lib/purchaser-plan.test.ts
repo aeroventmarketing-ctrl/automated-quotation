@@ -13,6 +13,8 @@ import {
   sortPlanRows,
   isPlanType,
   planTypeLabel,
+  planEditChange,
+  planEditValue,
   type PlanPr,
   type PurchaserPlanRow,
 } from "./purchaser-plan";
@@ -109,7 +111,7 @@ describe("Type", () => {
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", href: "#", orderedDate, accountHolder: "x", mrfNo,
-    mrfStatus: "Pending", purchaseDue, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null,
+    mrfStatus: "Pending", purchaseDue, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
   });
 
   it("dated rows first, soonest first; undated last, by order date", () => {
@@ -120,5 +122,22 @@ describe("default order — purchase due date, soonest first", () => {
       row("0451", null, "2026-09-15"),
     ]);
     expect(out.map((r) => r.mrfNo)).toEqual(["0405", "0450", "0451", "0453"]);
+  });
+});
+
+describe("the edit trail — how each change reads", () => {
+  it("names the Type by its label", () => {
+    expect(planEditChange({ field: "type", from: "", to: "for_fabrication" })).toBe("— → For fabrication");
+    expect(planEditChange({ field: "type", from: "for_fabrication", to: "purchase_to_supplier" })).toBe("For fabrication → Purchase to supplier");
+  });
+
+  it("spells the dates out, and shows a cleared one as —", () => {
+    expect(planEditChange({ field: "clientDue", from: "2026-10-24", to: "2026-10-30" })).toBe("Oct 24, 2026 → Oct 30, 2026");
+    expect(planEditChange({ field: "clientDue", from: "2026-10-24", to: "" })).toBe("Oct 24, 2026 → —");
+  });
+
+  it("never shifts a date by a day, whatever the viewer's timezone", () => {
+    // Formatted from the calendar day itself, not from a midnight instant.
+    expect(planEditValue("clientDue", "2026-01-01")).toBe("Jan 1, 2026");
   });
 });

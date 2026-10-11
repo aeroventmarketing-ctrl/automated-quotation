@@ -20,6 +20,23 @@ CREATE TABLE IF NOT EXISTS "PurchaserPlanEntry" (
 CREATE UNIQUE INDEX IF NOT EXISTS "PurchaserPlanEntry_mrfId_key" ON "PurchaserPlanEntry"("mrfId");
 CREATE INDEX IF NOT EXISTS "PurchaserPlanEntry_quotationId_idx" ON "PurchaserPlanEntry"("quotationId");
 
+-- Every change, kept: who, when, and what it changed from and to. Append-only.
+-- The owner: "Record every person who made the edit for tracking purposes."
+CREATE TABLE IF NOT EXISTS "PurchaserPlanEdit" (
+  "id"          TEXT NOT NULL,
+  "quotationId" TEXT NOT NULL,
+  "mrfId"       TEXT NOT NULL,
+  "field"       TEXT NOT NULL,
+  "fromValue"   TEXT NOT NULL DEFAULT '',
+  "toValue"     TEXT NOT NULL DEFAULT '',
+  "byId"        TEXT NOT NULL,
+  "byName"      TEXT NOT NULL,
+  "at"          TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "PurchaserPlanEdit_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "PurchaserPlanEdit_mrfId_idx" ON "PurchaserPlanEdit"("mrfId");
+
 -- Every public table stays under RLS with no policies (see 0038_enable_rls and
 -- CLAUDE.md): deny-all for Supabase's public API, invisible to Prisma.
 do $$

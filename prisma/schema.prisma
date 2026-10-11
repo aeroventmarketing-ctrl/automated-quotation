@@ -378,6 +378,26 @@ model PurchaserPlanEntry {
   @@index([quotationId])
 }
 
+/// Every change ever made to a Purchaser Plan row — the owner: "Record every
+/// person who made the edit for tracking purposes." Append-only: rows are
+/// created, never updated or deleted, so the trail can't be rewritten. One row
+/// per change, written in the same transaction as the change itself.
+model PurchaserPlanEdit {
+  id          String   @id @default(cuid())
+  quotationId String
+  mrfId       String
+  /// "type" | "clientDue"
+  field       String
+  /// The value before and after, as stored ("" = blank).
+  fromValue   String   @default("")
+  toValue     String   @default("")
+  byId        String
+  byName      String
+  at          DateTime @default(now())
+
+  @@index([mrfId])
+}
+
 model PurchaseRequest {
   id               String                @id @default(cuid())
   quotationId      String? // null for replenishment (stock top-up, not tied to an order)

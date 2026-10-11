@@ -27,6 +27,7 @@ import {
   manilaDay,
   sortPlanRows,
   type PlanPr,
+  type PlanEdit,
   type PurchaserPlanRow,
 } from "@/lib/purchaser-plan";
 
@@ -54,6 +55,21 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
       return [] as Awaited<ReturnType<typeof prisma.purchaserPlanEntry.findMany>>;
     }),
   ]);
+  // The edit trail, newest first. Only rows that have an entry can have edits,
+  // so the read is scoped to those — usually a handful.
+  const edited = entries.map((e) => e.mrfId);
+  const edits = edited.length
+    ? await prisma.purchaserPlanEdit
+        .findMany({ where: { mrfId: { in: edited } }, orderBy: { at: "desc" } })
+        .catch(() => [] as Awaited<ReturnType<typeof prisma.purchaserPlanEdit.findMany>>)
+    : [];
+  const editsByMrf = new Map<string, PlanEdit[]>();
+  for (const e of edits) {
+    if (e.field !== "type" && e.field !== "clientDue") continue;
+    const arr = editsByMrf.get(e.mrfId) ?? [];
+    arr.push({ field: e.field, from: e.fromValue, to: e.toValue, byName: e.byName, at: e.at.toISOString() });
+    editsByMrf.set(e.mrfId, arr);
+  }
 
   const prsByMrf = new Map<string, PlanPr[]>();
   for (const p of prs) {
@@ -93,6 +109,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         clientDue: e?.clientDueDate ?? null,
         clientDueByName: e?.clientDueByName ?? null,
         clientDueAt: e?.clientDueAt ? e.clientDueAt.toISOString() : null,
+        edits: editsByMrf.get(m.id) ?? [],
       });
     }
   }

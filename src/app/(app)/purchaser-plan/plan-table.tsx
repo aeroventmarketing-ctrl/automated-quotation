@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Search, ArrowUp, ArrowDown } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { PLAN_TYPES, type PurchaserPlanRow } from "@/lib/purchaser-plan";
+import { PLAN_TYPES, PLAN_EDIT_FIELD_LABEL, planEditChange, type PlanEditField, type PurchaserPlanRow } from "@/lib/purchaser-plan";
 import { savePlanType, savePlanClientDue } from "./actions";
 
 /** "Oct 13, 2026" — the sheet spells dates out; so does this. */
@@ -44,6 +44,35 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 function Stamp({ by, at }: { by: string | null; at: string | null }) {
   if (!by || !at) return null;
   return <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{by} · {fmtStamp(at)}</div>;
+}
+
+/**
+ * Everyone who ever changed this field, newest first — the owner's *"Record
+ * every person who made the edit for tracking purposes."* The stamp above shows
+ * the latest; this opens the whole trail, which is kept append-only.
+ */
+function History({ row, field }: { row: PurchaserPlanRow; field: PlanEditField }) {
+  const [open, setOpen] = useState(false);
+  const mine = row.edits.filter((e) => e.field === field);
+  if (mine.length === 0) return null;
+  return (
+    <div className="mt-0.5">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-[10px] font-medium text-primary hover:underline" aria-expanded={open} aria-label={`${PLAN_EDIT_FIELD_LABEL[field]} history for MRF #${row.mrfNo}`}>
+        {open ? "Hide history" : `History (${mine.length})`}
+      </button>
+      {open && (
+        <ol className="mt-1 space-y-0.5 border-l-2 border-muted pl-2 text-[10px] leading-tight text-muted-foreground">
+          {mine.map((e, i) => (
+            <li key={`${e.at}-${i}`}>
+              <span className="text-foreground">{planEditChange(e)}</span>
+              <br />
+              {e.byName} · {fmtStamp(e.at)}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
 }
 
 export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { rows: PurchaserPlanRow[]; canEdit: boolean; tableMissing: boolean }) {
@@ -88,7 +117,8 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
     const res = await savePlanType(r.quotationId, r.mrfId, value);
     setBusy(null);
     if (!res.ok) { setErr({ key: r.key, msg: res.error }); return; }
-    patch(r.key, { type: (value || null) as PurchaserPlanRow["type"], typeByName: res.byName, typeAt: res.at });
+    if (!res.edit) return; // unchanged — nothing was written, nothing to show
+    patch(r.key, { type: (value || null) as PurchaserPlanRow["type"], typeByName: res.byName, typeAt: res.at, edits: [res.edit, ...r.edits] });
   }
 
   async function setClientDue(r: PurchaserPlanRow, value: string) {
@@ -97,7 +127,8 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
     const res = await savePlanClientDue(r.quotationId, r.mrfId, value);
     setBusy(null);
     if (!res.ok) { setErr({ key: r.key, msg: res.error }); return; }
-    patch(r.key, { clientDue: value || null, clientDueByName: res.byName, clientDueAt: res.at });
+    if (!res.edit) return;
+    patch(r.key, { clientDue: value || null, clientDueByName: res.byName, clientDueAt: res.at, edits: [res.edit, ...r.edits] });
   }
 
   const header = (c: { key: SortKey; label: string }) => {
@@ -174,6 +205,7 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
                       <span>{PLAN_TYPES.find((t) => t.key === r.type)?.label ?? "—"}</span>
                     )}
                     <Stamp by={r.typeByName} at={r.typeAt} />
+                    <History row={r} field="type" />
                   </td>
                   <td className="whitespace-nowrap px-2.5 py-2">
                     <Link href={r.href} className="font-mono text-xs font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
@@ -200,6 +232,7 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
                       <span>{fmtDay(r.clientDue) ?? "—"}</span>
                     )}
                     <Stamp by={r.clientDueByName} at={r.clientDueAt} />
+                    <History row={r} field="clientDue" />
                     {err?.key === r.key && <div className="mt-0.5 text-[11px] text-destructive">{err.msg}</div>}
                   </td>
                 </tr>

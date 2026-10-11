@@ -166,6 +166,8 @@ export interface PurchaserPlanRow {
   clientDue: string | null;
   clientDueByName: string | null;
   clientDueAt: string | null;
+  /** Every change ever made to this row, newest first — see `PlanEdit`. */
+  edits: PlanEdit[];
 }
 
 /**
@@ -181,3 +183,36 @@ export function sortPlanRows(rows: PurchaserPlanRow[]): PurchaserPlanRow[] {
     return a.mrfNo.localeCompare(b.mrfNo);
   });
 }
+
+// --- The edit trail ------------------------------------------------------------
+
+/**
+ * One change to a plan row, as recorded in `PurchaserPlanEdit` — the owner:
+ * *"Record every person who made the edit for tracking purposes."* The "last
+ * edited by" stamp answers who touched it most recently; this answers everyone
+ * who ever did, and what each of them changed.
+ */
+export type PlanEditField = "type" | "clientDue";
+export interface PlanEdit {
+  field: PlanEditField;
+  /** As stored: a type key or a YYYY-MM-DD; "" for blank. */
+  from: string;
+  to: string;
+  byName: string;
+  at: string;
+}
+
+export const PLAN_EDIT_FIELD_LABEL: Record<PlanEditField, string> = { type: "Type", clientDue: "Client due date" };
+
+/** A stored value as a person reads it: the type's label, a spelled-out date, or "—". */
+export function planEditValue(field: PlanEditField, v: string): string {
+  if (!v) return "—";
+  if (field === "type") return planTypeLabel(v) || v;
+  const [y, m, d] = v.split("-").map(Number);
+  if (!y || !m || !d) return v;
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-PH", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
+}
+
+/** "— → For fabrication", "Oct 24, 2026 → Oct 30, 2026". */
+export const planEditChange = (e: Pick<PlanEdit, "field" | "from" | "to">): string =>
+  `${planEditValue(e.field, e.from)} → ${planEditValue(e.field, e.to)}`;

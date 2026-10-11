@@ -1,3 +1,27 @@
+## 2026-10-11 · The Purchaser Plan — every editor, not just the last
+
+The owner, on the "who last set it" stamp: *"Record every person who made the edit for tracking
+purposes."*
+
+The stamp answered *who touched this most recently*. It could not answer *who else did*, and each new
+edit overwrote the last person's name — exactly the information you want when a due date turns out to
+be wrong.
+
+So the plan now keeps **`PurchaserPlanEdit`** (added to migration 0060, which hadn't been applied yet;
+the file stays safe to re-run): one row per change — field, from, to, who (id and name), when.
+**Append-only**: nothing ever updates or deletes a row, so the trail can't be rewritten. The change
+and its trail row are written in **one transaction**, so there is no state where a value changed and
+the trail doesn't say who did it. Re-saving a value that's already there writes nothing — a trail full
+of "Oct 24 → Oct 24" would bury the changes that matter.
+
+On the page, each field keeps its latest-editor stamp and gains **History (N)**, which opens every
+change newest first: *"Oct 24, 2026 → Oct 30, 2026 · Admin Ana · Oct 11, 11:53 AM"*.
+
+Rendered: four people changed MRF #0450 in turn — Allan Ramos (Type → Purchase to supplier), Rey Gil
+(→ For fabrication), Elena Cruz (Client due → Oct 24), Admin Ana (→ Oct 30) — then the Purchaser
+re-saved "For fabrication" unchanged. The table holds exactly those four rows, with their from/to, and
+nothing for the re-save; History (2) under each field listed all of them, newest first.
+
 ## 2026-10-11 · The Purchaser Plan
 
 The owner uploaded *PURCHASER TABLE updated.xlsx* and asked for it as a live table behind a dashboard
