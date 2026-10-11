@@ -27,6 +27,9 @@ import {
   receivedOn,
   manilaDay,
   sortPlanRows,
+  closedInfo,
+  sortClosedRows,
+  type ClosedPlanRow,
   type PlanPr,
   type PlanEdit,
   type PurchaserPlanRow,
@@ -34,6 +37,8 @@ import {
 
 export interface PurchaserPlanData {
   rows: PurchaserPlanRow[];
+  /** Rejected / cancelled MRFs — their own box, most recently closed first. */
+  closed: ClosedPlanRow[];
   /** The plan's table has not been created yet (migration 0060 not applied). */
   tableMissing: boolean;
 }
@@ -49,7 +54,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     slimClassificationByOrder(),
     prisma.purchaseRequest.findMany({
       where: { mrfId: { not: null } },
-      select: { mrfId: true, status: true, kind: true, chainLog: true, purchaseDueAt: true, receivedAt: true },
+      select: { mrfId: true, status: true, kind: true, chainLog: true, purchaseDueAt: true, receivedAt: true, decidedByName: true, decidedAt: true, decisionNote: true },
     }),
     prisma.purchaserPlanEntry.findMany().catch(() => {
       tableMissing = true;
@@ -82,6 +87,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
   const entryByMrf = new Map(entries.map((e) => [e.mrfId, e] as const));
 
   const rows: PurchaserPlanRow[] = [];
+  const closed: ClosedPlanRow[] = [];
   for (const row of quotes) {
     const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
@@ -90,8 +96,25 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     const wf = readOrderWorkflow(q.classification);
     const orderedDate = manilaDay(saleRecognitionDate(sale));
     for (const m of wf.materialRequests) {
-      if (!isPlanOpenMrf(m.status)) continue;
       const mine = prsByMrf.get(m.id) ?? [];
+      // Rejected / cancelled → the box below the plan, not the plan itself.
+      const shut = closedInfo(m, mine);
+      if (shut) {
+        closed.push({
+          ...shut,
+          key: `${q.id}:${m.id}`,
+          quotationId: q.id,
+          mrfId: m.id,
+          orderNo: q.quoteNumber,
+          orderHref: `/orders/${q.id}`,
+          mrfHref: `/orders/${q.id}/mrf/${m.id}`,
+          orderedDate,
+          accountHolder: q.preparedBy?.name ?? "—",
+          mrfNo: m.formNo,
+        });
+        continue;
+      }
+      if (!isPlanOpenMrf(m.status)) continue;
       const e = entryByMrf.get(m.id);
       rows.push({
         key: `${q.id}:${m.id}`,
@@ -118,10 +141,5 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
       });
     }
   }
-  return { rows: sortPlanRows(rows), tableMissing };
-}
-
-/** How many rows the plan has — for the dashboard tile. Same rule, no entries read. */
-export function countOpenPlanMrfs(materialRequests: readonly { status: string }[]): number {
-  return materialRequests.filter((m) => isPlanOpenMrf(m.status)).length;
+  return { rows: sortPlanRows(rows), closed: sortClosedRows(closed), tableMissing };
 }

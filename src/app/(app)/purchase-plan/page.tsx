@@ -3,6 +3,7 @@ import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { loadPurchaserPlan } from "@/lib/purchaser-plan-data";
 import { PurchaserPlanTable } from "./plan-table";
+import { ClosedPlanBox } from "./closed-box";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export default async function PurchasePlanPage() {
   // for every viewer whatever their computer's clock or timezone says.
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   let failed = false;
-  let data: Awaited<ReturnType<typeof loadPurchaserPlan>> = { rows: [], tableMissing: false };
+  let data: Awaited<ReturnType<typeof loadPurchaserPlan>> = { rows: [], closed: [], tableMissing: false };
   try {
     data = await loadPurchaserPlan();
   } catch {
@@ -48,7 +49,10 @@ export default async function PurchasePlanPage() {
       {failed ? (
         <p className="text-sm text-destructive">The plan couldn&apos;t be loaded just now. Refresh to try again.</p>
       ) : (
-        <PurchaserPlanTable rows={data.rows} canEditType={canEditType} canEditClientDue={canEditClientDue} tableMissing={data.tableMissing} todayYMD={todayYMD} />
+        <>
+          <PurchaserPlanTable rows={data.rows} canEditType={canEditType} canEditClientDue={canEditClientDue} tableMissing={data.tableMissing} todayYMD={todayYMD} />
+          <ClosedPlanBox rows={data.closed} />
+        </>
       )}
     </div>
   );
