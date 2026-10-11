@@ -216,3 +216,197 @@ export function planEditValue(field: PlanEditField, v: string): string {
 /** "— → For fabrication", "Oct 24, 2026 → Oct 30, 2026". */
 export const planEditChange = (e: Pick<PlanEdit, "field" | "from" | "to">): string =>
   `${planEditValue(e.field, e.from)} → ${planEditValue(e.field, e.to)}`;
+
+// --- Purchase due date: the colour ----------------------------------------------
+
+/**
+ * The owner: *"Add color indicator in Purchase Due Date Column — Yellow: 7 days
+ * before purchase due date · Amber: 3 days before · Red: overdue · Green: on
+ * time."*
+ *
+ * Counted in whole Manila calendar days between today and the due date:
+ *
+ *   past the due date          → overdue  (red)
+ *   due today … 3 days away    → due3     (amber)  — today is not late yet
+ *   4 … 7 days away            → due7     (yellow)
+ *   more than 7 days away      → ontime   (green)
+ *   no due date set            → null     (no colour)
+ *
+ * Calendar days, not 24-hour spans, so a date due "tomorrow" is 1 day away all
+ * day long, and the colour changes at midnight Manila — the same day boundary
+ * every other date on the screen uses.
+ */
+export type DueTone = "overdue" | "due3" | "due7" | "ontime";
+
+const dayNumber = (ymd: string): number => {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86_400_000;
+};
+
+/** Whole days from today to the due date: 0 = due today, negative = overdue. */
+export const daysUntil = (dueYMD: string, todayYMD: string): number => dayNumber(dueYMD) - dayNumber(todayYMD);
+
+export function purchaseDueTone(dueYMD: string | null, todayYMD: string): DueTone | null {
+  if (!dueYMD) return null;
+  const n = daysUntil(dueYMD, todayYMD);
+  if (n < 0) return "overdue";
+  if (n <= 3) return "due3";
+  if (n <= 7) return "due7";
+  return "ontime";
+}
+
+export const DUE_TONE_LABEL: Record<DueTone, string> = {
+  overdue: "Overdue",
+  due3: "Due within 3 days",
+  due7: "Due within 7 days",
+  ontime: "On time",
+};
+
+/** "Overdue by 2 days", "Due today", "Due in 5 days". */
+export function dueCountdown(dueYMD: string, todayYMD: string): string {
+  const n = daysUntil(dueYMD, todayYMD);
+  if (n < 0) return `Overdue by ${-n} day${n === -1 ? "" : "s"}`;
+  if (n === 0) return "Due today";
+  return `Due in ${n} day${n === 1 ? "" : "s"}`;
+}
+
+// --- Sort and group ---------------------------------------------------------------
+
+/**
+ * The owner: *"Add an option to sort, group and arrange ascending and
+ * descending by date, order number, account holder, status, type, purchase due
+ * date and client due date."*
+ */
+export type PlanSortKey = "orderedDate" | "orderNo" | "accountHolder" | "mrfStatus" | "type" | "purchaseDue" | "clientDue" | "mrfNo";
+export type PlanGroupKey = "none" | Exclude<PlanSortKey, "mrfNo">;
+export type SortDir = "asc" | "desc";
+
+export const PLAN_SORT_OPTIONS: { key: PlanSortKey; label: string }[] = [
+  { key: "purchaseDue", label: "Purchase due date" },
+  { key: "clientDue", label: "Client due date" },
+  { key: "orderedDate", label: "Ordered date" },
+  { key: "orderNo", label: "Order no." },
+  { key: "accountHolder", label: "Account holder" },
+  { key: "mrfStatus", label: "MRF status" },
+  { key: "type", label: "Type" },
+];
+
+export const PLAN_GROUP_OPTIONS: { key: PlanGroupKey; label: string }[] = [
+  { key: "none", label: "No grouping" },
+  { key: "purchaseDue", label: "Purchase due date" },
+  { key: "clientDue", label: "Client due date" },
+  { key: "orderedDate", label: "Ordered date" },
+  { key: "orderNo", label: "Order no." },
+  { key: "accountHolder", label: "Account holder" },
+  { key: "mrfStatus", label: "MRF status" },
+  { key: "type", label: "Type" },
+];
+
+/**
+ * Statuses in the order an MRF actually moves through them, so "ascending"
+ * means earliest stage first — not alphabetical, where Approved would come
+ * before Requested.
+ */
+const STATUS_ORDER = ["Requested", "Issued from stock", "Partly issued", "Purchasing", "Pending", "Approved", "Budgeted", "Completed", "Rejected", "Cancelled"];
+const statusRank = (s: string) => {
+  const i = STATUS_ORDER.indexOf(s);
+  return i < 0 ? STATUS_ORDER.length : i;
+};
+const TYPE_ORDER: string[] = PLAN_TYPES.map((t) => t.key);
+
+/** A comparable value for a row, or null when the row has nothing there. */
+function sortValue(r: PurchaserPlanRow, key: PlanSortKey): string | number | null {
+  switch (key) {
+    case "mrfStatus": return statusRank(r.mrfStatus);
+    case "type": return r.type ? TYPE_ORDER.indexOf(r.type) : null;
+    case "orderedDate": return r.orderedDate;
+    case "purchaseDue": return r.purchaseDue;
+    case "clientDue": return r.clientDue;
+    case "orderNo": return r.orderNo;
+    case "accountHolder": return r.accountHolder && r.accountHolder !== "—" ? r.accountHolder : null;
+    case "mrfNo": return r.mrfNo;
+  }
+}
+
+const compare = (a: string | number, b: string | number): number =>
+  typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * Sort by one key, either way. **Blanks always go last** whichever way — a row
+ * with no due date is not "the earliest" or "the latest", it is undecided, and
+ * flipping the direction should not drag the undecided rows to the top. Ties
+ * fall back to purchase due date, then MRF no., so the order is stable.
+ */
+export function sortPlanBy(rows: readonly PurchaserPlanRow[], key: PlanSortKey, dir: SortDir): PurchaserPlanRow[] {
+  const sign = dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = sortValue(a, key), bv = sortValue(b, key);
+    if ((av == null) !== (bv == null)) return av == null ? 1 : -1;
+    if (av != null && bv != null) {
+      const c = compare(av, bv);
+      if (c !== 0) return c * sign;
+    }
+    const ad = a.purchaseDue ?? "9999", bd = b.purchaseDue ?? "9999";
+    if (ad !== bd) return ad < bd ? -1 : 1;
+    return compare(a.mrfNo, b.mrfNo);
+  });
+}
+
+export interface PlanGroup {
+  key: string;
+  label: string;
+  rows: PurchaserPlanRow[];
+}
+
+const monthLabel = (ymd: string) => {
+  const [y, m] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-PH", { timeZone: "UTC", month: "long", year: "numeric" });
+};
+
+/** Which group a row falls in, and the heading it goes under. Dates group by month. */
+function groupOf(r: PurchaserPlanRow, key: Exclude<PlanGroupKey, "none">): { key: string; label: string; rank: string | number | null } {
+  switch (key) {
+    case "orderedDate":
+    case "purchaseDue":
+    case "clientDue": {
+      const d = r[key];
+      return d ? { key: d.slice(0, 7), label: monthLabel(d), rank: d.slice(0, 7) } : { key: "~none", label: "No date", rank: null };
+    }
+    case "mrfStatus": return { key: r.mrfStatus, label: r.mrfStatus, rank: statusRank(r.mrfStatus) };
+    case "type": return r.type ? { key: r.type, label: planTypeLabel(r.type), rank: TYPE_ORDER.indexOf(r.type) } : { key: "~none", label: "No type yet", rank: null };
+    case "orderNo": return { key: r.orderNo, label: r.orderNo, rank: r.orderNo };
+    case "accountHolder": {
+      const v = r.accountHolder && r.accountHolder !== "—" ? r.accountHolder : null;
+      return v ? { key: v, label: v, rank: v } : { key: "~none", label: "No account holder", rank: null };
+    }
+  }
+}
+
+/**
+ * Group, then sort inside each group. The groups follow the same direction as
+ * the sort when grouping and sorting on the same column, and run ascending
+ * otherwise; the "no value" group always comes last.
+ */
+export function groupPlan(
+  rows: readonly PurchaserPlanRow[],
+  groupKey: PlanGroupKey,
+  sortKey: PlanSortKey,
+  dir: SortDir,
+): PlanGroup[] {
+  const sorted = sortPlanBy(rows, sortKey, dir);
+  if (groupKey === "none") return [{ key: "all", label: "", rows: sorted }];
+  const groups = new Map<string, PlanGroup & { rank: string | number | null }>();
+  for (const r of sorted) {
+    const g = groupOf(r, groupKey);
+    const existing = groups.get(g.key);
+    if (existing) existing.rows.push(r);
+    else groups.set(g.key, { key: g.key, label: g.label, rank: g.rank, rows: [r] });
+  }
+  const sign = groupKey === sortKey && dir === "desc" ? -1 : 1;
+  return [...groups.values()]
+    .sort((a, b) => {
+      if ((a.rank == null) !== (b.rank == null)) return a.rank == null ? 1 : -1;
+      return a.rank == null || b.rank == null ? 0 : compare(a.rank, b.rank) * sign;
+    })
+    .map(({ key, label, rows: rs }) => ({ key, label, rows: rs }));
+}

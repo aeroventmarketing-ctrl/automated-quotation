@@ -1,3 +1,51 @@
+## 2026-10-11 · Purchase Plan: renamed, sortable, groupable, and coloured by due date
+
+The owner: *"1. rename purchaser plan to purchase plan · 2. Add an option to sort, group and arrange
+ascending and descending by date, order number, account holder, status, type, purchase due date and
+client due date · 3. Add color indicator in Purchase Due Date Column — Yellow: 7 days before, Amber:
+3 days before, Red: overdue, Green: on time."*
+
+**Renamed** wherever a person reads it — tile, title, messages — and the page moved to
+`/purchase-plan`, with `/purchaser-plan` left as a redirect so a saved link still lands. The database
+tables (`PurchaserPlanEntry`, `PurchaserPlanEdit`) and the internal file names keep the old spelling:
+nobody sees them, and renaming a table means another migration for no visible gain.
+
+**Sort / group / direction.** A *Group by* box, a *Sort by* box and an *Ascending / Descending*
+button, over the seven fields named. Clicking a column header is the same control. Two choices worth
+recording:
+- **Blanks stay last in both directions.** A row with no due date isn't the earliest or the latest —
+  it's undecided — and flipping to descending shouldn't drag every undecided row to the top.
+- **Status sorts and groups by stage**, Requested → Pending → Approved → Budgeted → Completed, not
+  alphabetically (which would put Approved before Requested).
+Dates group by month. The viewer's last choice is kept in their own browser (`localStorage`, wrapped so
+a private window just gets the default).
+
+**The colours** (`purchaseDueTone`), in whole Manila calendar days from today:
+
+| | days to the due date | |
+| --- | --- | --- |
+| Red | past it | overdue |
+| Amber | 0–3 (due today counts — it isn't late yet) | |
+| Yellow | 4–7 | |
+| Green | more than 7 | on time |
+| none | no due date set | |
+
+"Today" is computed on the server in Manila time and handed down, so two viewers in different
+timezones never see different colours. The colour is never the only signal: each date also says
+*Overdue by 2 days* / *Due today* / *Due in 5 days*. Amber is drawn in **orange** shades — Tailwind's
+amber is a hair from its yellow, and two bands nobody can tell apart would defeat having two.
+
+**Rendered** against seven MRFs spanning every band: Oct 9 → red "Overdue by 2 days"; Oct 11 → amber
+"Due today"; Oct 14 → amber "Due in 3 days"; Oct 15 → yellow; Oct 18 → yellow "Due in 7 days"; Oct 19
+→ green "Due in 8 days"; no date → no colour. Descending kept the undated row last; grouping by status
+ran Requested → Pending → Approved → Budgeted; by type, "No type yet" last; the choice survived a
+reload. The table fits its card with no sideways scroll at 1500px and 1366px. Permissions unchanged on
+the new address for all seven seats.
+
+One honest note on my own measuring: "Purchase to supplier" looked clipped in its dropdown while my
+width check said it fit — the check measured the wrong thing. The box now sizes itself to its longest
+option, which holds whatever font a viewer's computer uses.
+
 ## 2026-10-11 · The Purchaser Plan — Sales joins, and the two columns split
 
 The owner: *"Add sales role who can see the Purchaser Plan tile, sales role can add and edit client

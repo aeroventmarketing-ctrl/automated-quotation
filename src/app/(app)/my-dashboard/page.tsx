@@ -222,17 +222,17 @@ export default async function MyDashboardPage() {
           </Link>
         );
       })}
-      {/* Purchaser Plan — the owner's PURCHASER TABLE, live. For the Purchaser,
+      {/* Purchase Plan — the owner's PURCHASER TABLE, live. For the Purchaser,
           Engineers, the Payment Approver and admins (lib/purchaser-plan-access).
           The number is the open MRFs on paid orders — the plan's row count. */}
       {data.purchaserPlan && (
-        <Link href="/purchaser-plan" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+        <Link href="/purchase-plan" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
           <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
             <CardContent className="flex items-center gap-3 py-4">
               <ClipboardCheck className="h-6 w-6 text-orange-600" />
               <div>
                 <div className="text-2xl font-bold tabular-nums leading-none">{data.purchaserPlan.openMrfs}</div>
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Purchaser Plan</div>
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Purchase Plan</div>
               </div>
             </CardContent>
           </Card>

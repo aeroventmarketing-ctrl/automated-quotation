@@ -121,7 +121,7 @@ export interface MyDashboard {
    * cap was silent, which is why it took a person counting rows to find it.
    */
   materialsTotal: number;
-  /** The Purchaser Plan tile — null for anyone it isn't for. */
+  /** The Purchase Plan tile — null for anyone it isn't for. */
   purchaserPlan: { openMrfs: number } | null;
   // Supplier-return lifecycle — shown to Admin, Purchaser, Warehouse, Plant
   // Manager and Logistics.
@@ -222,7 +222,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // Seen in full by the materials-handling roles and by every role that can
   // request an MRF for any department: Admin, Warehouse, Purchaser and the Plant
   // Manager. Individual department heads additionally see their own dept's MRFs.
-  // The Purchaser Plan tile: its count is the open MRFs on the paid orders this
+  // The Purchase Plan tile: its count is the open MRFs on the paid orders this
   // loop already walks, so the tile costs no read of its own.
   const seesPurchaserPlan = purchaserPlanAccess(user, assignments).canView;
   let planOpenMrfs = 0;
