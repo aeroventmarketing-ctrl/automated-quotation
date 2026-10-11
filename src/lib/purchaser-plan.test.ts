@@ -362,3 +362,34 @@ describe("the box's order — most recently closed first", () => {
     expect(out.map((r) => r.mrfNo)).toEqual(["0003", "0001", "0002"]);
   });
 });
+
+describe("sorting by Purchase due date puts what's still due first", () => {
+  // The owner: "show the 10 soon to due rows". A row already received into stock
+  // is not due any more, however old its date.
+  const r = (mrfNo: string, purchaseDue: string | null, receivedOn: string | null = null): PurchaserPlanRow => ({
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
+    accountHolder: "x", mrfNo, mrfStatus: "Approved", purchaseDue, receivedOn, type: null, typeByName: null, typeAt: null,
+    clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
+  });
+  const rows = [
+    r("0262", "2026-09-08", "2026-09-12"), // received, late
+    r("0268", "2026-09-09"),               // still owed, overdue
+    r("0272", "2026-09-09", "2026-09-11"), // received, late
+    r("0500", "2026-10-14"),               // still owed, soon
+    r("0007", null),                       // no due date
+    r("0600", "2026-10-30"),               // still owed, later
+  ];
+  const order = (rs: PurchaserPlanRow[]) => rs.map((x) => x.mrfNo);
+
+  it("ascending: owed (overdue, then soonest) → received → no date", () => {
+    expect(order(sortPlanBy(rows, "purchaseDue", "asc"))).toEqual(["0268", "0500", "0600", "0262", "0272", "0007"]);
+  });
+
+  it("descending turns each band around, but the bands keep their order", () => {
+    expect(order(sortPlanBy(rows, "purchaseDue", "desc"))).toEqual(["0600", "0500", "0268", "0272", "0262", "0007"]);
+  });
+
+  it("other columns are unaffected by receipt", () => {
+    expect(order(sortPlanBy([r("b", "2026-09-01", "2026-09-02"), r("a", "2026-10-01")], "mrfNo", "asc"))).toEqual(["a", "b"]);
+  });
+});

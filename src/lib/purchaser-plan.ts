@@ -428,6 +428,15 @@ const compare = (a: string | number, b: string | number): number =>
 export function sortPlanBy(rows: readonly PurchaserPlanRow[], key: PlanSortKey, dir: SortDir): PurchaserPlanRow[] {
   const sign = dir === "asc" ? 1 : -1;
   return [...rows].sort((a, b) => {
+    // Sorting by Purchase due date means "what's coming due" — the owner: "show
+    // the 10 soon to due rows". A purchase already RECEIVED into stock is no
+    // longer due at all, however old its date, so it goes after every row still
+    // owed (overdue first, then soonest), in either direction; rows with no due
+    // date stay last of all, as for every column.
+    if (key === "purchaseDue") {
+      const c = dueClass(a) - dueClass(b);
+      if (c !== 0) return c;
+    }
     const av = sortValue(a, key), bv = sortValue(b, key);
     if ((av == null) !== (bv == null)) return av == null ? 1 : -1;
     if (av != null && bv != null) {
@@ -439,6 +448,9 @@ export function sortPlanBy(rows: readonly PurchaserPlanRow[], key: PlanSortKey, 
     return compare(a.mrfNo, b.mrfNo);
   });
 }
+
+/** 0 = still owed, with a due date · 1 = already received · 2 = no due date. */
+const dueClass = (r: PurchaserPlanRow): number => (!r.purchaseDue ? 2 : r.receivedOn ? 1 : 0);
 
 export interface PlanGroup {
   key: string;
