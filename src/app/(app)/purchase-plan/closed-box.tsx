@@ -64,9 +64,11 @@ export function ClosedPlanBox({ rows }: { rows: ClosedPlanRow[] }) {
                       <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.orderedDate) ?? <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-2.5 py-2">{r.accountHolder}</td>
                       <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
-                        <Link href={r.mrfHref} className="font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
+                        {/* A plain link, not <Link>: a full page load is what makes the browser scroll
+              to the #mrf- anchor and light up the card with :target. */}
+          <a href={r.mrfHref} className="font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
                           #{r.mrfNo}
-                        </Link>
+                        </a>
                       </td>
                       <td className="px-2.5 py-2">
                         <Badge variant={r.outcome === "Purchase rejected" ? "destructive" : "secondary"} className="whitespace-nowrap font-normal">

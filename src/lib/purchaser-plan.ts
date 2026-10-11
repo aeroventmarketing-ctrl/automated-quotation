@@ -213,7 +213,7 @@ export interface PurchaserPlanRow {
   orderNo: string;
   /** Order no. → the order's workflow page. */
   orderHref: string;
-  /** MRF no. → that one MRF's own page. */
+  /** MRF no. → that MRF's card in the order's Phase 3 · Materials (`/orders/{id}#mrf-{mrfId}`). */
   mrfHref: string;
   orderedDate: string | null;
   accountHolder: string;

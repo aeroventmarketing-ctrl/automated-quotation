@@ -315,7 +315,11 @@ export function MaterialRequests({
       ) : (
         <div className="space-y-2">
           {requests.map((r) => (
-            <div key={r.id} className="rounded-md border p-3">
+            // An anchor per MRF, so the Purchase Plan's "MRF no." lands on THIS
+            // card (/orders/{id}#mrf-{mrfId}) — scrolled clear of the top bar and
+            // ringed while it is the page's target. Display only: no workflow,
+            // gating or buttons change (frozen Phase 3).
+            <div key={r.id} id={`mrf-${r.id}`} className="scroll-mt-24 rounded-md border p-3 target:border-primary target:bg-primary/5 target:ring-2 target:ring-primary/40">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm font-medium">
                   MRF #{r.formNo} · {r.deptLabel}

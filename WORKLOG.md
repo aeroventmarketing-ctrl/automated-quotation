@@ -1,3 +1,24 @@
+## 2026-10-11 · MRF no. lands on the MRF's card, not its printable form
+
+The owner, after clicking an MRF no. on the Purchase Plan and getting the printable "Consumables, Tools
+& Material Request Form": that was not the "specific MRF" they meant. It is the MRF **in the order's
+workflow** — the card in Phase 3 · Materials, where its buttons are.
+
+So **MRF no. → `/orders/{id}#mrf-{mrfId}`**. Each MRF card in `material-requests.tsx` now carries
+`id="mrf-…"`, `scroll-mt-24` (clears the sticky top bar) and Tailwind `target:` styles that ring the card
+while it is the page's target. Display only — no workflow, gating or buttons change in the frozen Phase
+3 file. The plan's link is a plain `<a>`, not Next's `<Link>`, on purpose: `:target` only updates on a
+real navigation, and a full load is also what makes the browser do the scrolling.
+
+Phase 3 shows whenever an order has any MRF, so the anchor exists for every role that has the plan.
+
+Verified as Purchaser, Sales and Payment Approver: URL `/orders/…#mrf-…`, MRF #0272's card 96px from
+the top, `:target` true, ring drawn; its "Office Request Received" button right there.
+
+Noticed while looking: the order page's own MRF card says **"Completed"** for an MRF still awaiting
+"Office Request Received" — the same ambiguity just fixed in the plan, in frozen Phase 3. Flagged to the
+owner, not changed.
+
 ## 2026-10-11 · Purchase Plan: rejected and cancelled MRFs get their own box
 
 The owner: *"in Purchase Plan, make a separate box for Rejected/Cancelled MRF."*
