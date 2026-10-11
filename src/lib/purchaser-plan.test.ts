@@ -19,7 +19,7 @@ import {
   dueCountdown,
   sortPlanBy,
   groupPlan,
-  boughtOn,
+  receivedOn,
   purchaseDoneTone,
   doneSummary,
   type PlanPr,
@@ -118,7 +118,7 @@ describe("Type", () => {
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", href: "#", orderedDate, accountHolder: "x", mrfNo,
-    mrfStatus: "Pending", purchaseDue, boughtOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
+    mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
   });
 
   it("dated rows first, soonest first; undated last, by order date", () => {
@@ -188,7 +188,7 @@ describe("the Purchase due date colour — the owner's four bands", () => {
 describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", href: "#", orderedDate: "2026-10-08",
-    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, boughtOn: null, type: null, typeByName: null, typeAt: null,
+    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, edits: [], ...over,
   });
   const rows = [
@@ -264,23 +264,29 @@ describe("a purchase received into stock no longer reads 'Completed'", () => {
   });
 });
 
-describe("when the purchase was made", () => {
-  it("is the Item Bought day, in Manila", () => {
-    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-09T23:30:00Z" })])).toBe("2026-09-10");
+describe("when the purchase was received — the Warehouse's Receive & Add Stock", () => {
+  // The owner: "Better reference for this is when warehouseman press the button
+  // Receive & Add to stock."
+  it("is the Manila day Receive & Add Stock was pressed", () => {
+    expect(receivedOn([pr("COMPLETED", { receivedAt: "2026-09-09T23:30:00Z" })])).toBe("2026-09-10");
   });
-  it("is null while anything is still to buy", () => {
-    expect(boughtOn([pr("APPROVED")])).toBeNull();
-    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-10T02:00:00Z" }), pr("APPROVED")])).toBeNull();
+  it("is null while the request isn't completed — bought is not received", () => {
+    expect(receivedOn([pr("PURCHASED", { receivedAt: null })])).toBeNull();
+    expect(receivedOn([pr("PLANT_APPROVED", { receivedAt: null })])).toBeNull();
   });
-  it("for a split MRF, the LAST piece bought", () => {
-    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-08T02:00:00Z" }), pr("COMPLETED", { purchasedAt: "2026-09-12T02:00:00Z" })])).toBe("2026-09-12");
+  it("ignores a stale timestamp on a request that isn't completed", () => {
+    expect(receivedOn([pr("RECEIVED", { receivedAt: "2026-09-10T02:00:00Z" })])).toBeNull();
+  });
+  it("for a split MRF, waits for the LAST piece to be received", () => {
+    expect(receivedOn([pr("COMPLETED", { receivedAt: "2026-09-08T02:00:00Z" }), pr("PURCHASED")])).toBeNull();
+    expect(receivedOn([pr("COMPLETED", { receivedAt: "2026-09-08T02:00:00Z" }), pr("COMPLETED", { receivedAt: "2026-09-12T02:00:00Z" })])).toBe("2026-09-12");
   });
   it("ignores rejected and cancelled siblings", () => {
-    expect(boughtOn([pr("CANCELLED"), pr("PURCHASED", { purchasedAt: "2026-09-08T02:00:00Z" })])).toBe("2026-09-08");
+    expect(receivedOn([pr("CANCELLED"), pr("COMPLETED", { receivedAt: "2026-09-08T02:00:00Z" })])).toBe("2026-09-08");
   });
 });
 
-describe("on time or late, once bought", () => {
+describe("on time or late, once received", () => {
   it("on or before the due date → on time", () => {
     expect(purchaseDoneTone("2026-09-10", "2026-09-10")).toBe("ontime");
     expect(purchaseDoneTone("2026-09-10", "2026-09-08")).toBe("ontime");

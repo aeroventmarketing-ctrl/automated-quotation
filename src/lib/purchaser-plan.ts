@@ -63,8 +63,13 @@ export interface PlanPr {
   chainLog?: unknown;
   /** The due date set in Purchasing. */
   purchaseDueAt?: Date | string | null;
-  /** Stamped at "Item Bought" — when the purchase was actually made. */
-  purchasedAt?: Date | string | null;
+  /**
+   * Stamped when the Warehouseman presses **Receive & Add Stock** — the step
+   * that completes the request. (An Office requisition linked to an order skips
+   * warehouse receiving — its goods go straight to the client — and is stamped
+   * when it is checked instead, which is also when it completes.)
+   */
+  receivedAt?: Date | string | null;
 }
 
 const TAB_LABEL = {
@@ -164,18 +169,24 @@ export function earliestPurchaseDue(prs: readonly PlanPr[]): string | null {
 }
 
 /**
- * The Manila day the MRF's purchase was **made** — or null while any part of it
- * is still to buy.
+ * The Manila day the MRF's purchase was **received into stock** — or null
+ * until every live request has been.
  *
- * `purchaseDueAt` is documented as when the purchase *has to be made by*, so
- * the event it is measured against is "Item Bought" (`purchasedAt`), not the
- * goods reaching stock. A split MRF is bought when its LAST live request is, so
- * that is the date returned.
+ * The owner chose the reference: *"Better reference for this is when
+ * warehouseman press the button Receive & Add to stock."* That is the moment
+ * the purchase actually lands where the requesting department can be served
+ * from, so it is what the due date is judged against — not "Item Bought", which
+ * is what I had first used from the schema's wording.
+ *
+ * Only a request that is COMPLETED counts, so a receipt that was rolled back
+ * (the rollback clears `receivedAt`, and the status) never counts. A split MRF
+ * is received when its LAST live request is, so that is the date returned.
  */
-export function boughtOn(prs: readonly PlanPr[]): string | null {
+export function receivedOn(prs: readonly PlanPr[]): string | null {
   const live = prs.filter((p) => p.status !== "REJECTED" && p.status !== "CANCELLED");
   if (live.length === 0) return null;
-  const days = live.map((p) => manilaDay(p.purchasedAt ?? null));
+  if (live.some((p) => p.status !== "COMPLETED")) return null;
+  const days = live.map((p) => manilaDay(p.receivedAt ?? null));
   if (days.some((d) => !d)) return null;
   return (days as string[]).sort().at(-1)!;
 }
@@ -203,8 +214,8 @@ export interface PurchaserPlanRow {
   mrfNo: string;
   mrfStatus: string;
   purchaseDue: string | null;
-  /** When the purchase was made (all of it), or null while still to buy. */
-  boughtOn: string | null;
+  /** When the purchase was received into stock (all of it), or null until then. */
+  receivedOn: string | null;
   type: PlanTypeKey | null;
   typeByName: string | null;
   typeAt: string | null;
@@ -301,21 +312,24 @@ export function purchaseDueTone(dueYMD: string | null, todayYMD: string): DueTon
 }
 
 /**
- * Once the purchase has been MADE, the countdown no longer applies: there is
- * nothing left to do by the due date. The owner saw "Overdue by 33 days" in red
- * on items already bought and in stock — a false alarm. Instead the cell says
- * how it went: bought on or before the due date → on time (green); after it →
- * late (a neutral grey, with the days said in words). Grey rather than red:
- * red means "act now", and there is nothing left to act on.
+ * Once the purchase is RECEIVED INTO STOCK, the countdown no longer applies:
+ * there is nothing left to do by the due date. The owner saw "Overdue by 33
+ * days" in red on items already in stock — a false alarm. Instead the cell says
+ * how it went: received on or before the due date → on time (green); after it →
+ * late (a neutral grey, with the days said in words). Grey rather than red: red
+ * means "act now", and there is nothing left to act on.
+ *
+ * Until the Warehouse receives it, the countdown runs on — a purchase that has
+ * been bought but not yet received is still owed, and still goes red.
  */
 export type DoneTone = "ontime" | "late";
-export function purchaseDoneTone(dueYMD: string | null, boughtYMD: string): DoneTone {
+export function purchaseDoneTone(dueYMD: string | null, receivedYMD: string): DoneTone {
   if (!dueYMD) return "ontime";
-  return daysUntil(dueYMD, boughtYMD) < 0 ? "late" : "ontime";
+  return daysUntil(dueYMD, receivedYMD) < 0 ? "late" : "ontime";
 }
-/** "Bought Sep 8 · on time", "Bought Sep 10 · 2 days late". The date is formatted by the caller. */
-export function doneSummary(dueYMD: string | null, boughtYMD: string): string {
-  const late = dueYMD ? -daysUntil(dueYMD, boughtYMD) : 0;
+/** "on time", "2 days late" — the line under "Received Sep 8". */
+export function doneSummary(dueYMD: string | null, receivedYMD: string): string {
+  const late = dueYMD ? -daysUntil(dueYMD, receivedYMD) : 0;
   return late > 0 ? `${late} day${late === 1 ? "" : "s"} late` : "on time";
 }
 

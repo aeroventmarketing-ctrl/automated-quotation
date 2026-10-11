@@ -1,3 +1,21 @@
+## 2026-10-11 · Judged at Receive & Add Stock, not at Item Bought
+
+The owner, on the entry below: *"Better reference for this is when warehouseman press the button
+Receive & Add to stock."*
+
+I had used **Item Bought** (`purchasedAt`), reading the schema's "when the purchase has to be made
+by" literally. The owner's reference is the one that matters on the floor: the purchase is done when
+it lands in stock, where the department can be served from it. So `receivedOn` now reads
+`receivedAt` — stamped by Receive & Add Stock, by the single and combined receive actions alike — and
+**only on a COMPLETED request**, so a receipt that was rolled back never counts. (An Office
+requisition linked to an order skips warehouse receiving and is stamped when it's checked, which is
+also when it completes.)
+
+The consequence worth stating: **bought but not yet received keeps counting down**, and goes red past
+its due date — it is still owed. Rendered: #0280, bought Oct 10 and not yet received, is back to red
+"Overdue by 2 days"; the three received rows read "Received Sep 7 · on time", "Received Sep 12 · 3
+days late" (grey) and "Received Sep 17 · on time". Still fits at 1500px and 1366px.
+
 ## 2026-10-11 · "Completed" was the purchase, not the MRF
 
 The owner, over a Purchase Plan full of green **Completed** badges flagged *Overdue by 33 days*: *"how

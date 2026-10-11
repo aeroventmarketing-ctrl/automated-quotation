@@ -72,7 +72,7 @@ const TONE_CLASS: Record<DueTone, string> = {
   due7: "border-yellow-400 bg-yellow-100 text-yellow-900 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-300",
   ontime: "border-emerald-400 bg-emerald-100 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
 };
-/** Bought after its due date: history, not an alarm — so grey, with the days in words. */
+/** Received after its due date: history, not an alarm — so grey, with the days in words. */
 const LATE_CLASS = "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300";
 const TONE_NAME: Record<DueTone, string> = { overdue: "Red", due3: "Amber", due7: "Yellow", ontime: "Green" };
 const TONES: DueTone[] = ["overdue", "due3", "due7", "ontime"];
@@ -242,18 +242,18 @@ export function PurchaserPlanTable({
         <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">#{r.mrfNo}</td>
         <td className="px-2.5 py-2"><Badge variant={STATUS_VARIANT[r.mrfStatus] ?? "secondary"} className="max-w-[11rem] whitespace-normal text-left font-normal leading-tight">{r.mrfStatus}</Badge></td>
         <td className="px-2.5 py-2">
-          {r.boughtOn ? (
-            // Already bought: the countdown is over. Say how it went instead.
+          {r.receivedOn ? (
+            // Received into stock: the countdown is over. Say how it went instead.
             <>
               <span
-                className={`inline-block whitespace-nowrap rounded-md border px-2 py-0.5 font-medium ${purchaseDoneTone(r.purchaseDue, r.boughtOn) === "late" ? LATE_CLASS : TONE_CLASS.ontime}`}
+                className={`inline-block whitespace-nowrap rounded-md border px-2 py-0.5 font-medium ${purchaseDoneTone(r.purchaseDue, r.receivedOn) === "late" ? LATE_CLASS : TONE_CLASS.ontime}`}
                 title={r.purchaseDue ? `Due ${fmtDay(r.purchaseDue)}` : "No due date was set"}
-                data-tone={`bought-${purchaseDoneTone(r.purchaseDue, r.boughtOn)}`}
+                data-tone={`received-${purchaseDoneTone(r.purchaseDue, r.receivedOn)}`}
               >
                 {fmtDay(r.purchaseDue) ?? "—"}
               </span>
-              <div className={`mt-0.5 max-w-[9rem] text-[10px] leading-tight ${purchaseDoneTone(r.purchaseDue, r.boughtOn) === "late" ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>
-                Bought {fmtDay(r.boughtOn)} · {doneSummary(r.purchaseDue, r.boughtOn)}
+              <div className={`mt-0.5 max-w-[9rem] text-[10px] leading-tight ${purchaseDoneTone(r.purchaseDue, r.receivedOn) === "late" ? "text-red-700 dark:text-red-400" : "text-muted-foreground"}`}>
+                Received {fmtDay(r.receivedOn)} · {doneSummary(r.purchaseDue, r.receivedOn)}
               </div>
             </>
           ) : r.purchaseDue && tone ? (
@@ -349,8 +349,8 @@ export function PurchaserPlanTable({
               {TONE_NAME[t]} · {DUE_TONE_LABEL[t].toLowerCase()}
             </span>
           ))}
-          <span className={`rounded border px-1.5 py-0.5 ${LATE_CLASS}`}>Grey · already bought, late</span>
-          <span>— once bought, green means it was bought on time</span>
+          <span className={`rounded border px-1.5 py-0.5 ${LATE_CLASS}`}>Grey · received in stock, late</span>
+          <span>— once received in stock, green means it arrived on time</span>
         </div>
 
         <div className="overflow-x-auto rounded-md border">
