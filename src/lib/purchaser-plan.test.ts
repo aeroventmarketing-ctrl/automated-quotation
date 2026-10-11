@@ -15,6 +15,10 @@ import {
   planTypeLabel,
   planEditChange,
   planEditValue,
+  purchaseDueTone,
+  dueCountdown,
+  sortPlanBy,
+  groupPlan,
   type PlanPr,
   type PurchaserPlanRow,
 } from "./purchaser-plan";
@@ -139,5 +143,101 @@ describe("the edit trail — how each change reads", () => {
   it("never shifts a date by a day, whatever the viewer's timezone", () => {
     // Formatted from the calendar day itself, not from a midnight instant.
     expect(planEditValue("clientDue", "2026-01-01")).toBe("Jan 1, 2026");
+  });
+});
+
+// --- Purchase due date colour ----------------------------------------------------
+
+describe("the Purchase due date colour — the owner's four bands", () => {
+  const TODAY = "2026-10-11";
+  it.each([
+    ["2026-10-10", "overdue"], // yesterday → red
+    ["2026-09-01", "overdue"],
+    ["2026-10-11", "due3"],    // due today is not late yet → amber
+    ["2026-10-14", "due3"],    // 3 days away → amber
+    ["2026-10-15", "due7"],    // 4 days away → yellow
+    ["2026-10-18", "due7"],    // 7 days away → yellow
+    ["2026-10-19", "ontime"],  // 8 days away → green
+    ["2026-12-25", "ontime"],
+  ])("due %s → %s", (due, tone) => {
+    expect(purchaseDueTone(due, TODAY)).toBe(tone);
+  });
+
+  it("no due date → no colour", () => {
+    expect(purchaseDueTone(null, TODAY)).toBeNull();
+  });
+
+  it("counts calendar days across a month end", () => {
+    expect(purchaseDueTone("2026-11-03", "2026-10-31")).toBe("due3"); // 3 days
+    expect(purchaseDueTone("2026-11-08", "2026-10-31")).toBe("ontime"); // 8 days
+  });
+
+  it("says how far off, in words", () => {
+    expect(dueCountdown("2026-10-09", TODAY)).toBe("Overdue by 2 days");
+    expect(dueCountdown("2026-10-10", TODAY)).toBe("Overdue by 1 day");
+    expect(dueCountdown("2026-10-11", TODAY)).toBe("Due today");
+    expect(dueCountdown("2026-10-12", TODAY)).toBe("Due in 1 day");
+    expect(dueCountdown("2026-10-16", TODAY)).toBe("Due in 5 days");
+  });
+});
+
+// --- Sort and group --------------------------------------------------------------
+describe("sort and group", () => {
+  const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", href: "#", orderedDate: "2026-10-08",
+    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, type: null, typeByName: null, typeAt: null,
+    clientDue: null, clientDueByName: null, clientDueAt: null, edits: [], ...over,
+  });
+  const rows = [
+    r("0450", { purchaseDue: "2026-10-20", clientDue: "2026-10-24", mrfStatus: "Budgeted", type: "for_fabrication", accountHolder: "Kurt Calucin" }),
+    r("0451", { purchaseDue: null, mrfStatus: "Requested", accountHolder: "Desiree Enigo" }),
+    r("0405", { purchaseDue: "2026-10-08", clientDue: "2026-10-09", mrfStatus: "Approved", type: "purchase_to_supplier", orderNo: "2026 - AFBM00003651A", orderedDate: "2026-09-30" }),
+  ];
+  const order = (rs: PurchaserPlanRow[]) => rs.map((x) => x.mrfNo);
+
+  it("ascending and descending, with blanks last both ways", () => {
+    expect(order(sortPlanBy(rows, "purchaseDue", "asc"))).toEqual(["0405", "0450", "0451"]);
+    expect(order(sortPlanBy(rows, "purchaseDue", "desc"))).toEqual(["0450", "0405", "0451"]);
+  });
+
+  it("status sorts by stage, not alphabet — Requested before Approved", () => {
+    expect(order(sortPlanBy(rows, "mrfStatus", "asc"))).toEqual(["0451", "0405", "0450"]);
+    expect(order(sortPlanBy(rows, "mrfStatus", "desc"))).toEqual(["0450", "0405", "0451"]);
+  });
+
+  it("type sorts as listed, untyped last", () => {
+    expect(order(sortPlanBy(rows, "type", "asc"))).toEqual(["0405", "0450", "0451"]);
+    expect(order(sortPlanBy(rows, "type", "desc"))).toEqual(["0450", "0405", "0451"]);
+  });
+
+  it("text columns sort A–Z / Z–A", () => {
+    expect(order(sortPlanBy(rows, "accountHolder", "asc"))).toEqual(["0451", "0450", "0405"]);
+    expect(order(sortPlanBy(rows, "orderNo", "desc"))).toEqual(["0450", "0451", "0405"]);
+  });
+
+  it("groups dates by month, with 'No date' last", () => {
+    const g = groupPlan(rows, "purchaseDue", "purchaseDue", "asc");
+    expect(g.map((x) => [x.label, order(x.rows)])).toEqual([["October 2026", ["0405", "0450"]], ["No date", ["0451"]]]);
+  });
+
+  it("grouping and sorting on the same column turns the groups around too — but 'No date' stays last", () => {
+    const g = groupPlan([...rows, r("0500", { purchaseDue: "2026-11-02" })], "purchaseDue", "purchaseDue", "desc");
+    expect(g.map((x) => x.label)).toEqual(["November 2026", "October 2026", "No date"]);
+  });
+
+  it("groups by status in stage order, each group sorted by the chosen key", () => {
+    const g = groupPlan(rows, "mrfStatus", "orderedDate", "asc");
+    expect(g.map((x) => x.label)).toEqual(["Requested", "Approved", "Budgeted"]);
+  });
+
+  it("groups by type with the untyped last", () => {
+    const g = groupPlan(rows, "type", "purchaseDue", "asc");
+    expect(g.map((x) => x.label)).toEqual(["Purchase to supplier", "For fabrication", "No type yet"]);
+  });
+
+  it("no grouping is one group holding everything, sorted", () => {
+    const g = groupPlan(rows, "none", "clientDue", "asc");
+    expect(g).toHaveLength(1);
+    expect(order(g[0].rows)).toEqual(["0405", "0450", "0451"]);
   });
 });

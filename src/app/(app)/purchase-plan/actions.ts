@@ -48,7 +48,7 @@ const asResult = async (fn: () => Promise<Extract<PlanSaveResult, { ok: true }>>
     const msg = e instanceof Error ? e.message : "Something went wrong.";
     // Missing table → say what to do, not a Prisma stack.
     if (/PurchaserPlan(Entry|Edit)|does not exist|P2021/i.test(msg)) {
-      return { ok: false, error: "The Purchaser Plan isn't set up in the database yet — run migration 0060_purchaser_plan." };
+      return { ok: false, error: "The Purchase Plan isn't set up in the database yet — run migration 0060_purchaser_plan." };
     }
     return { ok: false, error: msg };
   }
@@ -87,7 +87,7 @@ async function saveField(
     await tx.purchaserPlanEdit.create({ data: { quotationId, mrfId, field, fromValue: from, toValue: to, byId: who.id, byName: who.name, at } });
     return { field, from, to, byName: who.name, at: at.toISOString() } satisfies PlanEdit;
   });
-  if (edit) revalidatePath("/purchaser-plan");
+  if (edit) revalidatePath("/purchase-plan");
   return { ok: true, byName: who.name, at: at.toISOString(), edit };
 }
 
