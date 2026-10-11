@@ -19,6 +19,9 @@ import {
   dueCountdown,
   sortPlanBy,
   groupPlan,
+  boughtOn,
+  purchaseDoneTone,
+  doneSummary,
   type PlanPr,
   type PurchaserPlanRow,
 } from "./purchaser-plan";
@@ -115,7 +118,7 @@ describe("Type", () => {
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", href: "#", orderedDate, accountHolder: "x", mrfNo,
-    mrfStatus: "Pending", purchaseDue, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
+    mrfStatus: "Pending", purchaseDue, boughtOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
   });
 
   it("dated rows first, soonest first; undated last, by order date", () => {
@@ -185,7 +188,7 @@ describe("the Purchase due date colour — the owner's four bands", () => {
 describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", href: "#", orderedDate: "2026-10-08",
-    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, type: null, typeByName: null, typeAt: null,
+    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, boughtOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, edits: [], ...over,
   });
   const rows = [
@@ -239,5 +242,56 @@ describe("sort and group", () => {
     const g = groupPlan(rows, "none", "clientDue", "asc");
     expect(g).toHaveLength(1);
     expect(order(g[0].rows)).toEqual(["0405", "0450", "0451"]);
+  });
+});
+
+// --- After the purchase: where the MRF really is, and how the purchase went -----
+describe("a purchase received into stock no longer reads 'Completed'", () => {
+  // The owner: "how do we know … that the MRF is completed?" — it wasn't; only
+  // the purchase was. The MRF is done only when the department confirms receipt.
+  const done = pr("COMPLETED");
+  it("not yet released by the Warehouse", () => {
+    expect(planMrfStatus("purchasing", [done])).toBe("Received in stock · awaiting release");
+  });
+  it("partly released", () => {
+    expect(planMrfStatus("partial", [done])).toBe("Partly released");
+  });
+  it("released, waiting for the department to confirm", () => {
+    expect(planMrfStatus("issued", [done])).toBe("Released · awaiting confirmation");
+  });
+  it("a split MRF is only 'received' when the request furthest behind is", () => {
+    expect(planMrfStatus("purchasing", [done, pr("PURCHASED", { mrfId: null })])).toBe("Budgeted");
+  });
+});
+
+describe("when the purchase was made", () => {
+  it("is the Item Bought day, in Manila", () => {
+    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-09T23:30:00Z" })])).toBe("2026-09-10");
+  });
+  it("is null while anything is still to buy", () => {
+    expect(boughtOn([pr("APPROVED")])).toBeNull();
+    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-10T02:00:00Z" }), pr("APPROVED")])).toBeNull();
+  });
+  it("for a split MRF, the LAST piece bought", () => {
+    expect(boughtOn([pr("PURCHASED", { purchasedAt: "2026-09-08T02:00:00Z" }), pr("COMPLETED", { purchasedAt: "2026-09-12T02:00:00Z" })])).toBe("2026-09-12");
+  });
+  it("ignores rejected and cancelled siblings", () => {
+    expect(boughtOn([pr("CANCELLED"), pr("PURCHASED", { purchasedAt: "2026-09-08T02:00:00Z" })])).toBe("2026-09-08");
+  });
+});
+
+describe("on time or late, once bought", () => {
+  it("on or before the due date → on time", () => {
+    expect(purchaseDoneTone("2026-09-10", "2026-09-10")).toBe("ontime");
+    expect(purchaseDoneTone("2026-09-10", "2026-09-08")).toBe("ontime");
+    expect(doneSummary("2026-09-10", "2026-09-08")).toBe("on time");
+  });
+  it("after it → late, by how many days", () => {
+    expect(purchaseDoneTone("2026-09-08", "2026-09-10")).toBe("late");
+    expect(doneSummary("2026-09-08", "2026-09-10")).toBe("2 days late");
+    expect(doneSummary("2026-09-08", "2026-09-09")).toBe("1 day late");
+  });
+  it("no due date → nothing to be late against", () => {
+    expect(purchaseDoneTone(null, "2026-09-10")).toBe("ontime");
   });
 });
