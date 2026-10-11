@@ -1,3 +1,35 @@
+## 2026-10-11 · The Purchaser Plan — Sales joins, and the two columns split
+
+The owner: *"Add sales role who can see the Purchaser Plan tile, sales role can add and edit client
+due date. Purchaser role cannot add and edit the client due date. Engineer role, admin role and
+payment approver can edit and add client due date."*
+
+One edit flag became two, `canEditType` and `canEditClientDue`, in the same single rule
+(`purchaser-plan-access`) the tile, page and server actions all read:
+
+| | sees | Type | Client due date |
+| --- | --- | --- | --- |
+| Admin · Payment Approver · Engineer | ✓ | ✓ | ✓ |
+| Purchaser | ✓ | ✓ | **—** |
+| Sales | **✓** | — | **✓** |
+| everyone else | — | — | — |
+
+Sales was granted the Client due date and nothing else, so Type stays with the four who had it.
+Holding two seats gives the union. The server refuses each field on its own flag, so the read-only
+cells are enforced, not just hidden.
+
+**A correction made on the way.** I first said a plain Sales user is redirected away from My
+Dashboard and would never see the tile. The comment I'd read says so, but the code it sits above
+doesn't: `hasRole` includes the SALES and ENGINEER account roles. The tile reaches them, and the
+render below shows it.
+
+Rendered: Admin, Payment Approver and Engineer can edit both columns. The Purchaser sees the tile with
+Type editable and Client due read-only; Sales sees the tile with Type read-only and Client due
+editable. Warehouse and Accounting get no tile and are refused the page. Sam Sales set #0450's Client
+due to Nov 5, and the Purchaser saw it read-only with the whole trail underneath: Sam Sales, Admin Ana,
+Elena Cruz. A deliberate grant of the Client due date to the Purchaser failed the grid before it was
+reverted.
+
 ## 2026-10-11 · The Purchaser Plan — every editor, not just the last
 
 The owner, on the "who last set it" stamp: *"Record every person who made the edit for tracking

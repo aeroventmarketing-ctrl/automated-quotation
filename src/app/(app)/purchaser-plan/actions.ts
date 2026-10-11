@@ -20,12 +20,17 @@ export type PlanSaveResult =
   | { ok: true; byName: string; at: string; edit: PlanEdit | null }
   | { ok: false; error: string };
 
-async function guard(quotationId: string, mrfId: string): Promise<{ id: string; name: string }> {
+/** Who may set each field — read from the same rule the page draws its inputs from. */
+const REFUSAL: Record<PlanEditField, string> = {
+  type: "Only the Purchaser, an Engineer, the Payment Approver or an admin can set the Type.",
+  clientDue: "Only Sales, an Engineer, the Payment Approver or an admin can set the Client due date.",
+};
+
+async function guard(quotationId: string, mrfId: string, field: PlanEditField): Promise<{ id: string; name: string }> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Please sign in again.");
-  if (!purchaserPlanAccess(user, await getWorkflowRoles()).canEdit) {
-    throw new Error("Only the Purchaser, an Engineer, the Payment Approver or an admin can edit the Purchaser Plan.");
-  }
+  const a = purchaserPlanAccess(user, await getWorkflowRoles());
+  if (!(field === "type" ? a.canEditType : a.canEditClientDue)) throw new Error(REFUSAL[field]);
   // The MRF must really be an open MRF on that order — the ids arrive from a
   // browser, and an entry for an MRF that doesn't exist would be a row nobody
   // can ever see or clear.
@@ -67,7 +72,7 @@ async function saveField(
   field: PlanEditField,
   value: string | null,
 ): Promise<Extract<PlanSaveResult, { ok: true }>> {
-  const who = await guard(quotationId, mrfId);
+  const who = await guard(quotationId, mrfId, field);
   const at = new Date();
   const edit = await prisma.$transaction(async (tx) => {
     const cur = await tx.purchaserPlanEntry.findUnique({ where: { mrfId } });

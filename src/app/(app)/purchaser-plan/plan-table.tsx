@@ -75,7 +75,7 @@ function History({ row, field }: { row: PurchaserPlanRow; field: PlanEditField }
   );
 }
 
-export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { rows: PurchaserPlanRow[]; canEdit: boolean; tableMissing: boolean }) {
+export function PurchaserPlanTable({ rows: initial, canEditType, canEditClientDue, tableMissing }: { rows: PurchaserPlanRow[]; canEditType: boolean; canEditClientDue: boolean; tableMissing: boolean }) {
   // Saved values are patched in place, so a change shows at once without a reload.
   const [rows, setRows] = useState(initial);
   const [query, setQuery] = useState("");
@@ -190,7 +190,7 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
               {shown.map((r) => (
                 <tr key={r.key} className="align-top hover:bg-accent/40">
                   <td className="px-2.5 py-2">
-                    {canEdit ? (
+                    {canEditType ? (
                       <select
                         value={r.type ?? ""}
                         disabled={busy === `${r.key}:type`}
@@ -218,7 +218,7 @@ export function PurchaserPlanTable({ rows: initial, canEdit, tableMissing }: { r
                   <td className="px-2.5 py-2"><Badge variant={STATUS_VARIANT[r.mrfStatus] ?? "secondary"} className="whitespace-nowrap font-normal">{r.mrfStatus}</Badge></td>
                   <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.purchaseDue) ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="px-2.5 py-2">
-                    {canEdit ? (
+                    {canEditClientDue ? (
                       <input
                         type="date"
                         defaultValue={r.clientDue ?? ""}

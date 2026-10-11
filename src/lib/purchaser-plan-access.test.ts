@@ -1,9 +1,12 @@
 /**
- * THE PURCHASER PLAN'S GRID — who sees the tile and the table, who fills it in.
+ * THE PURCHASER PLAN'S GRID — who sees the tile and the table, and who fills in
+ * which column.
  *
- * The owner named exactly four: *"purchaser role, engineer role, admin role,
- * payment approver role"*, and gave all four the edit. Every other seat is
- * asserted false so a widening shows up here as a moved cell, not in production.
+ * The owner: Sales sees it and edits the Client due date; the Purchaser does NOT
+ * edit the Client due date; Engineer, Admin and Payment Approver edit it. Type
+ * stays with the four who had it — Sales was granted the Client due date only.
+ * Every other seat is asserted to get nothing, so a widening shows up here as a
+ * moved cell rather than in production.
  */
 import { describe, it, expect } from "vitest";
 import type { WorkflowRoleAssignments } from "@/lib/workflow-roles";
@@ -24,24 +27,48 @@ const WHO = {
 } as const;
 type Who = keyof typeof WHO;
 
-const access = (w: Who) =>
-  purchaserPlanAccess({ id: w, role: WHO[w].base } as never, { [w]: [...WHO[w].roles] } as WorkflowRoleAssignments);
+const access = (w: Who, base: string = WHO[w].base, roles: readonly string[] = WHO[w].roles) =>
+  purchaserPlanAccess({ id: w, role: base } as never, { [w]: [...roles] } as WorkflowRoleAssignments);
 
-const ALLOWED: Who[] = ["admin", "engineer", "purchaser", "paymentApprover"];
+/** [see, Type, Client due date] */
+const GRID: Record<Who, [boolean, boolean, boolean]> = {
+  admin: [true, true, true],
+  paymentApprover: [true, true, true],
+  engineer: [true, true, true],
+  purchaser: [true, true, false],
+  sales: [true, false, true],
+  warehouse: [false, false, false],
+  accounting: [false, false, false],
+  plantManager: [false, false, false],
+  logistics: [false, false, false],
+  prodHead: [false, false, false],
+  nobody: [false, false, false],
+};
 
 describe("the Purchaser Plan grid", () => {
   for (const w of Object.keys(WHO) as Who[]) {
-    const yes = ALLOWED.includes(w);
-    it(`${w} → ${yes ? "sees and edits" : "nothing"}`, () => {
-      expect(access(w)).toEqual({ canView: yes, canEdit: yes });
+    const [see, type, due] = GRID[w];
+    it(`${w} → see ${see} · Type ${type} · Client due ${due}`, () => {
+      expect(access(w)).toEqual({ canView: see, canEditType: type, canEditClientDue: due });
     });
   }
+});
 
-  it("an Engineer needs no workflow role — it is their account role", () => {
-    expect(purchaserPlanAccess({ id: "e", role: "ENGINEER" } as never, {})).toEqual({ canView: true, canEdit: true });
+describe("two seats at once — the union", () => {
+  it("a Purchaser who is also an Engineer edits the Client due date as the Engineer", () => {
+    expect(access("purchaser", "ENGINEER", ["purchaser"]).canEditClientDue).toBe(true);
   });
+  it("a Sales user who also holds Purchaser edits both columns", () => {
+    expect(access("sales", "SALES", ["purchaser"])).toEqual({ canView: true, canEditType: true, canEditClientDue: true });
+  });
+});
 
+describe("the account roles need no workflow role", () => {
+  it("a bare Engineer and a bare Sales user both qualify", () => {
+    expect(purchaserPlanAccess({ id: "e", role: "ENGINEER" } as never, {}).canView).toBe(true);
+    expect(purchaserPlanAccess({ id: "s", role: "SALES" } as never, {}).canView).toBe(true);
+  });
   it("nobody signed in → nothing", () => {
-    expect(purchaserPlanAccess(null, {})).toEqual({ canView: false, canEdit: false });
+    expect(purchaserPlanAccess(null, {})).toEqual({ canView: false, canEditType: false, canEditClientDue: false });
   });
 });
