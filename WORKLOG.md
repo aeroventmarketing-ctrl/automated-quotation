@@ -1,3 +1,25 @@
+## 2026-10-11 · Purchase Plan: rejected and cancelled MRFs get their own box
+
+The owner: *"in Purchase Plan, make a separate box for Rejected/Cancelled MRF."*
+
+Two kinds go there (`closedInfo`):
+- the **MRF itself was cancelled** — stamped with who (`handledByName`) and when; these used to be
+  left off the plan altogether;
+- **every purchase request raised from it was rejected or cancelled** in Purchasing — with the
+  decider, the time, and for a rejection the reason (`decisionNote`); these used to sit in the main
+  table reading "Rejected".
+
+Two rules worth stating: **one rejected request beside a live one is not closed** — the MRF is still
+being bought, so it stays on the plan; and **a completed MRF never goes in the box** — it finished, it
+wasn't called off. The box is read-only, newest first, ten rows then "Show N more".
+
+**The tile and the table count by the same rule** (`isPlanActive`). That meant the dashboard needs
+each MRF's purchase-request statuses — two columns, read only for the five seats that see the tile.
+
+Rendered: #0901 (MRF cancelled by Admin Ana) and #0902 (purchase rejected by Rey Gil, "Over budget —
+find a cheaper supplier") in the box, newest first; #0903 (one rejected, one live request) stays on the
+plan. Tile 6, "6 open MRFs", 6 rows.
+
 ## 2026-10-11 · Purchase Plan: each link goes where its label says
 
 The owner: *"make MRF clickable, once clicked it will be redirected to specific MRF. Order number is

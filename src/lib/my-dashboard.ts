@@ -15,7 +15,7 @@ import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
 import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
-import { isPlanOpenMrf } from "@/lib/purchaser-plan";
+import { isPlanActive } from "@/lib/purchaser-plan";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
@@ -226,6 +226,22 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // loop already walks, so the tile costs no read of its own.
   const seesPurchaserPlan = purchaserPlanAccess(user, assignments).canView;
   let planOpenMrfs = 0;
+  // Rejected / cancelled MRFs live in their own box under the plan, so the tile
+  // must leave them out too — its number is the plan's row count. That needs each
+  // MRF's purchase-request statuses: two columns, read only for the seats that
+  // see the tile.
+  const planPrStatuses = new Map<string, string[]>();
+  if (seesPurchaserPlan) {
+    const prs = await prisma.purchaseRequest
+      .findMany({ where: { mrfId: { not: null } }, select: { mrfId: true, status: true } })
+      .catch(() => [] as { mrfId: string | null; status: string }[]);
+    for (const p of prs) {
+      if (!p.mrfId) continue;
+      const arr = planPrStatuses.get(p.mrfId) ?? [];
+      arr.push(p.status);
+      planPrStatuses.set(p.mrfId, arr);
+    }
+  }
   const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager") || user.role === "SALES" || user.role === "ENGINEER";
   // Linked purchase-request status per MRF — so a "purchasing" MRF can say
   // whether its item has been received into stock yet.
@@ -324,7 +340,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
       const wf = readOrderWorkflow(q.classification);
-      if (seesPurchaserPlan) planOpenMrfs += wf.materialRequests.filter((m) => isPlanOpenMrf(m.status)).length;
+      if (seesPurchaserPlan) planOpenMrfs += wf.materialRequests.filter((m) => isPlanActive(m.status, planPrStatuses.get(m.id) ?? [])).length;
       // The order's creation instant — a go-live gate applied to every pending
       // action below, so an order created before launch never demands action even
       // if a later stage stamp (during testing) made its `since` post-launch.

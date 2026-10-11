@@ -63,6 +63,10 @@ export interface PlanPr {
   chainLog?: unknown;
   /** The due date set in Purchasing. */
   purchaseDueAt?: Date | string | null;
+  /** Who rejected / cancelled it, when, and (for a rejection) why. */
+  decidedByName?: string | null;
+  decidedAt?: Date | string | null;
+  decisionNote?: string | null;
   /**
    * Stamped when the Warehouseman presses **Receive & Add Stock** — the step
    * that completes the request. (An Office requisition linked to an order skips
@@ -493,4 +497,92 @@ export function groupPlan(
       return a.rank == null || b.rank == null ? 0 : compare(a.rank, b.rank) * sign;
     })
     .map(({ key, label, rows: rs }) => ({ key, label, rows: rs }));
+}
+
+// --- Rejected / Cancelled: their own box ------------------------------------------
+
+/**
+ * The owner: *"in Purchase Plan, make a separate box for Rejected/Cancelled
+ * MRF."* Two ways an MRF ends up there:
+ *
+ *  - the **MRF itself was cancelled** (by its requestor, or an admin) — these
+ *    used to be left off the plan altogether;
+ *  - **every purchase request raised from it was rejected or cancelled** in
+ *    Purchasing — these used to sit in the main table reading "Rejected".
+ *
+ * Neither is work anyone is still doing, so the main table no longer carries
+ * them; the box keeps them in sight, with who closed them, when, and why.
+ */
+export type ClosedOutcome = "MRF cancelled" | "Purchase rejected" | "Purchase cancelled";
+
+const isOffChain = (s: string) => s === "REJECTED" || s === "CANCELLED";
+
+/** Every purchase request on this MRF was rejected or cancelled (and there was at least one). */
+export const allPurchasesClosed = (prStatuses: readonly string[]): boolean =>
+  prStatuses.length > 0 && prStatuses.every(isOffChain);
+
+/**
+ * On the main plan? Open (not completed, not cancelled) AND not closed out in
+ * Purchasing. The one rule both the page and the dashboard tile count by, so
+ * the tile's number is the table's row count.
+ */
+export const isPlanActive = (mrfStatus: string, prStatuses: readonly string[]): boolean =>
+  isPlanOpenMrf(mrfStatus) && !allPurchasesClosed(prStatuses);
+
+export interface ClosedInfo {
+  outcome: ClosedOutcome;
+  byName: string | null;
+  /** ISO instant, or null when nothing was recorded. */
+  at: string | null;
+  note: string | null;
+}
+
+const iso = (d: Date | string | null | undefined): string | null => {
+  if (!d) return null;
+  const t = new Date(d);
+  return Number.isFinite(t.getTime()) ? t.toISOString() : null;
+};
+
+/**
+ * Why this MRF belongs in the Rejected / Cancelled box — or null if it doesn't.
+ * A completed MRF never does: it finished, it wasn't called off.
+ */
+export function closedInfo(
+  mrf: { status: string; handledByName?: string | null; handledAt?: string | null },
+  prs: readonly PlanPr[],
+): ClosedInfo | null {
+  if (mrf.status === "cancelled") {
+    return { outcome: "MRF cancelled", byName: mrf.handledByName ?? null, at: iso(mrf.handledAt), note: null };
+  }
+  if (mrf.status === "completed") return null;
+  if (!allPurchasesClosed(prs.map((p) => p.status))) return null;
+  // Several requests, all closed: the most recent decision speaks for the MRF.
+  const last = [...prs].sort((a, b) => (iso(b.decidedAt) ?? "").localeCompare(iso(a.decidedAt) ?? ""))[0];
+  return {
+    outcome: last.status === "REJECTED" ? "Purchase rejected" : "Purchase cancelled",
+    byName: last.decidedByName ?? null,
+    at: iso(last.decidedAt),
+    note: (last.decisionNote ?? "").trim() || null,
+  };
+}
+
+export interface ClosedPlanRow extends ClosedInfo {
+  key: string;
+  quotationId: string;
+  mrfId: string;
+  orderNo: string;
+  orderHref: string;
+  mrfHref: string;
+  orderedDate: string | null;
+  accountHolder: string;
+  mrfNo: string;
+}
+
+/** Most recently closed first; anything without a date last. */
+export function sortClosedRows(rows: ClosedPlanRow[]): ClosedPlanRow[] {
+  return [...rows].sort((a, b) => {
+    if (!!a.at !== !!b.at) return a.at ? -1 : 1;
+    if (a.at && b.at && a.at !== b.at) return a.at < b.at ? 1 : -1;
+    return a.mrfNo.localeCompare(b.mrfNo, undefined, { numeric: true });
+  });
 }

@@ -20,6 +20,10 @@ import {
   sortPlanBy,
   groupPlan,
   receivedOn,
+  closedInfo,
+  isPlanActive,
+  sortClosedRows,
+  type ClosedPlanRow,
   purchaseDoneTone,
   doneSummary,
   type PlanPr,
@@ -299,5 +303,62 @@ describe("on time or late, once received", () => {
   });
   it("no due date → nothing to be late against", () => {
     expect(purchaseDoneTone(null, "2026-09-10")).toBe("ontime");
+  });
+});
+
+// --- Rejected / Cancelled: their own box --------------------------------------------
+describe("which MRFs go to the Rejected / Cancelled box", () => {
+  it("an MRF that was itself cancelled — with who and when", () => {
+    const c = closedInfo({ status: "cancelled", handledByName: "Admin Ana", handledAt: "2026-10-05T02:00:00Z" }, []);
+    expect(c).toEqual({ outcome: "MRF cancelled", byName: "Admin Ana", at: "2026-10-05T02:00:00.000Z", note: null });
+  });
+
+  it("every purchase request rejected — with the reason", () => {
+    const c = closedInfo({ status: "purchasing" }, [pr("REJECTED", { decidedByName: "Rey Gil", decidedAt: "2026-10-06T03:00:00Z", decisionNote: "Over budget" })]);
+    expect(c).toEqual({ outcome: "Purchase rejected", byName: "Rey Gil", at: "2026-10-06T03:00:00.000Z", note: "Over budget" });
+  });
+
+  it("several requests, all closed — the most recent decision speaks", () => {
+    const c = closedInfo({ status: "purchasing" }, [
+      pr("REJECTED", { decidedByName: "Rey Gil", decidedAt: "2026-10-01T03:00:00Z" }),
+      pr("CANCELLED", { decidedByName: "Allan Ramos", decidedAt: "2026-10-04T03:00:00Z" }),
+    ]);
+    expect(c?.outcome).toBe("Purchase cancelled");
+    expect(c?.byName).toBe("Allan Ramos");
+  });
+
+  it("one rejected request alongside a live one is NOT closed — it stays on the plan", () => {
+    expect(closedInfo({ status: "purchasing" }, [pr("REJECTED"), pr("APPROVED")])).toBeNull();
+    expect(isPlanActive("purchasing", ["REJECTED", "APPROVED"])).toBe(true);
+  });
+
+  it("a completed MRF never goes in the box — it finished, it wasn't called off", () => {
+    expect(closedInfo({ status: "completed" }, [pr("CANCELLED")])).toBeNull();
+  });
+
+  it("an MRF with no purchase requests at all isn't closed out by Purchasing", () => {
+    expect(closedInfo({ status: "requested" }, [])).toBeNull();
+    expect(isPlanActive("requested", [])).toBe(true);
+  });
+});
+
+describe("the main plan and the tile count by the same rule", () => {
+  it("drops cancelled, completed, and closed-out-in-Purchasing MRFs", () => {
+    expect(isPlanActive("cancelled", [])).toBe(false);
+    expect(isPlanActive("completed", [])).toBe(false);
+    expect(isPlanActive("purchasing", ["REJECTED"])).toBe(false);
+    expect(isPlanActive("purchasing", ["CANCELLED", "REJECTED"])).toBe(false);
+    expect(isPlanActive("purchasing", ["COMPLETED"])).toBe(true);
+  });
+});
+
+describe("the box's order — most recently closed first", () => {
+  const c = (mrfNo: string, at: string | null): ClosedPlanRow => ({
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
+    accountHolder: "x", mrfNo, outcome: "MRF cancelled", byName: null, at, note: null,
+  });
+  it("newest first, undated last", () => {
+    const out = sortClosedRows([c("0001", "2026-10-01T00:00:00Z"), c("0002", null), c("0003", "2026-10-09T00:00:00Z")]);
+    expect(out.map((r) => r.mrfNo)).toEqual(["0003", "0001", "0002"]);
   });
 });
