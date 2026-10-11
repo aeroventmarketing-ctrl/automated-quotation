@@ -207,8 +207,10 @@ export interface PurchaserPlanRow {
   quotationId: string;
   mrfId: string;
   orderNo: string;
-  /** Where Order no. leads — the MRF itself. */
-  href: string;
+  /** Order no. → the order's workflow page. */
+  orderHref: string;
+  /** MRF no. → that one MRF's own page. */
+  mrfHref: string;
   orderedDate: string | null;
   accountHolder: string;
   mrfNo: string;

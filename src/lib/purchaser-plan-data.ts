@@ -98,7 +98,10 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         quotationId: q.id,
         mrfId: m.id,
         orderNo: q.quoteNumber,
-        href: `/orders/${q.id}/mrf/${m.id}`,
+        // The owner: Order no. "should be redirected to the workflow of the order
+        // number"; MRF no. "redirected to specific MRF".
+        orderHref: `/orders/${q.id}`,
+        mrfHref: `/orders/${q.id}/mrf/${m.id}`,
         orderedDate,
         accountHolder: q.preparedBy?.name ?? "—",
         mrfNo: m.formNo,

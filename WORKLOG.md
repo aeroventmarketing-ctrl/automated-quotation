@@ -1,3 +1,18 @@
+## 2026-10-11 · Purchase Plan: each link goes where its label says
+
+The owner: *"make MRF clickable, once clicked it will be redirected to specific MRF. Order number is
+clickable but it is redirected in the wrong page, it should be redirected to the workflow of the order
+number."*
+
+My first build pointed **Order no.** at the MRF's own form page — a number that names an order, leading
+to a form. Now a row carries two links: **Order no. → `/orders/{id}`**, the order's workflow; **MRF no.
+→ `/orders/{id}/mrf/{mrfId}`**, that one MRF (which has its own "Back to order").
+
+Verified as the Purchaser, Sales and an Engineer: Order no. landed on the order page with its stage strip
+and Phase 1 / 2 cards; MRF no. landed on the MRF 0262 form. My first click test reported both wrong —
+the links navigate in-page, and I read the address before the navigation finished. Reading the hrefs
+showed the links were right; waiting for each navigation confirmed it.
+
 ## 2026-10-11 · Judged at Receive & Add Stock, not at Item Bought
 
 The owner, on the entry below: *"Better reference for this is when warehouseman press the button

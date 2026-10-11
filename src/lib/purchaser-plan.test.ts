@@ -117,7 +117,7 @@ describe("Type", () => {
 
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", href: "#", orderedDate, accountHolder: "x", mrfNo,
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", mrfNo,
     mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
   });
 
@@ -187,7 +187,7 @@ describe("the Purchase due date colour — the owner's four bands", () => {
 // --- Sort and group --------------------------------------------------------------
 describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", href: "#", orderedDate: "2026-10-08",
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", orderHref: "#", mrfHref: "#", orderedDate: "2026-10-08",
     accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, edits: [], ...over,
   });
