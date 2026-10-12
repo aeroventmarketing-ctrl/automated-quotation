@@ -118,7 +118,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   const admin = isAdmin(viewer);
   const salespeople = users.filter((u) => u.id !== owner?.userId);
   const bir = accountData?.bir2303;
-  const birAccess = bir2303Access(viewer, workflowRoles);
+  const birAccess = bir2303Access(viewer, workflowRoles, owner?.userId ?? null);
 
   // Conversation log split into one box per quotation. Each conversation is
   // filed under the quote it relates to; anything without a matching quote (or

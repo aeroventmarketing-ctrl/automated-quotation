@@ -70,6 +70,24 @@ export function currentOwner(data: AccountData | null | undefined): AccountAssig
 }
 
 /**
+ * The client's sales in-charge, as the client profile shows it: the open
+ * assignment, or — for a client never assigned or transferred — the creator of
+ * its first inquiry, which is what the profile's "Sales in-charge" box falls back
+ * to. The BIR 2303 editor uses this so the person named in that box is the
+ * person who may change the client's 2303.
+ */
+export async function accountHolderId(customerId: string): Promise<string | null> {
+  const owner = currentOwner(await getAccountData(customerId));
+  if (owner) return owner.userId;
+  const first = await prisma.inquiry.findFirst({
+    where: { customerId },
+    orderBy: { createdAt: "asc" },
+    select: { createdById: true },
+  });
+  return first?.createdById ?? null;
+}
+
+/**
  * True when the user currently holds the client's account (the open assignment).
  * A transferred quotation belongs to whoever the account is now assigned to, so
  * the current sales in-charge gets the same edit rights as the preparer.

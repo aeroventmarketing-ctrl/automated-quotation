@@ -1,3 +1,19 @@
+## 2026-10-13 · BIR 2303: the client's account holder, not every salesperson
+
+The owner: *"Allow sales account holder, accounting, admin and payment approver change the 2303
+section."* Two moves in the grid: **Sales narrows** to the client's own sales in-charge — any other
+salesperson now sees the fields and the eye but can't change them — and **the Payment Approver gains**
+upload / AI read / edit. Engineer stays eye-only.
+
+"Account holder" is the person in the profile's Sales in-charge box: the open assignment, or for a
+client never assigned, the creator of its first inquiry (`accountHolderId` in `lib/account.ts`, the same
+fallback the profile uses). It is a fact about the client, so every caller — page, upload route, view
+route, AI route, both actions — passes it to the one pure rule.
+
+Rendered: Sam Sales (holder) edits; a second salesperson gets neither the link nor Edit, and 403 from
+both routes; Payment Approver, Accounting, Admin edit (the approver's save stamped "Rey Gil");
+Engineer and Purchaser refused.
+
 ## 2026-10-12 · BIR 2303 in Client details — upload, eye, AI read
 
 The owner taught the form off a sample certificate (TIN & Branch Code, Name of Taxpayer, TIN Issuance

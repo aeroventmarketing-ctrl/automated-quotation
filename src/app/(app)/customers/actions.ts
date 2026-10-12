@@ -18,6 +18,7 @@ import {
   getAccountsRegistry,
   saveAccountsRegistry,
   updateAccountsRegistry,
+  accountHolderId,
   currentOwner,
   type AccountData,
   type ConversationEntry,
@@ -469,11 +470,12 @@ export async function deleteConversation(customerId: string, conversationId: str
 
 // --- BIR Form 2303 ------------------------------------------------------------
 
-async function bir2303Editor() {
+async function bir2303Editor(customerId: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!bir2303Access(user, await getWorkflowRoles()).canEdit) {
-    throw new Error("Only Sales, Accounting or an admin can change a client's BIR 2303.");
+  const [roles, holder] = await Promise.all([getWorkflowRoles(), accountHolderId(customerId)]);
+  if (!bir2303Access(user, roles, holder).canEdit) {
+    throw new Error("Only the client's sales account holder, Accounting, the Payment Approver or an admin can change this BIR 2303.");
   }
   return user;
 }
@@ -484,7 +486,7 @@ async function bir2303Editor() {
  * old file stays in storage, untouched.
  */
 export async function attachBir2303(customerId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
-  const user = await bir2303Editor();
+  const user = await bir2303Editor(customerId);
   if (!isBir2303Path(customerId, doc.path)) throw new Error("That file isn't this client's BIR 2303 upload.");
   const exists = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
   if (!exists) throw new Error("Client not found.");
@@ -515,7 +517,7 @@ const bir2303Schema = z.object({
  * branch code — instead of being saved however it was typed.
  */
 export async function saveBir2303(customerId: string, input: z.input<typeof bir2303Schema>): Promise<void> {
-  const user = await bir2303Editor();
+  const user = await bir2303Editor(customerId);
   const d = bir2303Schema.parse(input);
   const tin = formatTin(d.tin);
   if (!tin.ok) throw new Error(tin.error);

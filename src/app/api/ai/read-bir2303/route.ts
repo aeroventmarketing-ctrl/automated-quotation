@@ -8,7 +8,7 @@ import { bir2303ReadSchema } from "@/lib/ai/schemas";
 import { AI_BIR2303_READ_LIMIT } from "@/lib/ai/limits";
 import { coerceReadCounts, readsUsed, readsLeft, canReadAgain, bumpReadCount } from "@/lib/ai/read-allowance";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { getAccountData, updateAccountsRegistry } from "@/lib/account";
+import { getAccountData, updateAccountsRegistry, accountHolderId } from "@/lib/account";
 import { bir2303Access } from "@/lib/bir2303-access";
 import { BIR2303_SYSTEM, BIR2303_USER_PROMPT, fieldsFromRead, isBir2303Path } from "@/lib/bir2303";
 
@@ -31,14 +31,15 @@ const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!bir2303Access(user, await getWorkflowRoles()).canEdit) {
-    return NextResponse.json({ error: "Only Sales, Accounting or an admin can read a BIR 2303." }, { status: 403 });
-  }
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await req.json());
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+  const [roles, holder] = await Promise.all([getWorkflowRoles(), accountHolderId(body.customerId)]);
+  if (!bir2303Access(user, roles, holder).canEdit) {
+    return NextResponse.json({ error: "Only the client's sales account holder, Accounting, the Payment Approver or an admin can read this BIR 2303." }, { status: 403 });
   }
 
   const account = await getAccountData(body.customerId);
