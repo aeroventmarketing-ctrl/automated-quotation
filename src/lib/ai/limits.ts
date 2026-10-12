@@ -53,3 +53,11 @@ export const AI_SALE_DOC_READ_LIMIT = 3;
  * allowance — they are the override for this rule.
  */
 export const AI_CHECK_READ_LIMIT = 3;
+
+/**
+ * How many times the AI may read **one uploaded BIR Form 2303**, for anyone but
+ * an Admin. Same reasoning as the others: three looks, then a person types it
+ * from the certificate. Uploading a new file starts that file's own three.
+ * Persisted per path on the client's `bir2303.readCounts`.
+ */
+export const AI_BIR2303_READ_LIMIT = 3;

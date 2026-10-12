@@ -17,12 +17,16 @@ import {
 import {
   getAccountsRegistry,
   saveAccountsRegistry,
+  updateAccountsRegistry,
   currentOwner,
   type AccountData,
   type ConversationEntry,
 } from "@/lib/account";
 import { getInquiryDocs, setInquiryDocs } from "@/lib/inquiry-docs-store";
 import { saleFromClassification, type SaleDoc } from "@/lib/sale";
+import { getWorkflowRoles } from "@/lib/workflow-roles";
+import { bir2303Access } from "@/lib/bir2303-access";
+import { formatTin, isBir2303Path, parseIssuedOn } from "@/lib/bir2303";
 
 /**
  * Transfer a client account to another salesperson. Only the current sales
@@ -461,4 +465,81 @@ export async function deleteConversation(customerId: string, conversationId: str
   accounts[customerId] = data;
   await saveAccountsRegistry(accounts);
   revalidatePath(`/customers/${customerId}`);
+}
+
+// --- BIR Form 2303 ------------------------------------------------------------
+
+async function bir2303Editor() {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!bir2303Access(user, await getWorkflowRoles()).canEdit) {
+    throw new Error("Only Sales, Accounting or an admin can change a client's BIR 2303.");
+  }
+  return user;
+}
+
+/**
+ * Record the uploaded BIR 2303 on the client (the file is already in storage via
+ * /api/customer-uploads). A new upload replaces the old one on the record; the
+ * old file stays in storage, untouched.
+ */
+export async function attachBir2303(customerId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
+  const user = await bir2303Editor();
+  if (!isBir2303Path(customerId, doc.path)) throw new Error("That file isn't this client's BIR 2303 upload.");
+  const exists = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!exists) throw new Error("Client not found.");
+  await updateAccountsRegistry((accounts) => {
+    const existing: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+    accounts[customerId] = {
+      ...existing,
+      bir2303: {
+        ...(existing.bir2303 ?? {}),
+        doc: { path: doc.path, name: doc.name.slice(0, 200) || "BIR 2303", uploadedAt: doc.uploadedAt ?? new Date().toISOString(), byName: user.name },
+      },
+    };
+  });
+  revalidatePath(`/customers/${customerId}`);
+}
+
+const bir2303Schema = z.object({
+  tin: z.string().max(40).default(""),
+  taxpayerName: z.string().max(300).default(""),
+  tinIssuedOn: z.string().max(40).default(""),
+  taxpayerType: z.string().max(200).default(""),
+  registeredAddress: z.string().max(500).default(""),
+});
+
+/**
+ * Save the five BIR 2303 fields. The TIN is the client's one TIN (the Sales
+ * Summary prints it), so it is validated here — 9 digits plus a 3- or 5-digit
+ * branch code — instead of being saved however it was typed.
+ */
+export async function saveBir2303(customerId: string, input: z.input<typeof bir2303Schema>): Promise<void> {
+  const user = await bir2303Editor();
+  const d = bir2303Schema.parse(input);
+  const tin = formatTin(d.tin);
+  if (!tin.ok) throw new Error(tin.error);
+  const issued = d.tinIssuedOn.trim() ? parseIssuedOn(d.tinIssuedOn) : "";
+  if (issued === null) throw new Error("The TIN issuance date isn't a valid date.");
+  const exists = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true } });
+  if (!exists) throw new Error("Client not found.");
+  const clean = (v: string) => v.trim().replace(/\s+/g, " ") || undefined;
+  await updateAccountsRegistry((accounts) => {
+    const existing: AccountData = accounts[customerId] ?? { history: [], conversations: [] };
+    accounts[customerId] = {
+      ...existing,
+      tin: tin.value || undefined,
+      bir2303: {
+        ...(existing.bir2303 ?? {}),
+        taxpayerName: clean(d.taxpayerName),
+        tinIssuedOn: issued || undefined,
+        taxpayerType: clean(d.taxpayerType),
+        registeredAddress: clean(d.registeredAddress),
+        updatedByName: user.name,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  });
+  revalidatePath(`/customers/${customerId}`);
+  revalidatePath("/quotations");
 }

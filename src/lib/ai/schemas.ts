@@ -138,3 +138,20 @@ export const checkReadSchema = z.object({
 });
 
 export type CheckReadResult = z.infer<typeof checkReadSchema>;
+
+// --- BIR Form 2303 (the client's Certificate of Registration) ----------------
+// Five fields the owner named, plus whether the file is a 2303 at all. Turned into
+// form values by `fieldsFromRead` in lib/bir2303.ts, which empties any field the
+// code can't stand behind.
+export const bir2303ReadSchema = z.object({
+  isBir2303: z.boolean().nullable().default(null),
+  tin: z.string().nullable().default(null),
+  taxpayerName: z.string().nullable().default(null),
+  tinIssuedOn: z.string().nullable().default(null),
+  taxpayerType: z.string().nullable().default(null),
+  registeredAddress: z.string().nullable().default(null),
+  confidence: z.number().nullable().default(null),
+  warnings: z.array(z.string()).default([]),
+});
+
+export type Bir2303ReadResult = z.infer<typeof bir2303ReadSchema>;
