@@ -1,3 +1,55 @@
+## 2026-10-13 · BIR 2303: the client's account holder, not every salesperson
+
+The owner: *"Allow sales account holder, accounting, admin and payment approver change the 2303
+section."* Two moves in the grid: **Sales narrows** to the client's own sales in-charge — any other
+salesperson now sees the fields and the eye but can't change them — and **the Payment Approver gains**
+upload / AI read / edit. Engineer stays eye-only.
+
+"Account holder" is the person in the profile's Sales in-charge box: the open assignment, or for a
+client never assigned, the creator of its first inquiry (`accountHolderId` in `lib/account.ts`, the same
+fallback the profile uses). It is a fact about the client, so every caller — page, upload route, view
+route, AI route, both actions — passes it to the one pure rule.
+
+Rendered: Sam Sales (holder) edits; a second salesperson gets neither the link nor Edit, and 403 from
+both routes; Payment Approver, Accounting, Admin edit (the approver's save stamped "Rey Gil");
+Engineer and Purchaser refused.
+
+## 2026-10-12 · BIR 2303 in Client details — upload, eye, AI read
+
+The owner taught the form off a sample certificate (TIN & Branch Code, Name of Taxpayer, TIN Issuance
+Date, Taxpayer Type, Registered Address), then: *"Add the following in Client Details … Add a link
+wherein the sales role or accounting role can upload the BIR 2303, put an eyeview and use AI reading to
+autofill the additional fields."* The 2303 is what VAT-inclusive, VAT-exclusive (+12%) and zero-rated
+transactions will lean on.
+
+**Where it lives.** No migration. Like the TIN before it, it rides in the account registry
+(`AccountData.bir2303`). The 2303's TIN & Branch Code **is** the client's existing `tin` — the one the
+Sales Summary prints — so there is one TIN, not two. The registry parser now knows `bir2303`; it had
+to, because every registry writer saves what the parser returns, and an unknown field is a deleted one
+(verified: saving the old "Edit client details" dialog keeps the 2303 intact).
+
+**Who** (`bir2303-access.ts`, grid test beside it): Admin, Sales, Accounting upload / read / edit;
+Payment Approver and Engineer get the eye only; everyone else neither. The five fields show to whoever
+opens the profile, as the TIN always has. The route, the AI route and both actions all ask the same
+function.
+
+**The flow.** Upload BIR 2303 → stored under `customers/{id}/bir2303/` → the AI reads it at once and
+fills the editor → a person checks it against the eye and presses Save. The AI never saves: it fills
+the boxes, someone signs for them. Reads are capped at 3 per file (admin unlimited); a new upload has
+its own 3. The route reads the file on the client's record, never a path from the browser.
+
+**Rules the code enforces, not the model.** The TIN is 9 digits plus a 3- or 5-digit branch code
+(older forms `000`, current `00000`) and is kept exactly — never padded or trimmed; anything else is
+refused with the digit count. The issuance date must be a real date. A read the code can't stand behind
+leaves that box empty with the reason. Taxpayer Type drops the parenthetical ("… (Resident Citizen)"),
+as the owner wrote it.
+
+Rendered as Sales: upload → editor filled with the owner's sample (201-616-609-00000 · Gil, Reyjellan
+Latican · January 29, 1999 · Single Proprietorship Only · 7635 Narra Road …) → Save → shown with "Last
+saved by Sam Sales"; a 13-digit TIN refused. Per seat: Accounting / Admin get Replace · Read with AI ·
+Edit; Payment Approver / Engineer the eye only; Purchaser nothing, and 403 from both routes. (Storage
+and the AI were stubbed in the harness — it has neither.)
+
 ## 2026-10-11 · Purchase Plan: the ten coming due, then "Show N more"
 
 The owner: *"show the 10 soon to due rows with show more button at the bottom same as"* the Rejected /

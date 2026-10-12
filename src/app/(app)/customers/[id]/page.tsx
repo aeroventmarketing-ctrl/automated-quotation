@@ -23,12 +23,15 @@ import { DeleteInquiry } from "./delete-inquiry";
 import { AddQuotation } from "./add-quotation";
 import { QuotationRowActions, OrderRowActions } from "./history-admin-actions";
 import { TermsToggle } from "./terms-toggle";
+import { Bir2303Panel } from "./bir2303-panel";
+import { getWorkflowRoles } from "@/lib/workflow-roles";
+import { bir2303Access } from "@/lib/bir2303-access";
 
 export const dynamic = "force-dynamic";
 
 export default async function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [customer, viewer, users, accountData, allCustomers] = await Promise.all([
+  const [customer, viewer, users, accountData, allCustomers, workflowRoles] = await Promise.all([
     prisma.customer.findUnique({
       where: { id },
       include: {
@@ -51,6 +54,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
     getSalespeople(),
     getAccountData(id),
     prisma.customer.findMany({ orderBy: { company: "asc" }, select: { id: true, company: true } }),
+    getWorkflowRoles(),
   ]);
 
   if (!customer) notFound();
@@ -113,6 +117,8 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
   // Quotation transfer and inquiry removal are admin-only.
   const admin = isAdmin(viewer);
   const salespeople = users.filter((u) => u.id !== owner?.userId);
+  const bir = accountData?.bir2303;
+  const birAccess = bir2303Access(viewer, workflowRoles, owner?.userId ?? null);
 
   // Conversation log split into one box per quotation. Each conversation is
   // filed under the quote it relates to; anything without a matching quote (or
@@ -210,9 +216,23 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
             {detail("Contact person", customer.contactName)}
             {detail("Contact number", customer.phone)}
             {detail("Email", customer.email)}
-            {detail("TIN", accountData?.tin)}
             <div className="sm:col-span-2">{detail("Address", customer.address)}</div>
             {customer.notes && <div className="sm:col-span-2">{detail("Notes", customer.notes)}</div>}
+            <Bir2303Panel
+              customerId={customer.id}
+              fields={{
+                tin: accountData?.tin ?? "",
+                taxpayerName: bir?.taxpayerName ?? "",
+                tinIssuedOn: bir?.tinIssuedOn ?? "",
+                taxpayerType: bir?.taxpayerType ?? "",
+                registeredAddress: bir?.registeredAddress ?? "",
+              }}
+              doc={bir?.doc ?? null}
+              updatedByName={bir?.updatedByName}
+              updatedAt={bir?.updatedAt}
+              canView={birAccess.canView}
+              canEdit={birAccess.canEdit}
+            />
           </CardContent>
         </Card>
         <div className="space-y-4">

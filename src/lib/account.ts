@@ -12,6 +12,7 @@
 import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { coerceBir2303, type Bir2303Record } from "@/lib/bir2303";
 
 export const ACCOUNT_REGISTRY_KEY = "__account_registry__";
 
@@ -42,6 +43,9 @@ export interface AccountData {
   optOutFollowUp?: boolean; // when true, this client is skipped by automated follow-ups
   terms?: boolean; // admin-set: a "terms" client — a PO alone can confirm the sale
   tin?: string; // client's Taxpayer Identification Number (BIR) — used by the Sales Summary report
+  // The rest of the client's BIR Form 2303 (the TIN above is its "TIN & Branch
+  // Code"), plus the uploaded certificate. See lib/bir2303.ts.
+  bir2303?: Bir2303Record;
   // "Constant communication" nudges sent to a client who has an open inquiry but
   // no quotation sent yet — one entry per automated inquiry follow-up.
   inquiryFollowUp?: { sent: { at: string }[] };
@@ -63,6 +67,24 @@ export function currentOwner(data: AccountData | null | undefined): AccountAssig
     if (!data.history[i].endedAt) return data.history[i];
   }
   return null;
+}
+
+/**
+ * The client's sales in-charge, as the client profile shows it: the open
+ * assignment, or — for a client never assigned or transferred — the creator of
+ * its first inquiry, which is what the profile's "Sales in-charge" box falls back
+ * to. The BIR 2303 editor uses this so the person named in that box is the
+ * person who may change the client's 2303.
+ */
+export async function accountHolderId(customerId: string): Promise<string | null> {
+  const owner = currentOwner(await getAccountData(customerId));
+  if (owner) return owner.userId;
+  const first = await prisma.inquiry.findFirst({
+    where: { customerId },
+    orderBy: { createdAt: "asc" },
+    select: { createdById: true },
+  });
+  return first?.createdById ?? null;
 }
 
 /**
@@ -89,13 +111,16 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
     const mktSent = mkt && Array.isArray(mkt.sent) ? (mkt.sent as { at: string }[]) : null;
     const onMktList = rec?.marketingList === true;
     const tin = typeof rec?.tin === "string" ? rec.tin.trim() : "";
+    // Parsed here, not passed through: every writer saves what this returns, so
+    // a field the parser doesn't know is a field the next save deletes.
+    const bir2303 = coerceBir2303(rec?.bir2303);
     const ty =
       rec?.thankYou && typeof rec.thankYou === "object" && !Array.isArray(rec.thankYou)
         ? (rec.thankYou as Record<string, string>)
         : null;
     if (
       Array.isArray(hist) || Array.isArray(convs) || rec?.optOutFollowUp != null ||
-      rec?.terms != null || inqSent || mktSent || onMktList || ty || tin
+      rec?.terms != null || inqSent || mktSent || onMktList || ty || tin || bir2303
     ) {
       out[cid] = {
         history: Array.isArray(hist) ? (hist as AccountAssignment[]) : [],
@@ -103,6 +128,7 @@ function parseAccounts(config: unknown): Record<string, AccountData> {
         optOutFollowUp: rec?.optOutFollowUp === true,
         terms: rec?.terms === true,
         ...(tin ? { tin } : {}),
+        ...(bir2303 ? { bir2303 } : {}),
         ...(inqSent ? { inquiryFollowUp: { sent: inqSent } } : {}),
         ...(onMktList ? { marketingList: true } : {}),
         ...(mktSent ? { marketingFollowUp: { sent: mktSent } } : {}),
