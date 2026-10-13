@@ -146,7 +146,7 @@ export type CheckReadResult = z.infer<typeof checkReadSchema>;
 export const bir2303ReadSchema = z.object({
   isBir2303: z.boolean().nullable().default(null),
   tin: z.string().nullable().default(null),
-  taxpayerName: z.string().nullable().default(null),
+  tradeName: z.string().nullable().default(null),
   tinIssuedOn: z.string().nullable().default(null),
   taxpayerType: z.string().nullable().default(null),
   registeredAddress: z.string().nullable().default(null),

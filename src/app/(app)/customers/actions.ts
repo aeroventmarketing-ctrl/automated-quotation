@@ -509,7 +509,7 @@ export async function attachBir2303(customerId: string, doc: { path: string; nam
 
 const bir2303Schema = z.object({
   tin: z.string().max(40).default(""),
-  taxpayerName: z.string().max(300).default(""),
+  tradeName: z.string().max(300).default(""),
   tinIssuedOn: z.string().max(40).default(""),
   taxpayerType: z.string().max(200).default(""),
   registeredAddress: z.string().max(500).default(""),
@@ -537,7 +537,7 @@ export async function saveBir2303(customerId: string, input: z.input<typeof bir2
       tin: tin.value || undefined,
       bir2303: {
         ...(existing.bir2303 ?? {}),
-        taxpayerName: clean(d.taxpayerName),
+        tradeName: clean(d.tradeName),
         tinIssuedOn: issued || undefined,
         taxpayerType: clean(d.taxpayerType),
         registeredAddress: clean(d.registeredAddress),
