@@ -1,3 +1,24 @@
+## 2026-10-13 · Delivery Receipt over several pages — 13 lines a page, DR (2), DR (3)…
+
+The owner: *"allow printing of multiple pages for Delivery receipt."* Their answers: **13 lines** fit
+one page of the booklet (the template's note said 16, its print area held 14), and the rest go on
+**more DR sheets**.
+
+So `formLines` lays the DR out as 13-line pages (`drPages`), "Nothing follows" after the last line
+when its page has room, up to a ceiling of ten pages (the old 16-line refusal is gone). Page 1 stays
+on the DR sheet (rows 5–17, via Input G15:I27; rows 18–20 now empty). Pages 2+ are **copies of the
+uploaded DR sheet** — "DR (2)", "DR (3)"… straight after DR — with the same header formulas (client,
+date, TIN, address from Input) and their lines as values. Each copy is a full package citizen
+(`addSheetCopies`): its own sheet part and relationships, its **own byte copy of DR's printer
+settings**, the content type, a workbook entry, its own print area (`A1:K18`, unchanged — 13 lines fit
+inside it), CR's print area re-indexed so it still means CR, and the document properties' sheet list.
+
+Tests: 17 lines → DR 1–13, DR (2) 14–17 + Nothing follows, header on both; 30 lines → tabs Input, SI,
+DR, DR (2), DR (3), CR, print areas on the right sheets, copies' cols / rows / merges / margins / page
+setup identical to the template DR, two distinct printer-settings parts each byte-equal to DR's. A
+second parser (ExcelJS) reads the six sheets and print areas back; every XML part is well-formed.
+Rendered: a 17-line order's box says "prints on 2 pages: DR, DR (2)" and the download matches.
+
 ## 2026-10-13 · Receipts template: SI column A widened to 7.86
 
 The owner: *"In SI tab of the downloaded excel file change Column A from 6.91 to 7.86."* Changed in the

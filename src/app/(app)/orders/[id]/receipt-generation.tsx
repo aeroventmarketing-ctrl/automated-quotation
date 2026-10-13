@@ -12,7 +12,8 @@ import {
   lineAmount,
   receiptTotals,
   splitWords,
-  DR_MAX_LINES,
+  DR_LINES_PER_PAGE,
+  MAX_LINES,
   SI_MAX_LINES,
   type ReceiptInput,
   type ReceiptLine,
@@ -119,8 +120,9 @@ export function ReceiptGeneration({ initial }: { initial: ReceiptInput }) {
       <div className="space-y-2">
         {section("Lines")}
         <p className="text-xs text-muted-foreground">
-          The Sales Invoice holds {SI_MAX_LINES} lines; past that it prints one line &quot;As per&quot; the PO and the Delivery
-          Receipt lists them all (up to {DR_MAX_LINES}). &quot;Nothing follows&quot; is added after the last line.
+          The Sales Invoice holds {SI_MAX_LINES} lines; past that it prints one line &quot;As per&quot; the PO. The Delivery Receipt
+          holds {DR_LINES_PER_PAGE} lines a page — more continue on extra sheets, DR (2), DR (3)…, one per booklet page.
+          &quot;Nothing follows&quot; is added after the last line.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
@@ -153,10 +155,16 @@ export function ReceiptGeneration({ initial }: { initial: ReceiptInput }) {
             </tbody>
           </table>
         </div>
-        {form.lines.length < DR_MAX_LINES && (
+        {form.lines.length < MAX_LINES && (
           <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline" onClick={() => setForm((f) => ({ ...f, lines: [...f.lines, blankLine()] }))}>
             <Plus className="h-3.5 w-3.5" /> Add line
           </button>
+        )}
+        {laid.ok && laid.value.drPages.length > 1 && (
+          <p className="text-xs text-muted-foreground">
+            {filled.length} lines — the Delivery Receipt prints on {laid.value.drPages.length} pages: DR
+            {laid.value.drPages.slice(1).map((_, k) => `, DR (${k + 2})`).join("")}.
+          </p>
         )}
         {laid.ok && laid.value.siSummarised && (
           <p className="text-xs text-amber-700">

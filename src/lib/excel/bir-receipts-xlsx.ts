@@ -21,7 +21,7 @@
  * settings — byte-for-byte the template's. A test holds it to that.
  */
 import JSZip from "jszip";
-import { formLines, amountInWords, receiptTotals, splitWords, type ReceiptInput, type ReceiptLine } from "@/lib/bir-receipts";
+import { formLines, amountInWords, receiptTotals, splitWords, DR_LINES_PER_PAGE, type ReceiptInput, type ReceiptLine } from "@/lib/bir-receipts";
 
 // --- XML helpers -------------------------------------------------------------
 
@@ -299,7 +299,8 @@ const INPUT = {
 const SI_INPUT_ROW = 3; // Input G3:J9 — the invoice's 7 lines
 const DR_INPUT_ROW = 15; // Input G15:I30 — the delivery receipt's 16 lines
 const SI_PRINT_ROW = 7; // SI rows 7–13
-const DR_PRINT_ROW = 5; // DR rows 5–20
+const DR_PRINT_ROW = 5; // DR rows 5–20 — 13 lines print (5–17); 18–20 stay empty
+const DR_TEMPLATE_ROWS = 16; // the item rows the template has on DR (and Input G15:I30)
 
 /**
  * Fill the template for one set of receipts. Returns the .xlsx bytes. Throws with
@@ -308,12 +309,15 @@ const DR_PRINT_ROW = 5; // DR rows 5–20
 export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint8Array, input: ReceiptInput): Promise<Buffer> {
   const laid = formLines(input);
   if (!laid.ok) throw new Error(laid.error);
-  const { si, dr } = laid.value;
+  const { si, drPages } = laid.value;
+  const dr = drPages[0];
 
   const zip = await JSZip.loadAsync(template);
   const paths = await sheetPaths(zip);
   const sheets = {} as Record<SheetName, SheetXml>;
   for (const name of SHEETS) sheets[name] = new SheetXml(await zip.file(paths[name])!.async("string"));
+  // The DR sheet as uploaded — each further Delivery Receipt page is a copy of it.
+  const drTemplateXml = sheets.DR.xml;
   const inp = sheets.Input;
 
   // Amount in words — of the Net Collectible (what CR prints), unless typed.
@@ -345,7 +349,8 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
     if (withPrice) numOrEmpty(inp, `J${row}`, l?.unitPrice ?? null);
   };
   for (let i = 0; i < 7; i++) writeLine(SI_INPUT_ROW + i, si[i], true);
-  for (let i = 0; i < 16; i++) writeLine(DR_INPUT_ROW + i, dr[i], false);
+  // Input holds the first DR page (13 lines); its last three DR rows stay empty.
+  for (let i = 0; i < DR_TEMPLATE_ROWS; i++) writeLine(DR_INPUT_ROW + i, i < DR_LINES_PER_PAGE ? dr[i] : undefined, false);
 
   // The print rows read the Input lines — a formula where the line has
   // something to print, an empty (still-styled) cell where it doesn't, so no
@@ -361,8 +366,8 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
     point(sheets.SI, `J${r}`, `J${ir}`, l?.unitPrice != null);
     point(sheets.SI, `K${r}`, `K${ir}`, l?.unitPrice != null && l?.qty != null);
   }
-  for (let i = 0; i < 16; i++) {
-    const l = dr[i];
+  for (let i = 0; i < DR_TEMPLATE_ROWS; i++) {
+    const l = i < DR_LINES_PER_PAGE ? dr[i] : undefined;
     const r = DR_PRINT_ROW + i, ir = DR_INPUT_ROW + i;
     point(sheets.DR, `A${r}`, `G${ir}`, l?.qty != null);
     point(sheets.DR, `B${r}`, `H${ir}`, !!l?.unit);
@@ -371,13 +376,29 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
   // CR's second words line — an empty merged row (G11:M11) the template left unwired.
   point(sheets.CR, "G11", "B9", !!w2);
 
+  // Delivery Receipt pages 2, 3… — copies of the uploaded DR sheet: the same
+  // header (client, date, TIN, address — still read from Input) and the next 13
+  // lines, written as values (Input holds one page).
+  const extraDr: { name: string; sx: SheetXml }[] = drPages.slice(1).map((page, k) => {
+    const sx = new SheetXml(drTemplateXml);
+    for (let i = 0; i < DR_TEMPLATE_ROWS; i++) {
+      const l = i < DR_LINES_PER_PAGE ? page[i] : undefined;
+      const r = DR_PRINT_ROW + i;
+      numOrEmpty(sx, `A${r}`, l?.qty ?? null);
+      sx.set(`B${r}`, l?.unit?.trim() ? { kind: "string", value: l.unit.trim() } : { kind: "empty" });
+      sx.set(`C${r}`, l?.description?.trim() ? { kind: "string", value: l.description.trim() } : { kind: "empty" });
+    }
+    return { name: `DR (${k + 2})`, sx };
+  });
+  const all: { name: string; sx: SheetXml }[] = [...SHEETS.map((name) => ({ name, sx: sheets[name] })), ...extraDr];
+
   // Cache every formula's result.
   const shared = await sharedStrings(zip);
   const values = new Map<string, Val>();
   const formulas = new Map<string, string>();
-  for (const name of SHEETS) {
+  for (const { name, sx } of all) {
     const masters = new Map<string, { text: string; ref: string }>();
-    const cells = sheets[name].cells();
+    const cells = sx.cells();
     for (const c of cells) {
       const f = /<f([^>]*?)(?:\/>|>([\s\S]*?)<\/f>)/.exec(c.body);
       if (f && /t="shared"/.test(f[1]) && f[2]) masters.set(/si="(\d+)"/.exec(f[1])![1], { text: unesc(f[2]), ref: c.ref });
@@ -405,9 +426,8 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
     }
   }
   const ev = new Evaluator(values, formulas);
-  for (const name of SHEETS) {
-    const sh = sheets[name];
-    for (const c of sh.cells()) {
+  for (const { name, sx } of all) {
+    for (const c of sx.cells()) {
       const fm = /<f[^>]*?(?:\/>|>[\s\S]*?<\/f>)/.exec(c.body);
       if (!fm) continue;
       const v = ev.get(name, c.ref);
@@ -418,17 +438,18 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
         typeof v === "string"
           ? `<c r="${c.ref}"${s} t="str">${fm[0]}<v>${esc(v)}</v></c>`
           : `<c r="${c.ref}"${s}>${fm[0]}<v>${v ?? 0}</v></c>`;
-      sh.xml = sh.xml.replace(c.raw, () => cell);
+      sx.xml = sx.xml.replace(c.raw, () => cell);
     }
   }
   // Open every sheet in Page Break Preview at 120% — the owner: *"default the
   // downloaded excel file to Page Break view 120%"*. Only the <sheetView> tag's
   // view/zoom attributes change: panes, selection, the Normal-view zoom, and
   // every width, height and print setting stay the template's.
-  for (const name of SHEETS) sheets[name].xml = withPageBreakView(sheets[name].xml, PAGE_BREAK_ZOOM);
+  for (const { sx } of all) sx.xml = withPageBreakView(sx.xml, PAGE_BREAK_ZOOM);
   // `createFolders: false` keeps the package's entry list the template's — no stray
   // directory entries that a strict reader might trip on.
   for (const name of SHEETS) zip.file(paths[name], sheets[name].xml, { createFolders: false });
+  if (extraDr.length) await addSheetCopies(zip, "DR", paths.DR, extraDr.map(({ name, sx }) => ({ name, xml: sx.xml })));
 
   // Recalculate on open, and drop the calc chain (Excel rebuilds it) — the
   // chain lists formula cells, and the print rows now have a different set.
@@ -446,6 +467,96 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
     zip.file("xl/_rels/workbook.xml.rels", rels.replace(/<Relationship[^>]*Target="calcChain\.xml"[^>]*\/>/, ""), { createFolders: false });
   }
   return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+}
+
+/**
+ * Add copies of one sheet to the package, straight after it in the tab order:
+ * the sheet part, its relationships (with its OWN byte copy of the source
+ * sheet's printer settings — paper and tray for that booklet), the content
+ * type, the workbook entry, and the source's print area. Sheet-scoped names
+ * after the insertion point are re-indexed, so CR's print area still means CR.
+ */
+async function addSheetCopies(zip: JSZip, sourceName: string, sourcePath: string, copies: { name: string; xml: string }[]) {
+  const put = (path: string, data: string | Uint8Array) => zip.file(path, data, { createFolders: false });
+  const read = async (path: string) => (await zip.file(path)?.async("string")) ?? "";
+  const highest = (re: RegExp) => Math.max(0, ...Object.keys(zip.files).map((f) => Number(re.exec(f)?.[1] ?? 0)));
+
+  let wb = await read("xl/workbook.xml");
+  let wbRels = await read("xl/_rels/workbook.xml.rels");
+  let ct = await read("[Content_Types].xml");
+  const srcRels = await read(sourcePath.replace(/worksheets\/(sheet\d+\.xml)$/, "worksheets/_rels/$1.rels"));
+  const srcBin = /Target="\.\.\/printerSettings\/(printerSettings\d+\.bin)"/.exec(srcRels)?.[1];
+  const binBytes = srcBin ? await zip.file(`xl/printerSettings/${srcBin}`)?.async("uint8array") : undefined;
+
+  const sheetEls = [...wb.matchAll(/<sheet\b[^>]*\/>/g)];
+  const srcIdx = sheetEls.findIndex((m) => m[0].includes(`name="${sourceName}"`));
+  if (srcIdx < 0) throw new Error(`No "${sourceName}" sheet to copy.`);
+  const srcArea = new RegExp(`<definedName name="_xlnm\\.Print_Area" localSheetId="${srcIdx}">([^<]*)</definedName>`).exec(wb)?.[1];
+
+  let sheetNo = highest(/^xl\/worksheets\/sheet(\d+)\.xml$/);
+  let binNo = highest(/^xl\/printerSettings\/printerSettings(\d+)\.bin$/);
+  let sheetId = Math.max(...sheetEls.map((m) => Number(/sheetId="(\d+)"/.exec(m[0])![1])));
+  let rId = Math.max(...[...wbRels.matchAll(/Id="rId(\d+)"/g)].map((m) => Number(m[1])));
+
+  // Sheet-scoped names after the source move up by the number of copies.
+  wb = wb.replace(/localSheetId="(\d+)"/g, (m, n) => (Number(n) > srcIdx ? `localSheetId="${Number(n) + copies.length}"` : m));
+
+  let insertAt = sheetEls[srcIdx].index! + sheetEls[srcIdx][0].length;
+  const names: string[] = [];
+  copies.forEach((copy, k) => {
+    const path = `xl/worksheets/sheet${++sheetNo}.xml`;
+    put(path, copy.xml);
+    let rels = srcRels;
+    if (srcBin && binBytes) {
+      const bin = `printerSettings${++binNo}.bin`;
+      put(`xl/printerSettings/${bin}`, binBytes);
+      rels = rels.replace(srcBin, bin);
+    }
+    if (rels) put(`xl/worksheets/_rels/sheet${sheetNo}.xml.rels`, rels);
+    wbRels = wbRels.replace("</Relationships>", () => `<Relationship Id="rId${++rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sheetNo}.xml"/></Relationships>`);
+    ct = ct.replace("</Types>", () => `<Override PartName="/${path}" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`);
+    const el = `<sheet name="${esc(copy.name)}" sheetId="${++sheetId}" r:id="rId${rId}"/>`;
+    wb = wb.slice(0, insertAt) + el + wb.slice(insertAt);
+    insertAt += el.length;
+    if (srcArea) {
+      const area = srcArea.replace(/^('?)[^!]*\1!/, `'${copy.name.replace(/'/g, "''")}'!`);
+      names.push(`<definedName name="_xlnm.Print_Area" localSheetId="${srcIdx + k + 1}">${esc(area)}</definedName>`);
+    }
+  });
+  if (names.length) {
+    wb = wb.includes("</definedNames>")
+      ? wb.replace("</definedNames>", () => `${names.join("")}</definedNames>`)
+      : wb.replace("</sheets>", () => `</sheets><definedNames>${names.join("")}</definedNames>`);
+  }
+  if (binBytes && !/Extension="bin"/.test(ct)) {
+    ct = ct.replace("<Default ", () => `<Default Extension="bin" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.printerSettings"/><Default `);
+  }
+  put("xl/workbook.xml", wb);
+  put("xl/_rels/workbook.xml.rels", wbRels);
+  put("[Content_Types].xml", ct);
+
+  // The document properties list the sheets and named ranges by title. Excel
+  // rebuilds the list on save; keep it true until then. Skipped if its shape
+  // isn't the one Excel writes.
+  const app = await read("docProps/app.xml");
+  const sheetCount = /<vt:lpstr>Worksheets<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>(\d+)<\/vt:i4>/.exec(app);
+  const titles = /<TitlesOfParts><vt:vector size="(\d+)" baseType="lpstr">([\s\S]*?)<\/vt:vector><\/TitlesOfParts>/.exec(app);
+  if (sheetCount && titles) {
+    const n = Number(sheetCount[1]);
+    const entries = [...titles[2].matchAll(/<vt:lpstr>[\s\S]*?<\/vt:lpstr>/g)].map((m) => m[0]);
+    const sheetTitles = entries.slice(0, n);
+    const at = sheetTitles.findIndex((t) => t === `<vt:lpstr>${sourceName}</vt:lpstr>`);
+    if (at >= 0) {
+      sheetTitles.splice(at + 1, 0, ...copies.map((c) => `<vt:lpstr>${esc(c.name)}</vt:lpstr>`));
+      const ranges = [...entries.slice(n), ...(srcArea ? copies.map((c) => `<vt:lpstr>'${esc(c.name)}'!Print_Area</vt:lpstr>`) : [])];
+      const namedCount = /<vt:lpstr>Named Ranges<\/vt:lpstr><\/vt:variant><vt:variant><vt:i4>(\d+)<\/vt:i4>/;
+      let next = app
+        .replace(sheetCount[0], () => sheetCount[0].replace(`<vt:i4>${n}</vt:i4>`, `<vt:i4>${n + copies.length}</vt:i4>`))
+        .replace(titles[0], () => `<TitlesOfParts><vt:vector size="${sheetTitles.length + ranges.length}" baseType="lpstr">${[...sheetTitles, ...ranges].join("")}</vt:vector></TitlesOfParts>`);
+      if (srcArea) next = next.replace(namedCount, (m, k) => m.replace(`<vt:i4>${k}</vt:i4>`, `<vt:i4>${Number(k) + copies.length}</vt:i4>`));
+      put("docProps/app.xml", next);
+    }
+  }
 }
 
 /** Exposed for the test that checks the evaluator against Excel's own cache. */
