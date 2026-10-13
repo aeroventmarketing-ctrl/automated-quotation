@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatTin, parseIssuedOn, formatIssuedOn, fieldsFromRead, coerceBir2303, isBir2303Path } from "./bir2303";
+import { formatTin, parseIssuedOn, formatIssuedOn, fieldsFromRead, coerceBir2303, isBir2303Path, BIR2303_SYSTEM, BIR2303_USER_PROMPT } from "./bir2303";
 
 describe("TIN & Branch Code", () => {
   it("keeps the owner's sample exactly — a 5-digit head-office branch code", () => {
@@ -42,7 +42,7 @@ describe("turning an AI read into form values", () => {
     const { fields, warnings } = fieldsFromRead({
       isBir2303: true,
       tin: "201-616-609-00000",
-      taxpayerName: "Gil, Reyjellan Latican",
+      tradeName: "Aerovent Fans and Blowers Manufacturing",
       tinIssuedOn: "1999-01-29",
       taxpayerType: "Single Proprietorship Only",
       registeredAddress: "7635 Narra Road Bayan-bayanan  San Vicente 4023 San Pedro Laguna Philippines",
@@ -51,7 +51,7 @@ describe("turning an AI read into form values", () => {
     });
     expect(fields).toEqual({
       tin: "201-616-609-00000",
-      taxpayerName: "Gil, Reyjellan Latican",
+      tradeName: "Aerovent Fans and Blowers Manufacturing",
       tinIssuedOn: "1999-01-29",
       taxpayerType: "Single Proprietorship Only",
       registeredAddress: "7635 Narra Road Bayan-bayanan San Vicente 4023 San Pedro Laguna Philippines",
@@ -75,16 +75,30 @@ describe("the stored record", () => {
   it("drops what's malformed instead of throwing", () => {
     expect(coerceBir2303(null)).toBeUndefined();
     expect(coerceBir2303({ tinIssuedOn: "Jan 29" })).toBeUndefined();
-    expect(coerceBir2303({ taxpayerName: " Gil ", doc: { path: "customers/c1/bir2303/a.jpg" }, readCounts: { a: 2, b: -1 } })).toEqual({
-      taxpayerName: "Gil",
+    expect(coerceBir2303({ tradeName: " Aerovent ", doc: { path: "customers/c1/bir2303/a.jpg" }, readCounts: { a: 2, b: -1 } })).toEqual({
+      tradeName: "Aerovent",
       doc: { path: "customers/c1/bir2303/a.jpg", name: "a.jpg", uploadedAt: "" },
       readCounts: { a: 2 },
     });
+  });
+  it("a value saved before the Trade Name correction still shows (it was stored as taxpayerName)", () => {
+    expect(coerceBir2303({ taxpayerName: "Modair Manila Co., Ltd. Inc." })).toEqual({ tradeName: "Modair Manila Co., Ltd. Inc." });
+    expect(coerceBir2303({ taxpayerName: "old", tradeName: "new" })).toEqual({ tradeName: "new" });
   });
   it("a file belongs to its own client's folder only", () => {
     expect(isBir2303Path("c1", "customers/c1/bir2303/x.pdf")).toBe(true);
     expect(isBir2303Path("c1", "customers/c2/bir2303/x.pdf")).toBe(false);
     expect(isBir2303Path("c1", "customers/c1/bir2303/../../sales/x.pdf")).toBe(false);
     expect(isBir2303Path("", "customers//bir2303/x.pdf")).toBe(false);
+  });
+});
+
+describe("what the reader is told to read", () => {
+  it("the name is the TRADE NAME 1 row, not the Name of Taxpayer — the owner's correction", () => {
+    expect(BIR2303_SYSTEM).toMatch(/TRADE NAME 1/);
+    expect(BIR2303_SYSTEM).toMatch(/Aerovent Fans and Blowers Manufacturing/);
+    expect(BIR2303_SYSTEM).toMatch(/NOT the "NAME OF TAXPAYER"/);
+    expect(BIR2303_USER_PROMPT).toMatch(/"tradeName"/);
+    expect(BIR2303_USER_PROMPT).not.toMatch(/taxpayerName/);
   });
 });

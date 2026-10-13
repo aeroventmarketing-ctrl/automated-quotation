@@ -2,7 +2,9 @@
  * BIR Form 2303 — the client's Certificate of Registration.
  *
  * The owner, teaching the form off a real one: *"TIN & Branch Code is
- * 201-616-609-0000[0], Name of Taxpayer is Gil, Reyjellan Latican, TIN Issuance
+ * 201-616-609-0000[0], Name of Taxpayer is Gil, Reyjellan Latican [corrected next
+ * day: *"look at the trade name instead of taxpayer name … Aerovent Fans and
+ * Blowers Manufacturing"*], TIN Issuance
  * Date is January 29, 1999, Taxpayer Type is Single Proprietorship Only,
  * Registered Address is 7635 Narra Road Bayan-bayanan San Vicente 4023 San Pedro
  * Laguna Philippines"* — then: *"Add the following in Client Details … Add a link
@@ -29,7 +31,12 @@ export interface Bir2303Doc {
 
 /** What the registry holds for a client's 2303, besides the TIN. */
 export interface Bir2303Record {
-  taxpayerName?: string;
+  /**
+   * The TRADE NAME (Business Information Details → TRADE NAME 1). The owner,
+   * correcting the first training: *"look at the trade name instead of taxpayer
+   * name. In the example trade name is Aerovent Fans and Blowers Manufacturing."*
+   */
+  tradeName?: string;
   /** YYYY-MM-DD. */
   tinIssuedOn?: string;
   taxpayerType?: string;
@@ -71,8 +78,11 @@ export function coerceBir2303(v: unknown): Bir2303Record | undefined {
     }
   }
   const issued = str(o.tinIssuedOn);
+  // `taxpayerName` is what this field was called before the owner's correction;
+  // a value saved under it is still shown, until someone saves the trade name.
+  const tradeName = str(o.tradeName) ?? str(o.taxpayerName);
   const rec: Bir2303Record = {
-    ...(str(o.taxpayerName) ? { taxpayerName: str(o.taxpayerName) } : {}),
+    ...(tradeName ? { tradeName } : {}),
     ...(issued && /^\d{4}-\d{2}-\d{2}$/.test(issued) ? { tinIssuedOn: issued } : {}),
     ...(str(o.taxpayerType) ? { taxpayerType: str(o.taxpayerType) } : {}),
     ...(str(o.registeredAddress) ? { registeredAddress: str(o.registeredAddress) } : {}),
@@ -156,7 +166,7 @@ export function formatIssuedOn(ymd: string | null | undefined): string {
 export interface Bir2303Read {
   isBir2303?: boolean | null;
   tin?: string | null;
-  taxpayerName?: string | null;
+  tradeName?: string | null;
   tinIssuedOn?: string | null;
   taxpayerType?: string | null;
   registeredAddress?: string | null;
@@ -167,7 +177,7 @@ export interface Bir2303Read {
 /** The five fields, as the form shows them — every one a string, "" when unread. */
 export interface Bir2303Fields {
   tin: string;
-  taxpayerName: string;
+  tradeName: string;
   tinIssuedOn: string;
   taxpayerType: string;
   registeredAddress: string;
@@ -201,7 +211,7 @@ export function fieldsFromRead(r: Bir2303Read): { fields: Bir2303Fields; warning
   return {
     fields: {
       tin,
-      taxpayerName: r.taxpayerName?.trim() ?? "",
+      tradeName: r.tradeName?.trim() ?? "",
       tinIssuedOn,
       taxpayerType: r.taxpayerType?.trim() ?? "",
       registeredAddress: r.registeredAddress?.trim().replace(/\s+/g, " ") ?? "",
@@ -215,12 +225,12 @@ export const BIR2303_SYSTEM = `You read a Philippine BIR Form 2303 — the "CERT
 
 THE FIVE FIELDS, and where they are on the form:
 1. TIN & BRANCH CODE — the box labelled "TIN & BRANCH CODE", top-left of the details table. Copy the digits EXACTLY as printed, with dashes, e.g. "201-616-609-00000". The branch code after the third dash is 3 digits on older forms ("000") and 5 digits on current ones ("00000"): never add or drop a digit.
-2. NAME OF TAXPAYER — the box labelled "NAME OF TAXPAYER" (an individual is printed SURNAME, GIVEN NAMES). This is NOT the trade name in "BUSINESS INFORMATION DETAILS".
+2. TRADE NAME — in the "BUSINESS INFORMATION DETAILS" table near the bottom, the row labelled "TRADE NAME 1" (e.g. "AEROVENT FANS AND BLOWERS MANUFACTURING" → "Aerovent Fans and Blowers Manufacturing"). This is NOT the "NAME OF TAXPAYER" box at the top (for a sole proprietor that is the owner's own name, e.g. "GIL, REYJELLAN LATICAN" — not wanted). Only if the form has no trade name printed at all, return the NAME OF TAXPAYER instead and add the warning "No trade name on the form — the taxpayer's registered name was used".
 3. TIN ISSUANCE DATE — the box labelled "TIN ISSUANCE DATE". Return YYYY-MM-DD. Do NOT use the "Date OCN Generated", a filing start date or the business registration date.
 4. TAXPAYER TYPE — the row labelled "TAXPAYER TYPE/S". Return the type itself without the parenthetical residency note, e.g. "SINGLE PROPRIETORSHIP ONLY (RESIDENT CITIZEN)" → "Single Proprietorship Only".
 5. REGISTERED ADDRESS — the row labelled "REGISTERED ADDRESS", as one line.
 
-CASING: write names and addresses the way a person would type them — Title Case, not ALL CAPS — e.g. "GIL, REYJELLAN LATICAN" → "Gil, Reyjellan Latican"; "7635 NARRA ROAD BAYAN-BAYANAN SAN VICENTE 4023 SAN PEDRO LAGUNA PHILIPPINES" → "7635 Narra Road Bayan-bayanan San Vicente 4023 San Pedro Laguna Philippines". Keep company suffixes and acronyms as normally written ("Inc.", "Corp.", "OPC", "ABC Steel Corp.").
+CASING: write names and addresses the way a person would type them — Title Case, not ALL CAPS, with small joining words in lower case — e.g. "AEROVENT FANS AND BLOWERS MANUFACTURING" → "Aerovent Fans and Blowers Manufacturing"; "7635 NARRA ROAD BAYAN-BAYANAN SAN VICENTE 4023 SAN PEDRO LAGUNA PHILIPPINES" → "7635 Narra Road Bayan-bayanan San Vicente 4023 San Pedro Laguna Philippines". Keep company suffixes and acronyms as normally written ("Inc.", "Corp.", "OPC", "ABC Steel Corp.").
 
 RULES:
 - Read only what is printed. The "BUREAU OF INTERNAL REVENUE" security background text is not content.
@@ -232,7 +242,7 @@ export const BIR2303_USER_PROMPT = `From the attached BIR Form 2303, return JSON
 {
   "isBir2303": boolean,               // is this a BIR Form 2303 Certificate of Registration?
   "tin": string|null,                 // TIN & BRANCH CODE exactly as printed, with dashes
-  "taxpayerName": string|null,        // NAME OF TAXPAYER, Title Case
+  "tradeName": string|null,           // TRADE NAME 1 from Business Information Details, Title Case
   "tinIssuedOn": string|null,         // TIN ISSUANCE DATE as YYYY-MM-DD
   "taxpayerType": string|null,        // TAXPAYER TYPE/S without the parenthetical, Title Case
   "registeredAddress": string|null,   // REGISTERED ADDRESS on one line, Title Case

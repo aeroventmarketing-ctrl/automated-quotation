@@ -15,7 +15,7 @@ const fmtStamp = (iso?: string) =>
 
 const LABELS: { key: keyof Bir2303Fields; label: string; wide?: boolean }[] = [
   { key: "tin", label: "TIN & Branch Code" },
-  { key: "taxpayerName", label: "Name of Taxpayer" },
+  { key: "tradeName", label: "Trade Name" },
   { key: "tinIssuedOn", label: "TIN Issuance Date" },
   { key: "taxpayerType", label: "Taxpayer Type" },
   { key: "registeredAddress", label: "Registered Address", wide: true },
@@ -80,7 +80,7 @@ export function Bir2303Panel({
       const read = data.fields;
       startEdit({
         tin: read.tin || base.tin,
-        taxpayerName: read.taxpayerName || base.taxpayerName,
+        tradeName: read.tradeName || base.tradeName,
         tinIssuedOn: read.tinIssuedOn || base.tinIssuedOn,
         taxpayerType: read.taxpayerType || base.taxpayerType,
         registeredAddress: read.registeredAddress || base.registeredAddress,

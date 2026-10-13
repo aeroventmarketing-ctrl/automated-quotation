@@ -222,7 +222,7 @@ export default async function CustomerProfilePage({ params }: { params: Promise<
               customerId={customer.id}
               fields={{
                 tin: accountData?.tin ?? "",
-                taxpayerName: bir?.taxpayerName ?? "",
+                tradeName: bir?.tradeName ?? "",
                 tinIssuedOn: bir?.tinIssuedOn ?? "",
                 taxpayerType: bir?.taxpayerType ?? "",
                 registeredAddress: bir?.registeredAddress ?? "",

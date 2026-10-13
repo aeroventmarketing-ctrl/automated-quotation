@@ -1,3 +1,16 @@
+## 2026-10-13 · BIR 2303: Trade Name, not Name of Taxpayer
+
+The owner, correcting the first training: *"look at the trade name instead of taxpayer name. In the
+example trade name is Aerovent Fans and Blowers Manufacturing."* For a sole proprietor the Name of
+Taxpayer is the owner's own name (Gil, Reyjellan Latican); the business the client trades as is in
+Business Information Details → TRADE NAME 1.
+
+So the field is now **Trade Name**: the reader is told to take TRADE NAME 1, Title Case with small
+joining words lower-case ("Aerovent Fans and Blowers Manufacturing"), and to fall back to the
+registered name — with a warning saying so — only when the form prints no trade name. Stored as
+`tradeName`; a value saved earlier under `taxpayerName` (e.g. Modair's) still shows until someone saves
+or re-reads it. A test pins the instruction, so the correction can't quietly revert.
+
 ## 2026-10-13 · Commission rules 7 & 8: documents filed, and the client's BIR 2303
 
 The owner, on the commission criteria: *"Add [step 19 — Accounting files all delivery documents and
