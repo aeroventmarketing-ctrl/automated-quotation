@@ -22,8 +22,11 @@
  *   Net Collectible  B16 = Total − Less EWT            (B7 = B16, CR's amount)
  *
  * The template's own notes set the line limits: the Sales Invoice takes "up to 7
- * lines only — in excess of 7 lines use client's PO#"; the Delivery Receipt "up
- * to 16 lines only — in excess of 16 lines use separate Delivery Receipt".
+ * lines only — in excess of 7 lines use client's PO#". The Delivery Receipt
+ * booklet takes 13 lines a page (the owner, 2026-10-13 — the template's note
+ * says 16, but its print area and the booklet hold 13), and the owner's call on
+ * more: *"allow printing of multiple pages for Delivery receipt"* — they continue
+ * on copies of the DR sheet, "DR (2)", "DR (3)", one per booklet page.
  *
  * Pure: no I/O.
  */
@@ -40,7 +43,11 @@ const RECEIPT_VAT_MODES = new Set(["INCLUSIVE", "ZERO_RATED", "EXCLUSIVE_PLUS"])
 export const receiptsApplyTo = (vatMode: string): boolean => RECEIPT_VAT_MODES.has(vatMode);
 
 export const SI_MAX_LINES = 7;
-export const DR_MAX_LINES = 16;
+/** Item lines on one Delivery Receipt page (rows 5–17 of the DR sheet). */
+export const DR_LINES_PER_PAGE = 13;
+/** A ceiling, not a booklet limit: ten DR pages. */
+export const DR_MAX_PAGES = 10;
+export const MAX_LINES = DR_LINES_PER_PAGE * DR_MAX_PAGES;
 export const NOTHING_FOLLOWS = "**** Nothing follows ****";
 
 export interface ReceiptLine {
@@ -148,8 +155,12 @@ export function splitWords(text: string, width = 55): [string, string] {
 export interface FormLines {
   /** Exactly what goes on the Sales Invoice's 7 rows (with "Nothing follows" when it fits). */
   si: ReceiptLine[];
-  /** Exactly what goes on the Delivery Receipt's 16 rows. */
-  dr: ReceiptLine[];
+  /**
+   * The Delivery Receipt, page by page — 13 lines each; page 1 is the DR sheet,
+   * the rest go on "DR (2)", "DR (3)"… "Nothing follows" after the last line
+   * when its page has room.
+   */
+  drPages: ReceiptLine[][];
   /** True when the invoice had to summarise ("as per PO") because of > 7 lines. */
   siSummarised: boolean;
 }
@@ -161,22 +172,26 @@ const marker: ReceiptLine = { qty: null, unit: "", description: NOTHING_FOLLOWS,
  *  - up to 7 → each on the invoice, then "Nothing follows" if a row is left;
  *  - more than 7 → the invoice carries ONE line "As per <PO>" for the total,
  *    and the Delivery Receipt lists them all;
- *  - more than 16 → refused: "use separate Delivery Receipt".
+ *  - the Delivery Receipt runs 13 lines a page, over as many pages as it takes
+ *    (up to a ceiling of ten).
  */
 export function formLines(input: Pick<ReceiptInput, "lines" | "paymentOf">): { ok: true; value: FormLines } | { ok: false; error: string } {
   const lines = input.lines.filter(isFilledLine);
   if (lines.length === 0) return { ok: false, error: "Add at least one line." };
-  if (lines.length > DR_MAX_LINES) {
-    return { ok: false, error: `${lines.length} lines — a Delivery Receipt holds ${DR_MAX_LINES}. Split them over separate receipts.` };
+  if (lines.length > MAX_LINES) {
+    return { ok: false, error: `${lines.length} lines — that's more than ${DR_MAX_PAGES} Delivery Receipt pages of ${DR_LINES_PER_PAGE}. Split them over separate receipts.` };
   }
   const withMarker = (ls: ReceiptLine[], max: number) => (ls.length < max ? [...ls, marker] : ls);
+  const drPages: ReceiptLine[][] = [];
+  for (let i = 0; i < lines.length; i += DR_LINES_PER_PAGE) drPages.push(lines.slice(i, i + DR_LINES_PER_PAGE));
+  drPages[drPages.length - 1] = withMarker(drPages[drPages.length - 1], DR_LINES_PER_PAGE);
   if (lines.length <= SI_MAX_LINES) {
-    return { ok: true, value: { si: withMarker(lines, SI_MAX_LINES), dr: withMarker(lines, DR_MAX_LINES), siSummarised: false } };
+    return { ok: true, value: { si: withMarker(lines, SI_MAX_LINES), drPages, siSummarised: false } };
   }
   const total = round2(lines.reduce((a, l) => a + lineAmount(l), 0));
   const ref = input.paymentOf.trim() || "client's PO";
   const summary: ReceiptLine = { qty: 1, unit: "lot", description: `As per ${ref}`, unitPrice: total };
-  return { ok: true, value: { si: withMarker([summary], SI_MAX_LINES), dr: withMarker(lines, DR_MAX_LINES), siSummarised: true } };
+  return { ok: true, value: { si: withMarker([summary], SI_MAX_LINES), drPages, siSummarised: true } };
 }
 
 /** "October 13, 2026" — the template's date wording — for a Manila YYYY-MM-DD. */

@@ -34,12 +34,23 @@ describe("the lines on each form", () => {
   it("exactly 7: no room for the marker on the invoice", () => {
     const r = formLines({ paymentOf: "", lines: Array.from({ length: 7 }, (_, i) => line(i)) });
     expect(r.ok && r.value.si).toHaveLength(7);
-    expect(r.ok && r.value.dr.at(-1)?.description).toBe(NOTHING_FOLLOWS);
+    expect(r.ok && r.value.drPages[0].at(-1)?.description).toBe(NOTHING_FOLLOWS);
   });
-  it("8 to 16: the invoice says 'As per' the PO for the total; the DR lists them all", () => {
+  it("more than 7: the invoice says 'As per' the PO for the total; the DR lists them all", () => {
     const r = formLines({ paymentOf: "PO No. 11014", lines: Array.from({ length: 9 }, (_, i) => line(i)) });
     expect(r.ok && r.value.si[0]).toEqual({ qty: 1, unit: "lot", description: "As per PO No. 11014", unitPrice: 900 });
-    expect(r.ok && r.value.dr).toHaveLength(10);
+    expect(r.ok && r.value.drPages).toEqual([[...Array.from({ length: 9 }, (_, i) => line(i)), expect.objectContaining({ description: NOTHING_FOLLOWS })]]);
+  });
+  it("the Delivery Receipt runs 13 lines a page; Nothing follows goes after the last line", () => {
+    const r = formLines({ paymentOf: "", lines: Array.from({ length: 27 }, (_, i) => line(i)) });
+    expect(r.ok && r.value.drPages.map((p) => p.length)).toEqual([13, 13, 2]);
+    expect(r.ok && r.value.drPages[2][1].description).toBe(NOTHING_FOLLOWS);
+    // A last page exactly full has no room for the marker.
+    const full = formLines({ paymentOf: "", lines: Array.from({ length: 26 }, (_, i) => line(i)) });
+    expect(full.ok && full.value.drPages.map((p) => p.length)).toEqual([13, 13]);
+  });
+  it("past ten pages is refused", () => {
+    expect(formLines({ paymentOf: "", lines: Array.from({ length: 131 }, (_, i) => line(i)) }).ok).toBe(false);
   });
   it("blank editor rows aren't lines; none at all is refused", () => {
     expect(formLines({ paymentOf: "", lines: [{ qty: null, unit: "", description: " ", unitPrice: null }] }).ok).toBe(false);

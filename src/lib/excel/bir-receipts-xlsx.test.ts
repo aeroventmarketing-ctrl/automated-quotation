@@ -37,9 +37,16 @@ const sample: ReceiptInput = {
   ],
 };
 
+/** Every sheet the workbook lists (the template's four, plus any DR copies), by name. */
 async function parts(buf: Buffer | Uint8Array) {
   const zip = await JSZip.loadAsync(buf);
-  const paths = await __test.sheetPaths(zip);
+  const wb = await zip.file("xl/workbook.xml")!.async("string");
+  const rels = await zip.file("xl/_rels/workbook.xml.rels")!.async("string");
+  const paths: Record<string, string> = {};
+  for (const m of wb.matchAll(/<sheet name="([^"]+)"[^>]*r:id="(rId\d+)"/g)) {
+    const target = new RegExp(`Id="${m[2]}"[^>]*Target="([^"]+)"`).exec(rels)![1];
+    paths[m[1]] = `xl/${target}`;
+  }
   const sheets: Record<string, string> = {};
   for (const [name, p] of Object.entries(paths)) sheets[name] = await zip.file(p)!.async("string");
   return { zip, paths, sheets };
@@ -151,9 +158,9 @@ describe("a filled workbook", () => {
     expect(v("SI", "C7")).toBe('Fan & motor <2HP> "A" $& co'.replace(/<|>/g, (m) => (m === "<" ? "&lt;" : "&gt;")));
   });
 
-  it("refuses more lines than a Delivery Receipt holds", async () => {
-    const lines = Array.from({ length: 17 }, (_, i) => ({ qty: 1, unit: "pc", description: `Item ${i + 1}`, unitPrice: 1 }));
-    await expect(fillReceiptsWorkbook(TEMPLATE, { ...sample, lines })).rejects.toThrow(/16/);
+  it("refuses more than ten Delivery Receipt pages", async () => {
+    const lines = Array.from({ length: 131 }, (_, i) => ({ qty: 1, unit: "pc", description: `Item ${i + 1}`, unitPrice: 1 }));
+    await expect(fillReceiptsWorkbook(TEMPLATE, { ...sample, lines })).rejects.toThrow(/ten Delivery Receipt pages|10 Delivery Receipt pages/);
   });
 });
 
@@ -188,5 +195,67 @@ describe("the owner's column adjustments", () => {
   it("SI column A is 8.4921875 stored — the 7.86 Excel shows (it was 7.54296875, shown as 6.91)", async () => {
     const { sheets } = await parts(await fillReceiptsWorkbook(TEMPLATE, sample));
     expect(sheets.SI).toContain('<col min="1" max="1" width="8.4921875" customWidth="1"/>');
+  });
+});
+
+describe("a Delivery Receipt over several pages", () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ qty: i + 1, unit: "pc", description: `Item ${i + 1}`, unitPrice: 10 }));
+
+  it("13 lines a page: DR has lines 1–13, DR (2) the rest and Nothing follows", async () => {
+    const out = await fillReceiptsWorkbook(TEMPLATE, { ...sample, lines: many(17) });
+    const v = await cellValues(out);
+    expect(v("DR", "C5")).toBe("Item 1");
+    expect(v("DR", "C17")).toBe("Item 13");
+    expect(v("DR", "C18")).toBeNull(); // rows 18–20 no longer carry lines
+    expect(v("DR (2)", "C5")).toBe("Item 14");
+    expect(v("DR (2)", "A8")).toBe(17);
+    expect(v("DR (2)", "C9")).toBe("**** Nothing follows ****");
+    expect(v("DR (2)", "C10")).toBeNull();
+    // The header is the client's, on every page.
+    expect(v("DR (2)", "B1")).toBe(sample.companyName);
+    expect(v("DR (2)", "I1")).toBe(sample.date);
+    expect(v("DR (2)", "B2")).toBe(sample.tin);
+  });
+
+  it("each extra page is the uploaded DR sheet's layout, printer settings and print area", async () => {
+    const out = await fillReceiptsWorkbook(TEMPLATE, { ...sample, lines: many(30) });
+    const a = await parts(TEMPLATE);
+    const zip = await JSZip.loadAsync(out);
+    const wb = await zip.file("xl/workbook.xml")!.async("string");
+    expect([...wb.matchAll(/<sheet name="([^"]+)"/g)].map((m) => m[1])).toEqual(["Input", "SI", "DR", "DR (2)", "DR (3)", "CR"]);
+    // Print areas follow their sheets: CR moved from index 3 to 5.
+    expect(wb).toMatch(/localSheetId="5">CR!\$A\$1:\$M\$15</);
+    expect(wb).toMatch(/localSheetId="2">DR!\$A\$1:\$K\$18</);
+    expect(wb).toMatch(/localSheetId="3">'DR \(2\)'!\$A\$1:\$K\$18</);
+    expect(wb).toMatch(/localSheetId="4">'DR \(3\)'!\$A\$1:\$K\$18</);
+    const b = await parts(out);
+    const pick = (x: string, re: RegExp) => x.match(re)?.join("\n") ?? "";
+    for (const copy of ["DR (2)", "DR (3)"]) {
+      const x = b.sheets[copy];
+      expect(pick(x, /<cols>[\s\S]*?<\/cols>/g)).toBe(pick(a.sheets.DR, /<cols>[\s\S]*?<\/cols>/g));
+      expect(pick(x, /<mergeCells[\s\S]*?<\/mergeCells>/g)).toBe(pick(a.sheets.DR, /<mergeCells[\s\S]*?<\/mergeCells>/g));
+      expect(pick(x, /<pageMargins[^>]*>|<pageSetup[^>]*>|<sheetFormatPr[^>]*>/g)).toBe(pick(a.sheets.DR, /<pageMargins[^>]*>|<pageSetup[^>]*>|<sheetFormatPr[^>]*>/g));
+      expect(pick(x, /<row [^>]*>/g)).toBe(pick(a.sheets.DR, /<row [^>]*>/g));
+      expect(x).toMatch(/view="pageBreakPreview"/);
+    }
+    // Each copy has its own printer-settings part, a byte copy of DR's.
+    const drBin = await zip.file("xl/printerSettings/printerSettings3.bin")!.async("uint8array");
+    const relsFor = async (sheetPath: string) => zip.file(sheetPath.replace(/worksheets\/(sheet\d+\.xml)$/, "worksheets/_rels/$1.rels"))!.async("string");
+    const bins = new Set<string>();
+    for (const copy of ["DR (2)", "DR (3)"]) {
+      const target = /printerSettings\/(printerSettings\d+\.bin)/.exec(await relsFor(b.paths[copy]))![1];
+      bins.add(target);
+      expect(Buffer.from(await zip.file(`xl/printerSettings/${target}`)!.async("uint8array")).equals(Buffer.from(drBin))).toBe(true);
+    }
+    expect(bins.size).toBe(2);
+    expect(await zip.file("[Content_Types].xml")!.async("string")).toContain(b.paths["DR (3)"].replace(/^/, "/"));
+    const app = await zip.file("docProps/app.xml")!.async("string");
+    expect(app).toContain("<vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>6</vt:i4>");
+    expect(app).toContain("<vt:lpstr>Named Ranges</vt:lpstr></vt:variant><vt:variant><vt:i4>5</vt:i4>");
+    expect(app).toMatch(/<vt:vector size="11" baseType="lpstr"><vt:lpstr>Input<\/vt:lpstr><vt:lpstr>SI<\/vt:lpstr><vt:lpstr>DR<\/vt:lpstr><vt:lpstr>DR \(2\)<\/vt:lpstr><vt:lpstr>DR \(3\)<\/vt:lpstr><vt:lpstr>CR<\/vt:lpstr>/);
+    const v = await cellValues(out);
+    expect(v("DR (3)", "C5")).toBe("Item 27");
+    expect(v("DR (3)", "C8")).toBe("Item 30");
+    expect(v("DR (3)", "C9")).toBe("**** Nothing follows ****");
   });
 });
