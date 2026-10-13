@@ -165,3 +165,21 @@ describe("the package", () => {
     expect(names(b)).toEqual(names(a).filter((n) => n !== "xl/calcChain.xml"));
   });
 });
+
+describe("the view it opens in", () => {
+  it("every sheet opens in Page Break Preview at 120%; panes, selection and Normal zoom are the template's", async () => {
+    const a = await parts(TEMPLATE);
+    const b = await parts(await fillReceiptsWorkbook(TEMPLATE, sample));
+    for (const name of Object.keys(a.sheets)) {
+      const view = /<sheetView\b[^>]*>/.exec(b.sheets[name])![0];
+      expect(view, name).toMatch(/\bview="pageBreakPreview"/);
+      expect(view, name).toMatch(/\bzoomScale="120"/);
+      expect(view, name).toMatch(/\bzoomScaleSheetLayoutView="120"/);
+      const normalBefore = /zoomScaleNormal="(\d+)"/.exec(/<sheetView\b[^>]*>/.exec(a.sheets[name])![0])?.[1];
+      expect(/zoomScaleNormal="(\d+)"/.exec(view)?.[1], name).toBe(normalBefore);
+      // Everything after the <sheetView> tag inside <sheetViews> — panes, selection — unchanged.
+      const inner = (x: string) => /<sheetView\b[^>]*>([\s\S]*?)<\/sheetView>/.exec(x)?.[1];
+      expect(inner(b.sheets[name]), name).toBe(inner(a.sheets[name]));
+    }
+  });
+});

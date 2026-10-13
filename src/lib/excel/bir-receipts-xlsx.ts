@@ -240,6 +240,31 @@ class Evaluator {
   }
 }
 
+// --- The view the file opens in -----------------------------------------------
+
+/** The zoom the downloaded workbook opens at, in Page Break Preview. */
+export const PAGE_BREAK_ZOOM = 120;
+
+/**
+ * Set a sheet's first `<sheetView>` to Page Break Preview at `zoom`%. Excel reads
+ * `zoomScale` as the zoom on open and `zoomScaleSheetLayoutView` as Page Break
+ * Preview's own remembered zoom, so both are set; `zoomScaleNormal` (Normal
+ * view's zoom) is left as the template has it.
+ */
+export function withPageBreakView(xml: string, zoom: number): string {
+  return xml.replace(/<sheetView\b([^>]*?)(\/?)>/, (_m, attrs: string, selfClose: string) => {
+    let a = attrs;
+    const setAttr = (name: string, value: string) => {
+      const re = new RegExp(`\\s${name}="[^"]*"`);
+      a = re.test(a) ? a.replace(re, ` ${name}="${value}"`) : `${a} ${name}="${value}"`;
+    };
+    setAttr("view", "pageBreakPreview");
+    setAttr("zoomScale", String(zoom));
+    setAttr("zoomScaleSheetLayoutView", String(zoom));
+    return `<sheetView${a}${selfClose}>`;
+  });
+}
+
 // --- The fill ---------------------------------------------------------------
 
 const SHEETS = ["Input", "SI", "DR", "CR"] as const;
@@ -396,6 +421,11 @@ export async function fillReceiptsWorkbook(template: ArrayBuffer | Buffer | Uint
       sh.xml = sh.xml.replace(c.raw, () => cell);
     }
   }
+  // Open every sheet in Page Break Preview at 120% — the owner: *"default the
+  // downloaded excel file to Page Break view 120%"*. Only the <sheetView> tag's
+  // view/zoom attributes change: panes, selection, the Normal-view zoom, and
+  // every width, height and print setting stay the template's.
+  for (const name of SHEETS) sheets[name].xml = withPageBreakView(sheets[name].xml, PAGE_BREAK_ZOOM);
   // `createFolders: false` keeps the package's entry list the template's — no stray
   // directory entries that a strict reader might trip on.
   for (const name of SHEETS) zip.file(paths[name], sheets[name].xml, { createFolders: false });

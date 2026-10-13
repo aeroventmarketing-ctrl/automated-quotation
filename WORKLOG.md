@@ -1,3 +1,15 @@
+## 2026-10-13 · Receipts workbook opens in Page Break view at 120%
+
+The owner: *"default the downloaded excel file to Page Break view 120%."* Every sheet's `<sheetView>`
+now carries `view="pageBreakPreview"`, `zoomScale="120"` (the zoom it opens at) and
+`zoomScaleSheetLayoutView="120"` (Page Break Preview's remembered zoom). `zoomScaleNormal`, frozen
+panes and selections stay the template's — and so, as before, every width, height and print setting.
+A test pins all four sheets.
+
+Noticed, not changed: the DR sheet's print area is `A1:K18`, but its 16 item rows run to row 20 — on
+a Delivery Receipt with 15 or 16 lines, the last two fall outside the printed page. Flagged to the
+owner; widening it is a print-setting change.
+
 ## 2026-10-13 · Receipt Generation moves onto the order, below Phase 6 — VAT orders only
 
 The owner, before the tab was merged: *"Instead of appearing below Cash Request, make it appear to the
