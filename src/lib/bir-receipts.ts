@@ -31,6 +31,14 @@
 // and quote.ts imports the database client.
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
+/**
+ * Which orders get Receipt Generation. The owner: *"this will appear only on VAT
+ * Inclusive, Zero Rated and VAT Exclusive +12% transactions."* A VAT Exclusive
+ * (÷1.12) order is the one that doesn't.
+ */
+const RECEIPT_VAT_MODES = new Set(["INCLUSIVE", "ZERO_RATED", "EXCLUSIVE_PLUS"]);
+export const receiptsApplyTo = (vatMode: string): boolean => RECEIPT_VAT_MODES.has(vatMode);
+
 export const SI_MAX_LINES = 7;
 export const DR_MAX_LINES = 16;
 export const NOTHING_FOLLOWS = "**** Nothing follows ****";

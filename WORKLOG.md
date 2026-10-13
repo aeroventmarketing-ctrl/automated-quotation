@@ -1,3 +1,21 @@
+## 2026-10-13 · Receipt Generation moves onto the order, below Phase 6 — VAT orders only
+
+The owner, before the tab was merged: *"Instead of appearing below Cash Request, make it appear to the
+Order workflow, this will appear only on VAT Inclusive, Zero Rated and VAT Exclusive +12% transactions.
+Make it appear below Phase 6 - Sales Commissions box."*
+
+So there is no sidebar tab and no `/receipts` page. The order page shows a **Receipt Generation** box
+directly under Phase 6 · Sales commission (above the admin's override card) when the order's VAT
+presentation is Inclusive, Zero Rated or Exclusive +12% (`receiptsApplyTo` — not Exclusive ÷1.12) and
+the viewer is Accounting, the Payment Approver or Admin (`canGenerateReceipts`, unchanged). The form
+is pre-filled from that order (`receipt-prefill.ts`, read only when the box will show), stays
+editable, and has "Reset to the order's figures". The workbook writer and the download route are
+unchanged — same byte-for-byte layout guarantee.
+
+Rendered: Accounting / Payment Approver / Admin see it on a VAT-inclusive order, below Phase 6, with
+the order's two lines (₱700,000, VAT ₱75,000) and a working download; on the same order switched to
+VAT Exclusive (÷1.12) it's gone; Sales and Purchaser never see it; no sidebar tab for anyone.
+
 ## 2026-10-13 · Receipt Generation — Accounting's BIR receipts, in their own template
 
 The owner: *"below Cash Requests tab and above Commissions tab, add a Receipt Generation tab … enable

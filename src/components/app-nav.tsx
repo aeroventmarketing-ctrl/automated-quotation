@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, CalendarClock, ListChecks, Store, Megaphone, MailQuestion, Receipt } from "lucide-react";
+import { LayoutDashboard, Inbox, FileText, BellRing, ClipboardList, Boxes, Package, ClipboardCheck, ShoppingCart, Wallet, Percent, Gauge, Wrench, Settings, LogOut, UserCog, CalendarDays, CalendarClock, ListChecks, Store, Megaphone, MailQuestion } from "lucide-react";
 import type { Role } from "@prisma/client";
 import { DASHBOARD_CONSOLIDATED_ROLES } from "@/lib/dashboard-consolidation";
-import { RECEIPT_ROLES } from "@/lib/receipts-roles";
 
 /** Shown to workflow-role holders and admins (their task list). */
 export const MY_DASHBOARD_ITEM = { href: "/my-dashboard", label: "My Dashboard", icon: ListChecks } as const;
@@ -43,9 +42,6 @@ export const NAV = [
   { href: "/requisitions", label: "Requisitions", icon: ClipboardCheck, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/purchasing", label: "Purchasing", icon: ShoppingCart, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   { href: "/cash-requests", label: "Cash Requests", icon: Wallet, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
-  // Accounting prints the BIR receipts here — Admin by base role; Accounting and
-  // the Payment Approver by workflow role (`RECEIPT_ROLES`, below in visibleNav).
-  { href: "/receipts", label: "Receipt Generation", icon: Receipt, roles: ["ADMIN"] },
   { href: "/commissions", label: "Commissions", icon: Percent, roles: ["SALES", "ENGINEER", "ADMIN", "OTHER"] },
   // Check monitoring is a finance screen: admin by base role, plus the two
   // workflow roles that handle checks (see the `show` overrides below).
@@ -128,8 +124,6 @@ export function visibleNav(role: Role, workflowRoles: string[], salesPersonnel =
   // Approver too (they record / hand over / clear walk-in sales), on top of the
   // Sales + Admin base roles.
   if (workflowRoles.some((r) => r === "accounting" || r === "warehouse" || r === "payment_approver")) show.add("/counter-sales");
-  // Receipt Generation — the same seats as `canGenerateReceipts`.
-  if (workflowRoles.some((r) => (RECEIPT_ROLES as readonly string[]).includes(r))) show.add("/receipts");
   // An Engineer marked "Credit as salesperson" (sales personnel) also sells, so
   // give them the Counter Sales tab — only while that flag is ticked.
   if (role === "ENGINEER" && salesPersonnel) show.add("/counter-sales");

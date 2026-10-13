@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import type { WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { canGenerateReceipts } from "./receipts-access";
 import { visibleNav } from "@/components/app-nav";
+import { receiptsApplyTo } from "@/lib/bir-receipts";
 
 const WHO = {
   admin: { base: "ADMIN", roles: [] },
@@ -36,19 +37,22 @@ const GRID: Record<Who, boolean> = {
   nobody: false,
 };
 
-describe("the Receipt Generation grid — the rule and the tab agree", () => {
+describe("the Receipt Generation grid", () => {
   for (const w of Object.keys(WHO) as Who[]) {
     it(`${w} → ${GRID[w]}`, () => {
       const { base, roles } = WHO[w];
       expect(canGenerateReceipts({ id: w, role: base } as never, { [w]: [...roles] } as WorkflowRoleAssignments)).toBe(GRID[w]);
-      const hrefs = visibleNav(base as never, [...roles]).map((n) => n.href);
-      expect(hrefs.includes("/receipts")).toBe(GRID[w]);
     });
   }
-  it("sits below Cash Requests and above Commissions", () => {
-    const hrefs = visibleNav("OTHER" as never, ["accounting"]).map((n) => n.href);
-    const i = hrefs.indexOf("/receipts");
-    expect(hrefs[i - 1]).toBe("/cash-requests");
-    expect(hrefs[i + 1]).toBe("/commissions");
+  it("it lives on the order page now — no sidebar tab for anyone", () => {
+    for (const w of Object.keys(WHO) as Who[]) {
+      expect(visibleNav(WHO[w].base as never, [...WHO[w].roles]).map((n) => n.href)).not.toContain("/receipts");
+    }
+  });
+});
+
+describe("which orders get the box", () => {
+  it("VAT Inclusive, Zero Rated and VAT Exclusive +12% — not VAT Exclusive (÷1.12)", () => {
+    expect(["INCLUSIVE", "ZERO_RATED", "EXCLUSIVE_PLUS", "EXCLUSIVE"].map(receiptsApplyTo)).toEqual([true, true, true, false]);
   });
 });
