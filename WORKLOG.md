@@ -1,3 +1,12 @@
+## 2026-10-13 · Receipts template: SI column A widened to 7.86
+
+The owner: *"In SI tab of the downloaded excel file change Column A from 6.91 to 7.86."* Changed in the
+template itself (`templates/bir-receipts-template.xlsx`), so it stays the one source of truth and a
+future upload simply replaces it. Excel stores a width with its cell padding: the 6.91 the owner sees
+is stored as 7.54296875, an offset of 0.633 on their screen, so 7.86 is stored as 8.4921875 (the
+nearest 1/256). Only that one `<col>` tag differs — every other part of the package, and every other
+byte of the SI sheet, is identical to before. A test pins it in the downloaded file.
+
 ## 2026-10-13 · Receipts workbook opens in Page Break view at 120%
 
 The owner: *"default the downloaded excel file to Page Break view 120%."* Every sheet's `<sheetView>`
