@@ -183,3 +183,10 @@ describe("the view it opens in", () => {
     }
   });
 });
+
+describe("the owner's column adjustments", () => {
+  it("SI column A is 8.4921875 stored — the 7.86 Excel shows (it was 7.54296875, shown as 6.91)", async () => {
+    const { sheets } = await parts(await fillReceiptsWorkbook(TEMPLATE, sample));
+    expect(sheets.SI).toContain('<col min="1" max="1" width="8.4921875" customWidth="1"/>');
+  });
+});
