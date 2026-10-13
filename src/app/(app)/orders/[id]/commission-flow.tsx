@@ -62,6 +62,8 @@ export function CommissionFlow({
   salesMonth,
   dueLabel,
   autoApproved = false,
+  holds = [],
+  customerHref = null,
   flow,
   canApprove,
   canAccounting,
@@ -82,6 +84,13 @@ export function CommissionFlow({
    * cleared ₱1M and the client has fully paid), so step 1 needs no signature.
    */
   autoApproved?: boolean;
+  /**
+   * Rules 7–8 — what holds this commission (e.g. the client's BIR 2303 isn't
+   * uploaded). While any remain, no step can be taken; the server says the same.
+   */
+  holds?: string[];
+  /** The client's profile — where the 2303 is uploaded. */
+  customerHref?: string | null;
   flow: OrderCommissionFlow;
   canApprove: boolean;
   canAccounting: boolean;
@@ -145,7 +154,8 @@ export function CommissionFlow({
     { label: "Commission received by Sales", role: "accounting", by: flow.receivedByName, at: flow.receivedAt },
     { label: "Signed voucher filed", role: "accounting", by: flow.filedByName, at: flow.filedAt },
   ];
-  const currentIdx = steps.findIndex((s) => !s.at);
+  // While held (rules 7–8) nobody can act, so no step is shown as "awaiting".
+  const currentIdx = holds.length > 0 ? -1 : steps.findIndex((s) => !s.at);
 
   return (
     <div className="space-y-2">
@@ -161,10 +171,23 @@ export function CommissionFlow({
       <p className="text-xs text-muted-foreground">
         Sales month {salesMonth}.{" "}
         {dueLabel
-          ? `Released ${dueLabel} — the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client has paid in full.`
-          : "Released on the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client pays in full."}
+          ? `Released ${dueLabel} — the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client has paid in full, the documents are filed and (VAT orders) the client's BIR 2303 is uploaded.`
+          : "Released on the 15th of the month after the sales month at the earliest, then the next 15th or 30th once the client has paid in full, the documents are filed and (VAT orders) the client's BIR 2303 is uploaded."}
       </p>
-      {!autoApproved && !flow.approvedAt && (
+      {holds.length > 0 && (
+        <div className="rounded-md border border-amber-500/50 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <p className="font-semibold">On hold — the commission can&apos;t be released yet:</p>
+          <ul className="mt-0.5 list-disc pl-4">
+            {holds.map((h) => <li key={h}>{h}</li>)}
+          </ul>
+          {customerHref && holds.some((h) => h.includes("2303")) && (
+            <a href={customerHref} className="mt-1 inline-block font-semibold text-primary hover:underline">
+              Upload it in the client&apos;s Client details →
+            </a>
+          )}
+        </div>
+      )}
+      {holds.length === 0 && !autoApproved && !flow.approvedAt && (
         <p className="text-xs text-amber-700">
           Not yet earned: the salesperson&apos;s sales for {salesMonth} must exceed ₱1,000,000 and the client must have
           paid in full.
@@ -215,7 +238,7 @@ export function CommissionFlow({
 
       {/* Current actionable step. Rule 5 skips the first one when the entitlement
           rules have already approved the amount. */}
-      {!amountApproved ? (
+      {holds.length > 0 && !flow.receivedAt ? null : !amountApproved ? (
         canApprove ? (
           <Button size="sm" disabled={busy} onClick={() => run(() => approveCommission(orderId))}>
             {busy ? "Saving…" : "Approve Commission Amount"}

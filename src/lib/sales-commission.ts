@@ -12,6 +12,22 @@
  *   5. Automatically approve sales commission if the conditions above are met
  *   6. Sales commission is computed at 1.5% of gross sales less VAT
  *
+ * And two more, added 2026-10-13 — *"Add [step 19: Accounting will file all
+ * delivery documents and press the button 'File Documents-Close Order'] in the
+ * criteria for release of commission"* and *"There must be an uploaded 2303 in
+ * the client details to be able to receive commission"*:
+ *
+ *   7. The order's documents are filed — the order is closed. (Orders only: a
+ *      counter sale has no such step and keeps rules 1–6.)
+ *   8. The client's BIR 2303 is uploaded — for VAT Inclusive, VAT Exclusive +12%
+ *      and Zero Rated orders. A VAT Exclusive (÷1.12) order, and every counter
+ *      sale, does not need one.
+ *
+ * Rules 7–8 HOLD a commission; they don't change the month's ₱1M target (the sale
+ * still counts toward it) and they never touch a commission already paid. The
+ * release date becomes the next 15th/30th on or after the LAST of: full payment,
+ * filing, 2303 upload — still never before rule 4's floor. See `commissionHolds`.
+ *
  * Two of those are per-MONTH and four are per-DEAL, which is why this module
  * groups by salesperson × month rather than listing orders flat:
  *
@@ -47,6 +63,9 @@ import { saleRecognitionDate, manilaYMD } from "@/lib/department-pnl";
 import { getWorkflowRoles, usersWithWorkflowRole } from "@/lib/workflow-roles";
 import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 import { coerceProofDocs, type CommissionProofDoc } from "@/lib/commission-proof";
+import { readOrderWorkflow } from "@/lib/order-workflow";
+import { bir2303OnFile } from "@/lib/account";
+import { commissionHolds, commissionReadyYMD, orderNeeds2303 } from "@/lib/commission-holds";
 
 /** Rule 6 — the rate. */
 export const COMMISSION_RATE_PCT = 1.5;
@@ -233,6 +252,10 @@ export function fullyPaidOn(sale: SaleRecord | null, gross: number): string | nu
   return last ? manilaYMD(last) : null;
 }
 
+// Rules 7 & 8 live in `commission-holds.ts` — pure, so the browser can name a
+// hold without importing the database.
+export { commissionHolds, commissionReadyYMD, orderNeeds2303 } from "@/lib/commission-holds";
+
 // --- The view -------------------------------------------------------------
 
 export type CommissionDealKind = "order" | "counter";
@@ -282,6 +305,20 @@ export interface CommissionDeal {
   payoutYMD: string | null;
   /** Rule 5 — the month cleared the quota and the client has fully paid. */
   approved: boolean;
+  /**
+   * Rule 7 — the order's documents are filed (stage "closed"). `null` = the rule
+   * doesn't apply (a counter sale).
+   */
+  filed: boolean | null;
+  /** Manila day of "File Documents-Close Order", when it was stamped. */
+  filedYMD: string | null;
+  /**
+   * Rule 8 — the client's BIR 2303 is uploaded. `null` = not required (a counter
+   * sale, or a VAT Exclusive ÷1.12 order).
+   */
+  has2303: boolean | null;
+  /** Manila day the client's 2303 was first uploaded. */
+  bir2303YMD: string | null;
   /** Already paid out (from the Commission table). */
   paid: boolean;
   paidAt: string | null;
@@ -498,11 +535,22 @@ export function groupByPersonMonth(deals: CommissionDeal[]): CommissionMonth[] {
         d.amount = d.approved ? commissionOn(d.net) : 0;
       }
       // Override rows arrive already approved and priced (see `withOverrides`).
-      // Rule 4 — a release date exists as soon as the client has fully paid, even
-      // while the month is short of quota, so Sales can see what it would be. It
-      // is never inside the sales month itself: the month's ₱1M target isn't a
-      // fact until the month ends, so the floor is the 15th of the month after.
-      d.payoutYMD = d.fullyPaidYMD ? releaseDateFor(d.fullyPaidYMD, g.salesMonth) : null;
+      // Rules 7–8 hold anything not yet PAID — base or override alike. A paid
+      // commission is history: the owner's ruling was to hold every unpaid one,
+      // and to leave what was already paid exactly as it is.
+      const held = !d.paid && commissionHolds(d).length > 0;
+      if (held) {
+        d.approved = false;
+        d.amount = 0;
+      }
+      // Rule 4 — a release date exists as soon as every condition is met (full
+      // payment, and — rules 7–8 — filing and the 2303), even while the month is
+      // short of quota, so Sales can see what it would be. It is never inside the
+      // sales month itself: the month's ₱1M target isn't a fact until the month
+      // ends, so the floor is the 15th of the month after. A paid row keeps the
+      // date it was paid against.
+      const ready = commissionReadyYMD(d) ?? (d.paid ? d.fullyPaidYMD : null);
+      d.payoutYMD = ready ? releaseDateFor(ready, g.salesMonth) : null;
     }
     g.deals.sort((a, b) => a.recognisedYMD.localeCompare(b.recognisedYMD) || a.refLabel.localeCompare(b.refLabel));
     g.earned = round2(g.deals.reduce((a, d) => a + d.amount, 0));
@@ -657,7 +705,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
   // deals loaded — which is the point of the role, not a leak. Everyone else
   // still gets the narrow query.
   const scopeToRep = opts.salespersonId && !heads.has(opts.salespersonId) ? opts.salespersonId : undefined;
-  const [quotations, slim, counterSales, paidRows] = await Promise.all([
+  const [quotations, slim, counterSales, paidRows, on2303] = await Promise.all([
     prisma.quotation.findMany({
       // Rule 1 needs the salesperson's WHOLE month, so this can be narrowed to
       // one salesperson but never to one order.
@@ -688,7 +736,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
         currency: true,
         preparedById: true,
         preparedBy: { select: { name: true } },
-        inquiry: { select: { customer: { select: { company: true } } } },
+        inquiry: { select: { customer: { select: { id: true, company: true } } } },
       },
     }),
     slimClassificationByOrder(),
@@ -707,6 +755,9 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     prisma.commission
       .findMany({ select: { id: true, quotationId: true, counterSaleId: true, kind: true, salespersonId: true, paid: true, paidAt: true, paidByName: true, receivedAt: true, receivedByName: true, paymentProof: true } })
       .catch(() => [] as { id: string; quotationId: string | null; counterSaleId: string | null; kind: string; salespersonId: string; paid: boolean; paidAt: Date | null; paidByName: string | null; receivedAt: Date | null; receivedByName: string | null; paymentProof: unknown }[]),
+    // Rule 8 — which clients have a 2303 on file, and since when. Picked out of
+    // the account registry by Postgres, so the 296 KB blob never leaves it.
+    bir2303OnFile(),
   ]);
 
   // Keyed by (sale, payee kind): one order can carry both the rep's 1.5% payout
@@ -730,6 +781,14 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     const gross = round2(payableTotal(q));
     const net = netOfVat(q, gross);
     const record = payout.get(`q:${q.id}:base`);
+    // Rule 7 — "File Documents-Close Order" is what closes the order, on both the
+    // single and the multiple-batch path; its stamp dates it.
+    const wf = readOrderWorkflow(q.classification);
+    const filed = wf.stage === "closed";
+    const filedAt = wf.approvals.documents_filed?.at;
+    // Rule 8 — only the VAT presentations the owner named need the 2303.
+    const customerId = q.inquiry?.customer?.id ?? null;
+    const needs = orderNeeds2303(q.vatMode);
     deals.push({
       kind: "order",
       payeeKind: "base",
@@ -753,6 +812,10 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       amount: 0,
       payoutYMD: null,
       approved: false,
+      filed,
+      filedYMD: filed && filedAt ? manilaYMD(filedAt) : null,
+      has2303: needs ? !!customerId && on2303.has(customerId) : null,
+      bir2303YMD: needs && customerId ? on2303.get(customerId) ?? null : null,
       paid: record?.paid ?? false,
       paidAt: record?.paidAt ? record.paidAt.toISOString() : null,
       paidByName: record?.paidByName ?? null,
@@ -802,6 +865,11 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       amount: 0,
       payoutYMD: null,
       approved: false,
+      // Rules 7–8 don't apply to a walk-in: no filing step, no 2303 required.
+      filed: null,
+      filedYMD: null,
+      has2303: null,
+      bir2303YMD: null,
       paid: record?.paid ?? false,
       paidAt: record?.paidAt ? record.paidAt.toISOString() : null,
       paidByName: record?.paidByName ?? null,

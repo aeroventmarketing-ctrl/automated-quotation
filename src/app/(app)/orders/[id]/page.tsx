@@ -78,6 +78,7 @@ import { suggestOfficeMrfRows } from "@/lib/mrf-suggest";
 import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
+import { commissionHolds } from "@/lib/commission-holds";
 import { SaleDocumentList } from "./sale-document-list";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -577,6 +578,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         dueLabel: commissionDeal.payoutYMD ? formatDate(commissionDeal.payoutYMD) : "",
         // Rule 5 — clearing rules 1–3 IS the approval; nobody signs the amount off.
         autoApproved: commissionDeal.approved,
+        // Rules 7–8: what still holds an unpaid commission (the 2303, mostly —
+        // this card only opens once the order is filed).
+        holds: commissionDeal.paid ? [] : commissionHolds(commissionDeal),
         flow: wf.commission ?? {},
       }
     : null;
@@ -1245,6 +1249,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
               salesMonth={commissionInfo.salesMonth}
               dueLabel={commissionInfo.dueLabel}
               autoApproved={commissionInfo.autoApproved}
+              holds={commissionInfo.holds}
+              customerHref={quote.inquiry?.customer ? `/customers/${quote.inquiry.customer.id}` : null}
               flow={commissionInfo.flow}
               canApprove={perms.canApproveComm}
               canAccounting={perms.canAccountingComm}

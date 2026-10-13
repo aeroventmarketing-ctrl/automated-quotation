@@ -1,3 +1,34 @@
+## 2026-10-13 · Commission rules 7 & 8: documents filed, and the client's BIR 2303
+
+The owner, on the commission criteria: *"Add [step 19 — Accounting files all delivery documents and
+presses 'File Documents-Close Order'] in the criteria for release of commission"* and *"There must be
+an uploaded 2303 in the client details to be able to receive commission."* Their answers to my
+questions: release on the next 15th/30th after the **last** of payment, filing and 2303; counter sales
+keep today's rules; the 2303 is needed only on **VAT Inclusive, VAT Exclusive +12% and Zero Rated**
+orders (not VAT Exclusive ÷1.12); and every commission not yet **paid** is held — paid ones untouched.
+
+**Why it needed doing.** The order page's Phase 6 card already waited for the order to be closed, but
+the Commissions page — where the money is actually ticked onto a voucher and marked paid — approved on
+₱1M + full payment alone. Both now read rules 7–8 from the one engine (`groupByPersonMonth`), with the
+pure helpers in `lib/commission-holds.ts` so the browser can name a hold in the engine's own words.
+
+- **Held** = no amount, no release date, not voucherable, not markable paid; the sale **still counts**
+  toward the month's ₱1M. The Sales Head's 0.25% is held with the deal it comes from.
+- **Release** = next 15th/30th on or after the latest of full payment, the `documents_filed` stamp, and
+  the client's **first** 2303 upload (`firstUploadedAt`, kept on replace — a clearer copy never pushes a
+  payout back). Still never before the 15th of the month after the sales month.
+- **Where it shows**: Commissions row "On hold" + the reason; an "On hold" tile; rules 7–8 in the
+  "How a commission is earned" card; the order card's amber box with a link to the client's profile
+  and no buttons. Every order-card step (approve, voucher, approve voucher, release budget, received)
+  re-checks on the server, as does Mark paid.
+- **Read cost**: which clients have a 2303 is picked out of the account registry by Postgres
+  (`bir2303OnFile`) — the 296 KB blob never crosses the wire.
+
+Rendered (₱700k + ₱700k VAT-inclusive, Sep, both paid): filed order with no 2303 → "On hold · Client's
+BIR 2303 not uploaded"; unfiled → both reasons; 2303 first uploaded Oct 8 (replaced Oct 28) → the filed
+one "Approved · Release Oct 15" and into Ready for payout. Order card: amber hold box, no buttons, no
+"awaiting" step; with the 2303, approved automatically.
+
 ## 2026-10-13 · BIR 2303: the client's account holder, not every salesperson
 
 The owner: *"Allow sales account holder, accounting, admin and payment approver change the 2303

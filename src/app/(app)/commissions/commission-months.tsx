@@ -9,6 +9,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { matchesQuery } from "@/lib/commission-search";
 import type { CommissionDeal, CommissionMonth } from "@/lib/sales-commission";
+import { commissionHolds } from "@/lib/commission-holds";
 import { MarkPaid } from "./mark-paid";
 import { ReceivedStamp } from "./receipt-link";
 import { RowProof } from "./proof-of-payment";
@@ -376,6 +377,19 @@ function DealStatus({ deal: d, currency }: { deal: SearchableDeal; currency: str
         <span className="text-[10px] text-muted-foreground">
           {outstanding > 0 ? `${formatCurrency(outstanding, currency)} outstanding` : "collected, waiting to clear"}
         </span>
+      </span>
+    );
+  }
+  // Rules 7–8 — fully paid, but the order isn't filed or the client's 2303 isn't
+  // on file. Named, so Sales knows exactly what to chase.
+  const holds = commissionHolds(d);
+  if (holds.length > 0) {
+    return (
+      <span className="inline-flex flex-col gap-0.5">
+        <Badge variant="outline" className="w-fit border-amber-500/60 text-amber-700">On hold</Badge>
+        {holds.map((h) => (
+          <span key={h} className="text-[10px] text-amber-700">{h}</span>
+        ))}
       </span>
     );
   }

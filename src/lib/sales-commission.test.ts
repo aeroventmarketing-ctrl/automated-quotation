@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  commissionHolds,
+  orderNeeds2303,
   payoutDateFor,
   firstReleaseForMonth,
   releaseDateFor,
@@ -51,6 +53,12 @@ function deal(over: Partial<CommissionDeal> = {}): CommissionDeal {
     amount: 0,
     payoutYMD: null,
     approved: false,
+    // Rules 7–8 met by default (filed, 2303 on file, both before full payment),
+    // so every test above them reads exactly as it did before they existed.
+    filed: true,
+    filedYMD: "2026-08-20",
+    has2303: true,
+    bir2303YMD: "2026-08-01",
     paid: false,
     paidAt: null,
     paidByName: null,
@@ -748,5 +756,68 @@ describe("the three moments of a commission", () => {
     expect(markPaidOpensYMD(null)).toBeNull();
     expect(canMarkPaid(noDate, "2026-09-12")).toBe(true);
     expect(isPayable(noDate, "2026-09-12")).toBe(false); // still not "released"
+  });
+});
+
+describe("rules 7 & 8 — documents filed, and the client's BIR 2303", () => {
+  const month = (d: Partial<CommissionDeal>) => groupByPersonMonth([deal({ gross: 1_200_000, ...d })])[0];
+
+  it("an order not yet filed is held — no amount, no release date — but still counts toward the ₱1M", () => {
+    const g = month({ filed: false, filedYMD: null });
+    const d = g.deals[0];
+    expect(g.qualifies).toBe(true);
+    expect(d.approved).toBe(false);
+    expect(d.amount).toBe(0);
+    expect(d.payoutYMD).toBeNull();
+    expect(commissionHolds(d)).toEqual(["Documents not yet filed (File Documents-Close Order)"]);
+  });
+
+  it("a VAT order with no 2303 on file is held", () => {
+    const d = month({ has2303: false, bir2303YMD: null }).deals[0];
+    expect(d.approved).toBe(false);
+    expect(commissionHolds(d)).toEqual(["Client's BIR 2303 not uploaded"]);
+  });
+
+  it("a deal the 2303 rule doesn't apply to (null) is not held by it", () => {
+    expect(month({ has2303: null, bir2303YMD: null }).deals[0].approved).toBe(true);
+  });
+
+  it("released on the next 15th/30th after the LAST of payment, filing and 2303 — the owner's example", () => {
+    // Paid Oct 3 → would have been Oct 15; filed Oct 20 → Oct 30.
+    const d = month({ fullyPaidYMD: "2026-10-03", filedYMD: "2026-10-20", bir2303YMD: "2026-09-01" }).deals[0];
+    expect(d.approved).toBe(true);
+    expect(d.payoutYMD).toBe("2026-10-30");
+    // The 2303 arriving last moves it the same way.
+    expect(month({ fullyPaidYMD: "2026-10-03", filedYMD: "2026-10-04", bir2303YMD: "2026-10-31" }).deals[0].payoutYMD).toBe("2026-11-15");
+  });
+
+  it("still never before the 15th of the month after the sales month", () => {
+    const d = month({ salesMonth: "2026-08", fullyPaidYMD: "2026-08-05", filedYMD: "2026-08-06", bir2303YMD: "2026-08-07" }).deals[0];
+    expect(d.payoutYMD).toBe("2026-09-15");
+  });
+
+  it("a commission already PAID is left alone, holds or not", () => {
+    const d = month({ paid: true, filed: false, filedYMD: null, has2303: false, bir2303YMD: null }).deals[0];
+    expect(d.approved).toBe(true);
+    expect(d.amount).toBeGreaterThan(0);
+    expect(d.payoutYMD).toBe("2026-09-15");
+  });
+
+  it("the Sales Head's override is held with the deal it comes from", () => {
+    const heads = new Map([["head", "JayR"]]);
+    const sources = new Set(["u1"]);
+    const held = withOverrides([deal({ gross: 1_200_000, has2303: false, bir2303YMD: null })], heads, sources);
+    expect(held.filter((d) => d.payeeKind === "override")).toHaveLength(0);
+    // Base already paid but the client still has no 2303: the unpaid override waits.
+    const months = groupByPersonMonth(
+      withOverrides([deal({ gross: 1_200_000, paid: true, has2303: false, bir2303YMD: null })], heads, sources),
+    );
+    const override = months.flatMap((m) => m.deals).find((d) => d.payeeKind === "override")!;
+    expect(override.approved).toBe(false);
+    expect(override.amount).toBe(0);
+  });
+
+  it("which orders need the 2303: VAT Inclusive, Exclusive +12%, Zero Rated — not Exclusive ÷1.12", () => {
+    expect(["INCLUSIVE", "EXCLUSIVE_PLUS", "ZERO_RATED", "EXCLUSIVE"].map(orderNeeds2303)).toEqual([true, true, true, false]);
   });
 });

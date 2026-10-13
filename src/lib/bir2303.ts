@@ -36,6 +36,11 @@ export interface Bir2303Record {
   registeredAddress?: string;
   /** The uploaded certificate — the eye opens this. */
   doc?: Bir2303Doc;
+  /**
+   * When a 2303 was FIRST put on file. Commission rule 8 dates the release from
+   * it; kept on replace, so a clearer copy doesn't push anyone's payout back.
+   */
+  firstUploadedAt?: string;
   /** AI reads per uploaded file — capped, like every other AI reader. */
   readCounts?: Record<string, number>;
   /** Who last saved the fields, and when. */
@@ -72,6 +77,7 @@ export function coerceBir2303(v: unknown): Bir2303Record | undefined {
     ...(str(o.taxpayerType) ? { taxpayerType: str(o.taxpayerType) } : {}),
     ...(str(o.registeredAddress) ? { registeredAddress: str(o.registeredAddress) } : {}),
     ...(doc ? { doc } : {}),
+    ...(str(o.firstUploadedAt) ? { firstUploadedAt: str(o.firstUploadedAt) } : {}),
     ...(Object.keys(counts).length ? { readCounts: counts } : {}),
     ...(str(o.updatedByName) ? { updatedByName: str(o.updatedByName) } : {}),
     ...(str(o.updatedAt) ? { updatedAt: str(o.updatedAt) } : {}),

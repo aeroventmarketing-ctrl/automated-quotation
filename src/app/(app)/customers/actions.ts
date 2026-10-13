@@ -497,10 +497,14 @@ export async function attachBir2303(customerId: string, doc: { path: string; nam
       bir2303: {
         ...(existing.bir2303 ?? {}),
         doc: { path: doc.path, name: doc.name.slice(0, 200) || "BIR 2303", uploadedAt: doc.uploadedAt ?? new Date().toISOString(), byName: user.name },
+        // Commission rule 8 dates from the first upload — a replacement keeps it.
+        firstUploadedAt: existing.bir2303?.firstUploadedAt ?? existing.bir2303?.doc?.uploadedAt ?? doc.uploadedAt ?? new Date().toISOString(),
       },
     };
   });
   revalidatePath(`/customers/${customerId}`);
+  // Rule 8 of the commissions reads this — a held commission can release now.
+  revalidatePath("/commissions");
 }
 
 const bir2303Schema = z.object({
