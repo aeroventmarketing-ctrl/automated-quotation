@@ -10,6 +10,9 @@ const nextConfig = {
       "./public/templates/po-2307-template.xlsx",
       "./public/templates/2307-source.xlsx",
     ],
+    // Accounting's BIR receipts workbook (Receipt Generation). Kept out of
+    // public/: its sample rows name a real client and TIN.
+    "/api/receipts/xlsx": ["./templates/bir-receipts-template.xlsx"],
     "/(app)/orders/[id]/jo/[index]/xlsx": [
       "./public/templates/fans-jo-template.xlsx",
       "./public/templates/fans-inline-jo-template.xlsx",

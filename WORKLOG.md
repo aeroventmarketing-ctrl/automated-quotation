@@ -1,3 +1,56 @@
+## 2026-10-13 · Receipt Generation moves onto the order, below Phase 6 — VAT orders only
+
+The owner, before the tab was merged: *"Instead of appearing below Cash Request, make it appear to the
+Order workflow, this will appear only on VAT Inclusive, Zero Rated and VAT Exclusive +12% transactions.
+Make it appear below Phase 6 - Sales Commissions box."*
+
+So there is no sidebar tab and no `/receipts` page. The order page shows a **Receipt Generation** box
+directly under Phase 6 · Sales commission (above the admin's override card) when the order's VAT
+presentation is Inclusive, Zero Rated or Exclusive +12% (`receiptsApplyTo` — not Exclusive ÷1.12) and
+the viewer is Accounting, the Payment Approver or Admin (`canGenerateReceipts`, unchanged). The form
+is pre-filled from that order (`receipt-prefill.ts`, read only when the box will show), stays
+editable, and has "Reset to the order's figures". The workbook writer and the download route are
+unchanged — same byte-for-byte layout guarantee.
+
+Rendered: Accounting / Payment Approver / Admin see it on a VAT-inclusive order, below Phase 6, with
+the order's two lines (₱700,000, VAT ₱75,000) and a working download; on the same order switched to
+VAT Exclusive (÷1.12) it's gone; Sales and Purchaser never see it; no sidebar tab for anyone.
+
+## 2026-10-13 · Receipt Generation — Accounting's BIR receipts, in their own template
+
+The owner: *"below Cash Requests tab and above Commissions tab, add a Receipt Generation tab … enable
+the Accounting role to print receipts, pattern of receipt printing is uploaded in github with filename
+BIR Receipts template.xlsx. Show this tab to payment approver and admin role. Make the uploaded file
+consistent, do not change the row height and the column width."*
+
+**The template** (moved, byte-identical, to `templates/bir-receipts-template.xlsx` — not `public/`: its
+sample rows name a real client and TIN) is an **Input** sheet feeding three print sheets that land on
+pre-printed BIR booklets: **SI** Sales Invoice (7 lines), **DR** Delivery Receipt (16), **CR**
+Collection Receipt. Their layout IS the product.
+
+**Why not ExcelJS.** Loading and re-saving rewrites every part and drops the four
+`printerSettings*.bin` parts (paper/tray for those booklets). `excel/bir-receipts-xlsx.ts` instead edits
+the package as XML and changes **only cell contents**: the Input values; the SI/DR item rows pointed at
+the Input lines by formula (a cleared, still-styled cell where a row is empty, so no stray "0" prints);
+CR's empty merged second words line wired to Input!B9; every formula's cached result; and
+`fullCalcOnLoad`. A test asserts `<cols>`, every row tag (`ht`), merges, margins, page setup, styles,
+theme and all four printer-settings parts are byte-identical, and that the package has exactly the
+template's parts (minus the calc chain). A small evaluator recomputes the template's formulas; run on
+the template's own sample it reproduces every value Excel had cached.
+
+**The page** (`/receipts`, `canGenerateReceipts` — Admin, Accounting, Payment Approver; grid test also
+checks the tab sits between Cash Requests and Commissions): load from an order (client, TIN, Registered
+Address and Trade Name-as-Business-Style from the 2303; quotation lines priced to sum to the payable;
+VAT 12% / zero-rated; EWT 1% if the client withheld), the template's fields, live totals by the
+template's formulas, amount in words in the template's wording ("… & 50/100"), then Download. Over 7
+lines the SI prints "As per <PO>"; over 16 is refused (the template's own notes).
+
+Rendered as Accounting: tab between Cash Requests and Commissions; order loaded (2 × ₱250,000 + 4 ×
+₱50,000 = ₱700,000, VAT ₱75,000); downloaded; SI/DR/CR drawn at the sheet's real widths and heights —
+names, TIN, lines, "Nothing follows", totals, words and PO in their cells. Payment Approver and Admin
+get it; Sales and Purchaser neither the tab nor the route (403). LibreOffice here has no Calc, so the
+check was against the XML and a true-size drawing, not an Excel print.
+
 ## 2026-10-13 · BIR 2303: Trade Name, not Name of Taxpayer
 
 The owner, correcting the first training: *"look at the trade name instead of taxpayer name. In the

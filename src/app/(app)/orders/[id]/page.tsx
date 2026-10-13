@@ -79,6 +79,10 @@ import { StockRelease } from "./stock-release";
 import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
 import { commissionHolds } from "@/lib/commission-holds";
+import { ReceiptGeneration } from "./receipt-generation";
+import { canGenerateReceipts } from "@/lib/receipts-access";
+import { receiptsApplyTo } from "@/lib/bir-receipts";
+import { receiptPrefillFor } from "@/lib/receipt-prefill";
 import { SaleDocumentList } from "./sale-document-list";
 import { AutoRefresh } from "@/components/auto-refresh";
 
@@ -587,6 +591,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // The sales commission stays hidden until the client has fully paid the order
   // (amount collected covers the payable total, within a rounding tolerance).
   const fullyPaid = value > 0 && collectedTotal(saleForClose) >= value - 0.005;
+  // Receipt Generation — the owner: *"make it appear to the Order workflow, this
+  // will appear only on VAT Inclusive, Zero Rated and VAT Exclusive +12%
+  // transactions … below Phase 6 - Sales Commissions box"*. Accounting, the
+  // Payment Approver and Admin. Read only when it will be shown.
+  const receiptInitial =
+    receiptsApplyTo(quote.vatMode) && canGenerateReceipts(viewer, assignments)
+      ? await receiptPrefillFor(quote.id).catch(() => null)
+      : null;
   const phase6Active =
     wf.stage === "closed" &&
     !!commissionInfo &&
@@ -1265,6 +1277,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <Card className="border-dashed opacity-70">
           <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Phase 6 · Sales commission</CardTitle></CardHeader>
           <CardContent><p className="text-sm text-muted-foreground">Opens once the client has fully paid and the order is closed with all closing documents complete — the sales commission voucher, approval and release.</p></CardContent>
+        </Card>
+      )}
+
+      {/* Receipt Generation — below Phase 6, VAT orders only (see receiptInitial). */}
+      {!restricted && receiptInitial && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Receipt Generation</CardTitle></CardHeader>
+          <CardContent>
+            <ReceiptGeneration initial={receiptInitial} />
+          </CardContent>
         </Card>
       )}
 
