@@ -21,6 +21,7 @@ import {
 } from "@/lib/commission-proof";
 import { releaseDay, voucherMates } from "@/lib/commission-voucher-set";
 import { getCommissionVoucherNoByDeal } from "@/lib/commission-voucher";
+import { commissionHolds } from "@/lib/commission-holds";
 import { buildCommissionsFresh, allDeals, canMarkPaid, dealKey, markPaidOpensYMD, MARK_PAID_LEAD_DAYS, commissionToday, type CommissionDealKind, type CommissionPayeeKind } from "@/lib/sales-commission";
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -90,7 +91,12 @@ export async function payDealCommission(
   );
   if (!deal) throw new Error("That sale is no longer in the commission list.");
   if (paid && !deal.approved) {
-    throw new Error("This commission isn't approved yet — the month must clear ₱1,000,000 and the client must have fully paid.");
+    const holds = commissionHolds(deal);
+    throw new Error(
+      holds.length > 0
+        ? `This commission is on hold: ${holds.join("; ")}.`
+        : "This commission isn't approved yet — the month must clear ₱1,000,000 and the client must have fully paid.",
+    );
   }
   // The five-day window, enforced HERE and not only on the button. The button is
   // a hint; this is the rule. Without it, rule 4 would hold only for as long as

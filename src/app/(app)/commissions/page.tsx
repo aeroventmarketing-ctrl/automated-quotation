@@ -21,6 +21,7 @@ import {
   OVERRIDE_RATE_PCT,
   SALES_START_YMD,
 } from "@/lib/sales-commission";
+import { commissionHolds } from "@/lib/commission-holds";
 import { ReceiptLink } from "./receipt-link";
 import { readOutstandingReceipt, readAwaitingConfirmation } from "@/lib/commission-receipt";
 import { AwaitingConfirmationPanel } from "./awaiting-confirmation";
@@ -99,6 +100,8 @@ export default async function CommissionsPage() {
   const pendingReleaseTotal = pendingRelease.reduce((a, d) => a + d.amount, 0);
   const nextRelease = pendingRelease.map((d) => d.payoutYMD).filter((x): x is string => !!x).sort()[0] ?? null;
   const awaitingPayment = deals.filter((d) => !d.fullyPaid);
+  // Rules 7–8: paid in full, but the order isn't filed or the 2303 isn't on file.
+  const onHold = deals.filter((d) => !d.paid && d.fullyPaid && commissionHolds(d).length > 0);
   const belowQuota = months.filter((m) => !m.qualifies);
 
   // Money leaves the company one voucher per salesperson, not one per order, so
@@ -190,6 +193,7 @@ export default async function CommissionsPage() {
     },
     { label: "Paid out", value: formatCurrency(view?.totals.paid ?? 0, currency), caption: `${deals.filter((d) => d.paid).length} released` },
     { label: "Awaiting full payment", value: String(awaitingPayment.length), caption: "client still owing" },
+    { label: "On hold", value: String(onHold.length), caption: "not filed, or no BIR 2303" },
     { label: "Months below quota", value: String(belowQuota.length), caption: `under ${formatCurrency(MONTHLY_QUOTA_GROSS, currency)}` },
   ];
 
@@ -211,10 +215,12 @@ export default async function CommissionsPage() {
           <p><span className="font-semibold text-foreground">1 · The month.</span> The salesperson&apos;s sales for the month must exceed {formatCurrency(MONTHLY_QUOTA_GROSS, currency)} gross. Below that, nothing in the month is earned.</p>
           <p><span className="font-semibold text-foreground">2 · The month it counts in.</span> A terms client counts in the month their PO was submitted; everyone else in the month of their down payment.</p>
           <p><span className="font-semibold text-foreground">3 · Full payment.</span> The client must have paid the order in full — whenever that happens.</p>
-          <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on each 15th and 30th as the remaining clients pay in full. A month with 31 days releases on the 30th; February on the 28th (29th in a leap year).</p>
-          <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 approves it; no one signs off the entitlement.</p>
-          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of each <em>listed</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>. Only salespeople ticked <em>Counts toward override</em> in Admin → Workflow roles are included.</p>
+          <p><span className="font-semibold text-foreground">4 · Release.</span> A month&apos;s commissions start on the <strong>15th of the following month</strong> — the target isn&apos;t settled until the month ends — then on the next 15th or 30th after the <strong>last</strong> of: full payment, documents filed (7), BIR 2303 uploaded (8). A month with 31 days releases on the 30th; February on the 28th (29th in a leap year).</p>
+          <p><span className="font-semibold text-foreground">5 · Approval.</span> Automatic — meeting 1–3 and 7–8 approves it; no one signs off the entitlement.</p>
           <p><span className="font-semibold text-foreground">6 · The rate.</span> {COMMISSION_RATE_PCT}% of gross sales less VAT. VAT is deducted only where the client was charged it — a <em>VAT exclusive</em> or <em>zero rated</em> order pays {COMMISSION_RATE_PCT}% of its full amount.</p>
+          <p><span className="font-semibold text-foreground">7 · Documents filed.</span> Accounting has filed the delivery documents and pressed <em>File Documents-Close Order</em>. Orders only — counter sales have no such step.</p>
+          <p><span className="font-semibold text-foreground">8 · The client&apos;s BIR 2303.</span> Uploaded in the client&apos;s Client details — required for <em>VAT Inclusive</em>, <em>VAT Exclusive +12%</em> and <em>Zero Rated</em> orders. Until then the commission is <strong>on hold</strong> (the sale still counts toward the month&apos;s target).</p>
+          <p className="sm:col-span-2"><span className="font-semibold text-foreground">The Sales Head&apos;s override.</span> Whoever holds the <em>Sales Head</em> role also earns {OVERRIDE_RATE_PCT}% of each <em>listed</em> salesperson&apos;s qualifying month, on the same net-of-VAT base and released on the same dates. It is on top of the {COMMISSION_RATE_PCT}% — the salesperson&apos;s own commission is untouched — never applies to the Sales Head&apos;s own sales, and is <strong>not conditional on the Sales Head hitting their own target</strong>. Only salespeople ticked <em>Counts toward override</em> in Admin → Workflow roles are included.</p>
         </CardContent>
       </Card>
 

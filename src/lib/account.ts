@@ -70,6 +70,30 @@ export function currentOwner(data: AccountData | null | undefined): AccountAssig
 }
 
 /**
+ * Every client with a BIR 2303 on file → the Manila day it was FIRST uploaded
+ * (null when that isn't known). Commission rule 8 reads it for every order at
+ * once, so Postgres picks the two fields out of the registry and the 296 KB blob
+ * never crosses the wire. "First" so replacing the certificate with a clearer
+ * copy doesn't push a commission's release date back.
+ */
+export async function bir2303OnFile(): Promise<Map<string, string | null>> {
+  const rows = await prisma.$queryRaw<{ customerId: string; at: string | null }[]>`
+    select a.key as "customerId",
+           coalesce(a.value -> 'bir2303' ->> 'firstUploadedAt', a.value -> 'bir2303' -> 'doc' ->> 'uploadedAt') as "at"
+    from "QuotationTemplate" t, jsonb_each(t."config" -> 'accounts') a
+    where t."layoutKey" = ${ACCOUNT_REGISTRY_KEY}
+      and jsonb_typeof(t."config" -> 'accounts') = 'object'
+      and coalesce(a.value -> 'bir2303' -> 'doc' ->> 'path', '') <> ''
+  `;
+  const ymd = (iso: string | null) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+  };
+  return new Map(rows.map((r) => [r.customerId, ymd(r.at)] as const));
+}
+
+/**
  * The client's sales in-charge, as the client profile shows it: the open
  * assignment, or — for a client never assigned or transferred — the creator of
  * its first inquiry, which is what the profile's "Sales in-charge" box falls back

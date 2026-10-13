@@ -79,7 +79,7 @@ import {
 } from "@/lib/delivery-multibatch";
 import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
-import { buildCommissionsFresh, allDeals } from "@/lib/sales-commission";
+import { buildCommissionsFresh, allDeals, commissionHolds } from "@/lib/sales-commission";
 import { applyStockChange } from "@/lib/inventory";
 import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
@@ -5061,11 +5061,26 @@ async function commissionActor(role: "approver" | "accounting") {
   return user;
 }
 
+/**
+ * Commission rules 7–8: refuse any step while the commission is held — the order
+ * not filed, or (on a VAT order) the client's BIR 2303 not uploaded. Read from
+ * the one engine, so this can't disagree with the card or the Commissions page.
+ */
+async function assertCommissionNotHeld(quotationId: string): Promise<void> {
+  const quote = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { preparedById: true } });
+  if (!quote?.preparedById) return;
+  const deal = await buildCommissionsFresh({ salespersonId: quote.preparedById })
+    .then((v) => allDeals(v).find((d) => d.kind === "order" && d.payeeKind === "base" && d.refId === quotationId) ?? null);
+  const holds = deal && !deal.paid ? commissionHolds(deal) : [];
+  if (holds.length > 0) throw new Error(`This commission is on hold: ${holds.join("; ")}.`);
+}
+
 /** 1. Approve the commission amount. */
 export async function approveCommission(quotationId: string): Promise<void> {
   const user = await commissionActor("approver");
   const { cls, wf } = await loadWorkflow(quotationId);
   if (wf.stage !== "closed") throw new Error("The order isn't closed yet.");
+  await assertCommissionNotHeld(quotationId);
   const commission = { ...(wf.commission ?? {}), approvedByName: user.name, approvedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
 }
@@ -5090,6 +5105,7 @@ async function commissionAmountApproved(quotationId: string, wf: { commission?: 
 export async function uploadCommissionVoucher(quotationId: string, doc: { path: string; name: string; uploadedAt?: string }): Promise<void> {
   const user = await commissionActor("accounting");
   const { cls, wf } = await loadWorkflow(quotationId);
+  await assertCommissionNotHeld(quotationId);
   if (!(await commissionAmountApproved(quotationId, wf))) {
     throw new Error("This commission isn't earned yet — the salesperson's month must exceed ₱1,000,000 and the client must have paid in full.");
   }
@@ -5106,6 +5122,7 @@ export async function uploadCommissionVoucher(quotationId: string, doc: { path: 
 export async function approveCommissionVoucher(quotationId: string): Promise<void> {
   const user = await commissionActor("approver");
   const { cls, wf } = await loadWorkflow(quotationId);
+  await assertCommissionNotHeld(quotationId);
   if (!wf.commission?.voucherAt) throw new Error("The commission voucher hasn't been uploaded yet.");
   const commission = { ...wf.commission, voucherApprovedByName: user.name, voucherApprovedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
@@ -5115,6 +5132,7 @@ export async function approveCommissionVoucher(quotationId: string): Promise<voi
 export async function releaseCommissionBudget(quotationId: string): Promise<void> {
   const user = await commissionActor("approver");
   const { cls, wf } = await loadWorkflow(quotationId);
+  await assertCommissionNotHeld(quotationId);
   if (!wf.commission?.voucherApprovedAt) throw new Error("The commission voucher hasn't been approved yet.");
   const commission = { ...wf.commission, budgetReleasedByName: user.name, budgetReleasedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
@@ -5124,6 +5142,7 @@ export async function releaseCommissionBudget(quotationId: string): Promise<void
 export async function receiveCommission(quotationId: string): Promise<void> {
   const user = await commissionActor("accounting");
   const { cls, wf } = await loadWorkflow(quotationId);
+  await assertCommissionNotHeld(quotationId);
   if (!wf.commission?.budgetReleasedAt) throw new Error("The commission budget hasn't been released yet.");
   const commission = { ...wf.commission, receivedByName: user.name, receivedAt: new Date().toISOString() };
   await saveWorkflow(quotationId, cls, { ...wf, commission });
