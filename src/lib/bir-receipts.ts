@@ -203,8 +203,61 @@ export function receiptDate(ymd: string): string {
 }
 
 /**
- * Spread what the client actually pays over the quotation's lines, so the
- * receipt's lines add up to the order — a quote's mark-up, discount and VAT
+ * Characters that fit one description row on the printed receipts. Both receipts
+ * share the rows, so it is the narrower one: the Sales Invoice's description
+ * runs C–I (≈45.6 Excel width units at 10pt) before the unit-price column; the
+ * Delivery Receipt's runs C–K (≈78 at 11pt). 48 keeps every row inside the SI.
+ */
+export const DESCRIPTION_ROW_CHARS = 48;
+
+/**
+ * The quotation's Product Selection description — one detail per line, e.g.
+ * "Ceiling Cassette / KDK Brand / Model: 24CHG" — as receipt text. The owner:
+ * *"Fit the product Selection box description rows to Receipt Generation
+ * description row, separate Product Selection Description with
+ * 'space-dash-space'."*
+ */
+export const joinDescription = (description: string): string =>
+  description
+    .split(/\r?\n/)
+    .map((s) => s.trim().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(" - ");
+
+/**
+ * Break a description into rows of at most `width` characters — the owner: *"If
+ * Receipt Generation Description row is filled up, use another row if needed."*
+ * Breaks between words; a single word longer than a row is cut.
+ */
+export function wrapDescription(text: string, width = DESCRIPTION_ROW_CHARS): string[] {
+  const rows: string[] = [];
+  let cur = "";
+  for (const word of text.split(" ").filter(Boolean)) {
+    if (!cur) cur = word;
+    else if (cur.length + 1 + word.length <= width) cur += ` ${word}`;
+    else {
+      rows.push(cur);
+      cur = word;
+    }
+    while (cur.length > width) {
+      rows.push(cur.slice(0, width));
+      cur = cur.slice(width);
+    }
+  }
+  if (cur) rows.push(cur);
+  return rows.length ? rows : [""];
+}
+
+/**
+ * The quotation's lines as receipt rows.
+ *
+ * Qty, unit and description come from the quotation's Product Selection: the
+ * description's lines joined with " - ", wrapped over as many rows as it needs —
+ * the first row carries the qty, unit and price; a continuation row carries
+ * only the rest of the description.
+ *
+ * The price spreads what the client actually pays over the lines, so the
+ * receipt adds up to the order — a quote's mark-up, discount and VAT
  * presentation live at the header, not on each line. The last line takes the
  * rounding, so the total is exact to the centavo when its qty is 1, and within
  * a centavo per unit otherwise.
@@ -216,12 +269,15 @@ export function linesFromQuotation(
   const sum = items.reduce((a, i) => a + i.lineTotal, 0);
   const factor = sum > 0 ? payable / sum : 1;
   let running = 0;
-  return items.map((it, idx) => {
+  return items.flatMap((it, idx) => {
     const qty = it.qty > 0 ? it.qty : 1;
     const last = idx === items.length - 1;
     const lineValue = last ? round2(payable - running) : round2(it.lineTotal * factor);
     running = round2(running + lineValue);
-    const firstLine = it.description.split(/\r?\n/).map((s) => s.trim()).find(Boolean) ?? "";
-    return { qty, unit: it.unit?.trim() || "Pcs", description: firstLine.slice(0, 90), unitPrice: round2(lineValue / qty) };
+    const [first, ...rest] = wrapDescription(joinDescription(it.description));
+    return [
+      { qty, unit: it.unit?.trim() || "Pcs", description: first, unitPrice: round2(lineValue / qty) },
+      ...rest.map((d): ReceiptLine => ({ qty: null, unit: "", description: d, unitPrice: null })),
+    ];
   });
 }

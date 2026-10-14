@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { amountInWords, splitWords, receiptTotals, formLines, linesFromQuotation, receiptDate, NOTHING_FOLLOWS } from "./bir-receipts";
+import { joinDescription, wrapDescription, DESCRIPTION_ROW_CHARS, amountInWords, splitWords, receiptTotals, formLines, linesFromQuotation, receiptDate, NOTHING_FOLLOWS } from "./bir-receipts";
 
 describe("amount in words — the template's wording", () => {
   it("matches the sample: 6,937.50", () => {
@@ -64,11 +64,43 @@ describe("prefill from an order", () => {
       1350, // a 10% discount off 1,500
     );
     expect(ls).toEqual([
-      { qty: 2, unit: "Pcs", description: "Fan A", unitPrice: 450 },
+      { qty: 2, unit: "Pcs", description: "Fan A - with motor", unitPrice: 450 },
       { qty: 1, unit: "Pcs", description: "Damper", unitPrice: 450 },
     ]);
   });
   it("dates print the template's way", () => {
     expect(receiptDate("2026-10-13")).toBe("October 13, 2026");
+  });
+});
+
+describe("the description, from the quotation's Product Selection", () => {
+  it("joins the detail lines with space-dash-space — the owner's KDK example", () => {
+    expect(joinDescription("Ceiling Cassette\nKDK Brand\nModel: 24CHG")).toBe("Ceiling Cassette - KDK Brand - Model: 24CHG");
+    expect(joinDescription("  A  \r\n\n  B  ")).toBe("A - B");
+  });
+  it("a row holds 48 characters; the rest continues on the next row, between words", () => {
+    const text = "Centrifugal Blower - Model: CB-18 - 2HP 3PH 230V - Belt driven - Galvanized housing";
+    const rows = wrapDescription(text);
+    expect(rows.every((r) => r.length <= DESCRIPTION_ROW_CHARS)).toBe(true);
+    expect(rows.join(" ")).toBe(text);
+    expect(rows.length).toBe(2);
+  });
+  it("continuation rows carry only the description — no qty, unit or price", () => {
+    const long = "Centrifugal Blower\nModel: CB-18\n2HP 3PH 230V\nBelt driven\nGalvanized housing";
+    const [row1, row2] = wrapDescription(joinDescription(long));
+    const ls = linesFromQuotation(
+      [
+        { qty: 2, lineTotal: 15374, description: "Ceiling Cassette\nKDK Brand\nModel: 24CHG" },
+        { qty: 1, lineTotal: 1000, description: long },
+      ],
+      16374,
+    );
+    expect(ls.map((l) => [l.qty, l.unit, l.description, l.unitPrice])).toEqual([
+      [2, "Pcs", "Ceiling Cassette - KDK Brand - Model: 24CHG", 7687],
+      [1, "Pcs", row1, 1000],
+      [null, "", row2, null],
+    ]);
+    expect(row1).toBe("Centrifugal Blower - Model: CB-18 - 2HP 3PH 230V");
+    expect(row2).toBe("- Belt driven - Galvanized housing");
   });
 });
