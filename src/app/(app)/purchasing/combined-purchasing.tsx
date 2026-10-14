@@ -21,6 +21,7 @@ import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-c
 import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
+import { PurchaseDueControl } from "./purchase-due-control";
 import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
@@ -98,6 +99,15 @@ export interface BatchCard {
   /** …and they may accept a discrepancy, or correct a misread figure. */
   canApproveCheckIssue: boolean;
   canRemoveCheck: boolean;
+  /** Every request on this PO — a purchase due date is set on all of them. */
+  memberIds: string[];
+  /** The PO's purchase due date (YYYY-MM-DD) — the earliest, if they differ. */
+  purchaseDueAt: string | null;
+  /** The requests carry different dates (or some none). */
+  purchaseDueMixed: boolean;
+  canSetPurchaseDue: boolean;
+  /** Bought — the due date has done its job. */
+  purchased: boolean;
 }
 
 function todayInput(): string {
@@ -465,7 +475,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
             {" · "}<span className="font-semibold text-foreground">Net {formatCurrency(totals.net, "PHP")}</span>
           </span>
         ) : <span />}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {batch.canDelete && (
             <button type="button" onClick={del} disabled={busy === "delete"}
               className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-semibold text-destructive transition-colors hover:bg-destructive/10">
@@ -498,6 +508,16 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
               <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
             </a>
           )}
+          {/* When the buying has to happen — one date for the whole combined PO. */}
+          <PurchaseDueControl
+            prId={batch.anchorId}
+            prIds={batch.memberIds}
+            mixed={batch.purchaseDueMixed}
+            dueAt={batch.purchaseDueAt}
+            canSet={batch.canSetPurchaseDue}
+            purchased={batch.purchased}
+            todayYMD={todayInput()}
+          />
           {/* …and, to its right, the photo of the check that paid for it. */}
           <VoucherCheckControl
             prId={batch.anchorId}

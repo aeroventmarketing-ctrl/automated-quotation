@@ -581,6 +581,16 @@ export async function removeJobOrderProof(quotationId: string, dept: string, pat
  * know whether the date saved.
  */
 export async function setPurchaseDue(purchaseRequestId: string, dueAt: string | null): Promise<{ ok?: true; error?: string }> {
+  return setPurchaseDueFor([purchaseRequestId], dueAt);
+}
+
+/**
+ * The same date on every request of a COMBINED PO — the owner: *"Add purchase
+ * due date … to combine PO of Purchasing Approved, Budgeted tab."* A combined PO
+ * is bought in one go, so it has one due date; it is written to all its
+ * requests in ONE statement, so they can never disagree half-way through.
+ */
+export async function setPurchaseDueFor(purchaseRequestIds: string[], dueAt: string | null): Promise<{ ok?: true; error?: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: "Unauthorized" };
   const assignments = await getWorkflowRoles();
@@ -598,11 +608,12 @@ export async function setPurchaseDue(purchaseRequestId: string, dueAt: string | 
   const value = clean ? new Date(`${clean}T00:00:00.000Z`) : null;
   if (value && Number.isNaN(value.getTime())) return { error: "Use a calendar date." };
 
-  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, quotationId: true } });
-  if (!pr) return { error: "Purchase order not found." };
+  const ids = [...new Set(purchaseRequestIds)].filter(Boolean);
+  const prs = ids.length ? await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { id: true, quotationId: true } }) : [];
+  if (prs.length === 0 || prs.length !== ids.length) return { error: "Purchase order not found." };
 
-  await prisma.purchaseRequest.update({ where: { id: pr.id }, data: { purchaseDueAt: value } });
-  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  await prisma.purchaseRequest.updateMany({ where: { id: { in: ids } }, data: { purchaseDueAt: value } });
+  for (const q of new Set(prs.map((p) => p.quotationId).filter((x): x is string => !!x))) revalidatePath(`/orders/${q}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
   return { ok: true };

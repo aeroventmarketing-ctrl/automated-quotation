@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
 import { purchaseDueState, type PurchaseDueState } from "@/lib/job-order-due";
-import { setPurchaseDue } from "../orders/actions";
+import { setPurchaseDue, setPurchaseDueFor } from "../orders/actions";
 
 /**
  * The **due date of purchase** on one request — the owner's *"purchaser or
@@ -38,12 +38,21 @@ const WORD: Record<PurchaseDueState, string> = {
 
 export function PurchaseDueControl({
   prId,
+  prIds,
+  mixed = false,
   dueAt,
   canSet,
   purchased,
   todayYMD,
 }: {
   prId: string;
+  /**
+   * A combined PO: every request on it. The date is set on all of them at once,
+   * and `dueAt` is the earliest of theirs.
+   */
+  prIds?: string[];
+  /** The combined PO's requests had different dates — `dueAt` is the earliest. */
+  mixed?: boolean;
   dueAt: string | null;
   canSet: boolean;
   /** The goods are bought, so the date has done its job. */
@@ -66,7 +75,7 @@ export function PurchaseDueControl({
     setBusy(true);
     setErr(null);
     try {
-      const res = await setPurchaseDue(prId, next);
+      const res = prIds && prIds.length > 1 ? await setPurchaseDueFor(prIds, next) : await setPurchaseDue(prId, next);
       if (res.error) { setErr(res.error); return; }
       setEditing(false);
       router.refresh();
@@ -107,6 +116,7 @@ export function PurchaseDueControl({
     <span className={`inline-flex items-center gap-1 text-xs ${TONE[state]}`}>
       <CalendarClock className="h-3.5 w-3.5 shrink-0" />
       {dueAt ? <>{WORD[state]} {formatDate(dueAt)}</> : <span className="text-muted-foreground">No purchase due date</span>}
+      {dueAt && mixed && <span className="text-muted-foreground" title="The requests on this PO had different dates; this is the earliest. Changing it sets one date for all.">(earliest)</span>}
       {canSet && (
         <button
           type="button"
