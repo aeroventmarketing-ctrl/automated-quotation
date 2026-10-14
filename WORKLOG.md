@@ -1,3 +1,21 @@
+## 2026-10-14 · Receipt lines take the quotation's full Product Selection description
+
+The owner, on order 2026 - AFBM00003289S: the receipt's qty, unit and description must come from the
+quotation's Product Selection box; *"Fit the product Selection box description rows to Receipt
+Generation description row, separate Product Selection Description with 'space-dash-space'. If Receipt
+Generation Description row is filled up, use another row if needed."*
+
+The prefill used only the description's first line ("Ceiling Cassette"). Now `joinDescription` joins
+every line with " - " ("Ceiling Cassette - KDK Brand - Model: 24CHG") and `wrapDescription` breaks it
+into rows of at most 48 characters, between words: the first row carries qty, unit and price; a
+continuation row carries only the rest of the description. 48 because both receipts share the rows and
+the Sales Invoice's description runs C–I (≈45.6 Excel width units at 10pt) before the price column; the
+Delivery Receipt's is wider (≈78). Continuation rows count toward the SI's 7 rows and the DR's 13 a page.
+
+Rendered as Accounting: the KDK line on one row; a five-detail blower line on two ("Centrifugal Blower -
+Model: CB-18 - 2HP 3PH 230V" / "- Belt driven - Galvanized housing"); the same rows on SI and DR in the
+download, then "Nothing follows".
+
 ## 2026-10-14 · Client due date: set on the order, shown (greyed) on the Purchase Plan
 
 The owner: *"wire Client Due date in order workflow to purchase plan, Sales role, admin role, engineer
