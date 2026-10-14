@@ -85,6 +85,7 @@ import { readClientDue } from "@/lib/order-client-due";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { manilaDay } from "@/lib/purchaser-plan";
 import { canGenerateReceipts } from "@/lib/receipts-access";
+import { boughtInPurchasePending } from "@/lib/bought-in-pending";
 import { receiptsApplyTo } from "@/lib/bir-receipts";
 import { receiptPrefillFor } from "@/lib/receipt-prefill";
 import { SaleDocumentList } from "./sale-document-list";
@@ -381,7 +382,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Live "who acts next" for the whole order. `stockOnly` routes the "released"
   // stage to the from-stock release path (by fulfilment mode) rather than the
   // bought-in Purchase Order step.
-  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
+  // A bought-in order at "For PO creation" waits on whoever its purchase
+  // request needs next — not always the Purchaser (`boughtInPurchasePending`).
+  const boughtInPurchase = boughtInPurchasePending(
+    purchaseRequests
+      .filter((pr) => isDeptRequisition(pr))
+      .map((pr) => ({ status: pr.status, hasPo: pr.po != null, poApproved: isPoApproved(pr.chainLog) })),
+  );
+  const pend = pendingStep(wf, stockOnly, engineerApprovesStock, wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchase);
   const pendingApprovers: string[] = pend
     ? pend.sales
       ? [`Sales${quote.preparedBy?.name ? ` — ${quote.preparedBy.name}` : ""}`]

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -118,6 +119,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // Engineer-generated Job Order numbers. Admins keep the full financial view.
   const isPurchaserView = !adminViewer && viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser");
 
+  // Who each bought-in order at "For PO creation" is really waiting on — its
+  // purchase request's next step (one small query for all of them).
+  const boughtInPurchaseFor = await boughtInPendingLookup(
+    quotes.map((row) => ({ id: row.id, stage: readOrderWorkflow(withSlimClassification(row, slim).classification).stage })),
+  );
   const orders = quotes
     // The slim `classification` goes back on the row, so the loop below reads
     // exactly as it did — `payableTotal(q)` reaches into it too.
@@ -141,7 +147,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       const docMissing = docCheckGate && next?.key === "doc_check" ? docCheckMissing(sale) : [];
       const blockedReason = docMissing.length ? `Attach: ${docMissing.join(", ")}` : null;
       // Who acts next across the whole order (all phases), for the "Awaiting" hint.
-      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
       const awaitingAll = pend
         ? pend.sales
           ? "Sales"

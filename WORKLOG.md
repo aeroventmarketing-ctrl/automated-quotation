@@ -1,3 +1,31 @@
+## 2026-10-14 · Bought-in orders: "awaiting" follows the purchase request
+
+The owner: *"Order 3512 is flashing for Allan Ramos and Purchaser but we cannot find anything to be
+approved by purchaser."* (Frozen order workflow — the owner approved this fix in the conversation.)
+
+**Cause.** `pendingStep` named the Purchaser for a bought-in order for the whole time it sits at
+"For PO creation" (`released`) — from payment cleared until Sales notifies the client — without
+looking at the order's purchase request. That request is raised already Approved, so its first step
+is the Payment Approver's "Approve purchase"; after that the PO is with the Purchaser, then
+Accounting, the Payment Approver, Logistics… The orders list badge, the order page's approvers, the
+approver alarm and My Dashboard all read `pendingStep`, so all four pointed at the Purchaser.
+
+**Fix.** `boughtInPurchasePending` (lib/bought-in-pending, pure) reads the order's department
+requisitions: any bought (PURCHASED onward) → Sales, "Notify Client — Order Ready" (the same test
+`notifyClientBoughtInOrder` makes); otherwise each live request's next step — APPROVED without the
+purchase approval → Payment Approver; approved, no PO → Purchaser; PO prepared → Accounting; later
+statuses → that step's role (`purchaseStepsFrom` / `effectiveStepRole`); none live → the Purchaser, as
+before. `pendingStep` takes it as an optional last argument, used only for a bought-in order at
+`released`. The order page builds it from the requests it already loads; the list, alarm and My
+Dashboard use `boughtInPendingLookup` — one small SQL read for the orders at `released` (status, PO
+present, approve_po signed), no PO JSON. No buttons, gating or stage order changed.
+
+Rendered on three test orders at "released": request Approved, not purchase-approved → "Approve
+purchase · Payment Approver — Rey Gil" on the order card and list badge, on the Payment Approver's My
+Dashboard, not the Purchaser's; PO prepared → "Voucher & Check Prepared · Accounting"; bought →
+"Notify Client — Order Ready · Sales". The purchase chain's own badge on the same orders already said
+the same — only the order-level hint was wrong.
+
 ## 2026-10-14 · Receipt unit: "pc" for one, "pcs" for two or more
 
 The owner: *"retain pc if Qty=1, if Qty=2 or more use pcs instead"*. `receiptUnit(unit, qty)`: a

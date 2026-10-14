@@ -3,6 +3,7 @@
  * alarm: whenever an order reaches a stage whose pending step needs a workflow
  * role the viewer holds (or a Sales step they own), it shows up here.
  */
+import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -155,6 +156,10 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     getNotificationBaseline(),
   ]);
 
+  // A bought-in order at "For PO creation" rings for whoever its purchase
+  // request needs next — not always the Purchaser (`boughtInPurchasePending`).
+  const boughtInPurchaseFor = await boughtInPendingLookup(quotes.map((q) => ({ id: q.id, stage: readOrderWorkflow(q.classification).stage })));
+
   const out: PendingApproval[] = [];
   for (const q of quotes) {
     const sale = saleFromClassification(q.classification);
@@ -162,7 +167,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
 
     const wf = readOrderWorkflow(q.classification);
     const stockOnly = isStockOnlyOrder(q.items);
-    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
+    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
     if (!pend) continue;
     // Production underway ("Complete production") is ongoing work, not an approval
     // awaiting a decision — don't ring the alarm for it once production has
