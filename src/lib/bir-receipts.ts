@@ -262,6 +262,16 @@ export function wrapDescription(text: string, width = DESCRIPTION_ROW_CHARS): st
  * rounding, so the total is exact to the centavo when its qty is 1, and within
  * a centavo per unit otherwise.
  */
+/**
+ * The unit as the receipt prints it — the owner: *"change Pcs to pc"*. Any
+ * spelling of piece(s) reads "pc"; other units (set, lot, m…) pass as written.
+ */
+export function receiptUnit(unit?: string | null): string {
+  const u = unit?.trim() ?? "";
+  if (u === "" || /^(pcs?|pieces?)\.?$/i.test(u)) return "pc";
+  return u;
+}
+
 export function linesFromQuotation(
   items: { qty: number; lineTotal: number; description: string; unit?: string | null }[],
   payable: number,
@@ -276,7 +286,7 @@ export function linesFromQuotation(
     running = round2(running + lineValue);
     const [first, ...rest] = wrapDescription(joinDescription(it.description));
     return [
-      { qty, unit: it.unit?.trim() || "Pcs", description: first, unitPrice: round2(lineValue / qty) },
+      { qty, unit: receiptUnit(it.unit), description: first, unitPrice: round2(lineValue / qty) },
       ...rest.map((d): ReceiptLine => ({ qty: null, unit: "", description: d, unitPrice: null })),
     ];
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { joinDescription, wrapDescription, DESCRIPTION_ROW_CHARS, amountInWords, splitWords, receiptTotals, formLines, linesFromQuotation, receiptDate, NOTHING_FOLLOWS } from "./bir-receipts";
+import { receiptUnit, joinDescription, wrapDescription, DESCRIPTION_ROW_CHARS, amountInWords, splitWords, receiptTotals, formLines, linesFromQuotation, receiptDate, NOTHING_FOLLOWS } from "./bir-receipts";
 
 describe("amount in words — the template's wording", () => {
   it("matches the sample: 6,937.50", () => {
@@ -64,9 +64,13 @@ describe("prefill from an order", () => {
       1350, // a 10% discount off 1,500
     );
     expect(ls).toEqual([
-      { qty: 2, unit: "Pcs", description: "Fan A / with motor", unitPrice: 450 },
-      { qty: 1, unit: "Pcs", description: "Damper", unitPrice: 450 },
+      { qty: 2, unit: "pc", description: "Fan A / with motor", unitPrice: 450 },
+      { qty: 1, unit: "pc", description: "Damper", unitPrice: 450 },
     ]);
+  });
+  it("pieces print as \"pc\" — the owner's \"change Pcs to pc\"; other units as written", () => {
+    expect(["Pcs", "pcs", "PCS", "pc", "Pc.", "piece", "Pieces", "", null, undefined].map(receiptUnit)).toEqual(Array(10).fill("pc"));
+    expect(["set", "lot", "m", "kg"].map(receiptUnit)).toEqual(["set", "lot", "m", "kg"]);
   });
   it("dates print the template's way", () => {
     expect(receiptDate("2026-10-13")).toBe("October 13, 2026");
@@ -96,8 +100,8 @@ describe("the description, from the quotation's Product Selection", () => {
       16374,
     );
     expect(ls.map((l) => [l.qty, l.unit, l.description, l.unitPrice])).toEqual([
-      [2, "Pcs", "Ceiling Cassette / KDK Brand / Model: 24CHG", 7687],
-      [1, "Pcs", row1, 1000],
+      [2, "pc", "Ceiling Cassette / KDK Brand / Model: 24CHG", 7687],
+      [1, "pc", row1, 1000],
       [null, "", row2, null],
     ]);
     expect(row1).toBe("Centrifugal Blower / Model: CB-18 / 2HP 3PH 230V");
