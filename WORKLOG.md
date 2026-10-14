@@ -1,3 +1,9 @@
+## 2026-10-14 · Receipt description details joined with " / "
+
+The owner: *"change the - to /"*. `joinDescription` now joins the Product Selection description lines
+with " / " ("Ceiling Cassette / KDK Brand / Model: 24CHG"); a continuation row reads "/ Belt driven /
+Galvanized housing". Wrapping (48 characters a row) is unchanged.
+
 ## 2026-10-14 · Receipt lines take the quotation's full Product Selection description
 
 The owner, on order 2026 - AFBM00003289S: the receipt's qty, unit and description must come from the
