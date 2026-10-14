@@ -11,6 +11,7 @@
  *   Admin                         ✓
  *   Accounting                    ✓
  *   Payment Approver              ✓
+ *   Engineer                      ✓   (*"Add receipt generation in engineer role"*)
  *   everyone else                 —
  *
  * ONE definition, read by the order page and the download route. Asserted per
@@ -24,5 +25,5 @@ const RECEIPT_ROLES = ["accounting", "payment_approver"] as const;
 
 export function canGenerateReceipts(user: User | null | undefined, roles: WorkflowRoleAssignments): boolean {
   if (!user) return false;
-  return isAdmin(user) || RECEIPT_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r));
+  return isAdmin(user) || user.role === "ENGINEER" || RECEIPT_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r));
 }

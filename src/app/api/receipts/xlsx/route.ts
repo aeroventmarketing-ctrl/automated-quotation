@@ -35,13 +35,13 @@ const body = z.object({
 /**
  * POST the receipt form → Accounting's BIR receipts workbook, filled: the Input
  * sheet and the SI / DR / CR print sheets, layout untouched. Accounting,
- * Payment Approver, Admin (`canGenerateReceipts`).
+ * Payment Approver, Engineer, Admin (`canGenerateReceipts`).
  */
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canGenerateReceipts(user, await getWorkflowRoles())) {
-    return NextResponse.json({ error: "Only Accounting, the Payment Approver or an admin can generate receipts." }, { status: 403 });
+    return NextResponse.json({ error: "Only Accounting, the Payment Approver, an Engineer or an admin can generate receipts." }, { status: 403 });
   }
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Some fields aren't valid — check the form." }, { status: 400 });
