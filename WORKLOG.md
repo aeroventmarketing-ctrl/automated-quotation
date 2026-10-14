@@ -1,3 +1,21 @@
+## 2026-10-14 · Client Due Date in the Phase 1 box
+
+The owner: *"In phase 1 box at the farthest right side put a word 'Client Due Date' put a date picker
+below the word. This addition will help us monitor the client due."* Phase 1 is frozen; this is the
+owner's own explicit ask, and it is display + a date — it changes nothing about who acts, the steps,
+the gating or the stage progression.
+
+Stored on the quotation's classification as its own key, `clientDue` ({date, byName, at}) — beside the
+workflow, never inside it — and written with a single `jsonb_set` (or `- 'clientDue'` to clear), not
+a read-modify-write of the blob, so a date pick can't undo a workflow step saved a moment earlier.
+Who may set it is the owner's existing ruling for a client due date (`purchaserPlanAccess`
+`canEditClientDue`: Admin, Engineer, Payment Approver, Sales); everyone else sees it read-only. Under
+the date: the Purchase Plan's colour and "Due in N days / Overdue by N days", and "Set by … · when".
+
+Rendered: Sam Sales picks Oct 17 → saved, "Due in 3 days" (amber), survives reload; stored with name
+and time; the workflow JSON byte-identical before and after. Purchaser and Accounting see "Oct 17, 2026
+· Due in 3 days · Set by Sam Sales" with no picker. The picker sits at the card's right edge.
+
 ## 2026-10-13 · Delivery Receipt over several pages — 13 lines a page, DR (2), DR (3)…
 
 The owner: *"allow printing of multiple pages for Delivery receipt."* Their answers: **13 lines** fit
