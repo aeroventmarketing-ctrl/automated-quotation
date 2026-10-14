@@ -667,6 +667,11 @@ export function pendingStep(
   engineerApprovesStock = false,
   officePickup = false,
   plantPickup = false,
+  /**
+   * A bought-in order at "released": who its purchase request is waiting on
+   * (`boughtInPurchasePending`). Without it, the Purchaser — as before.
+   */
+  boughtInPurchase: PendingStep | null = null,
 ): PendingStep | null {
   // A fully bought-in order has no job-order content — it skips production and its
   // Office-side roles (Logistics / Payment Approver / Sales / Engineer) handle the
@@ -709,7 +714,7 @@ export function pendingStep(
       if (boughtIn) {
         // The Purchaser prepares & processes the PO (savePurchaseOrder is Purchaser /
         // admin only) — the Technical Head has no action here, so isn't an approver.
-        return { action: "Prepare & process the Purchase Order", roles: ["purchaser"] };
+        return boughtInPurchase ?? { action: "Prepare & process the Purchase Order", roles: ["purchaser"] };
       }
       return { action: "Issue job orders", roles: ["technical_head"] };
     }

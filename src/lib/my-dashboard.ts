@@ -9,6 +9,7 @@
  * matching the app-wide client-visibility policy. Every source is wrapped so a
  * missing table can't break the page.
  */
+import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
@@ -335,6 +336,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       }),
       slimClassificationByOrder(),
     ]);
+    // A bought-in order at "For PO creation" is a task for whoever its purchase
+    // request needs next — not always the Purchaser (`boughtInPurchasePending`).
+    const boughtInPurchaseFor = await boughtInPendingLookup(
+      quotes.map((row) => ({ id: row.id, stage: readOrderWorkflow(withSlimClassification(row, slim).classification).stage })),
+    );
     for (const row of quotes) {
       const q = withSlimClassification(row, slim);
       const sale = saleFromClassification(q.classification);
@@ -429,7 +435,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
       }
-      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup");
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
       if (!pend) continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
