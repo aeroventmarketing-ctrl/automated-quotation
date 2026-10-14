@@ -26,15 +26,18 @@ function sizeOf(sel: SelectionResult): number {
 export function SelectionTool({
   priceMap,
   motorPrices = null,
+  initial,
 }: {
   priceMap: Record<string, number>;
+  /** A duty handed over from another calculator; the user still presses Select. */
+  initial?: { airflow: string; airflowUnit: string; pressure: string; pressureUnit: string };
   /** Catalogue motor prices; null falls back to `lib/pricing/motors`. */
   motorPrices?: MotorPriceMap | null;
 }) {
-  const [airflow, setAirflow] = useState("");
-  const [airflowUnit, setAirflowUnit] = useState("cfm");
-  const [pressure, setPressure] = useState("");
-  const [pressureUnit, setPressureUnit] = useState("inwg");
+  const [airflow, setAirflow] = useState(initial?.airflow ?? "");
+  const [airflowUnit, setAirflowUnit] = useState(initial?.airflowUnit ?? "cfm");
+  const [pressure, setPressure] = useState(initial?.pressure ?? "");
+  const [pressureUnit, setPressureUnit] = useState(initial?.pressureUnit ?? "inwg");
   const [tag, setTag] = useState("");
   const [drive, setDrive] = useState("belt");
   // Motor pole for a direct-drive (CEBDD) selection. "" = not specified, which
