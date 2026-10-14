@@ -8,12 +8,15 @@ import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { isYMD } from "@/lib/order-client-due";
 
 /**
- * Set (or clear, with "") the order's Client Due Date.
+ * Set (or clear, with "") the order's Client Due Date — the only place it is
+ * edited; the Purchase Plan shows it read-only.
  *
- * Written with `jsonb_set` on the one key, in one statement, rather than
- * read-modify-write of the whole classification: an order page has many hands
- * on that blob at once, and a date picker must never be the thing that undoes
- * somebody's workflow step saved a moment earlier.
+ * ONE statement does all of it: the new date, who and when, and a line at the
+ * head of the history (from → to). So there is no state in which the date moved
+ * and the history doesn't say who moved it, and — being `jsonb_set` on the one
+ * key rather than a rewrite of the classification blob — a date pick can never
+ * undo somebody's workflow step saved a moment earlier. Setting the date it
+ * already has writes nothing.
  */
 export async function setOrderClientDue(quotationId: string, date: string): Promise<void> {
   const user = await getCurrentUser();
@@ -23,15 +26,32 @@ export async function setOrderClientDue(quotationId: string, date: string): Prom
   }
   const value = date.trim();
   if (value && !isYMD(value)) throw new Error("That isn't a valid date.");
-  const n = value
-    ? await prisma.$executeRaw`
-        update "Quotation"
-        set "classification" = jsonb_set(coalesce("classification", '{}'::jsonb), '{clientDue}',
-          ${JSON.stringify({ date: value, byName: user.name, at: new Date().toISOString() })}::jsonb, true)
-        where "id" = ${quotationId}`
-    : await prisma.$executeRaw`
-        update "Quotation" set "classification" = coalesce("classification", '{}'::jsonb) - 'clientDue'
-        where "id" = ${quotationId}`;
-  if (n === 0) throw new Error("Order not found.");
+  const at = new Date().toISOString();
+  const n = await prisma.$executeRaw`
+    update "Quotation"
+    set "classification" = jsonb_set(
+      coalesce("classification", '{}'::jsonb),
+      '{clientDue}',
+      jsonb_build_object(
+        'date', ${value}::text,
+        'byName', ${user.name}::text,
+        'at', ${at}::text,
+        'history',
+          jsonb_build_array(jsonb_build_object(
+            'from', coalesce("classification" -> 'clientDue' ->> 'date', ''),
+            'to', ${value}::text,
+            'byName', ${user.name}::text,
+            'at', ${at}::text
+          )) || coalesce("classification" -> 'clientDue' -> 'history', '[]'::jsonb)
+      ),
+      true)
+    where "id" = ${quotationId}
+      and coalesce("classification" -> 'clientDue' ->> 'date', '') <> ${value}::text`;
+  if (n === 0) {
+    const exists = await prisma.quotation.findUnique({ where: { id: quotationId }, select: { id: true } });
+    if (!exists) throw new Error("Order not found.");
+    return; // already that date — nothing to record
+  }
   revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/purchase-plan");
 }

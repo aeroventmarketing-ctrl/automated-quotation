@@ -34,6 +34,7 @@ import {
   type PRStatus,
 } from "@/lib/purchasing";
 import type { MaterialRequestStatus } from "@/lib/order-workflow";
+import type { OrderClientDue } from "@/lib/order-client-due";
 
 // --- Type --------------------------------------------------------------------
 
@@ -225,9 +226,18 @@ export interface PurchaserPlanRow {
   type: PlanTypeKey | null;
   typeByName: string | null;
   typeAt: string | null;
+  /**
+   * The ORDER's client due date (set in the order's Phase 1 box — the only place
+   * it is edited), the same on every MRF row of the order. See `planClientDue`.
+   */
   clientDue: string | null;
   clientDueByName: string | null;
   clientDueAt: string | null;
+  /**
+   * False only for a date typed into the Purchase Plan before the client due
+   * date moved to the order — still shown, until the order gets its own.
+   */
+  clientDueFromOrder: boolean;
   /** Every change ever made to this row, newest first — see `PlanEdit`. */
   edits: PlanEdit[];
 }
@@ -244,6 +254,46 @@ export function sortPlanRows(rows: PurchaserPlanRow[]): PurchaserPlanRow[] {
     if (ao !== bo) return ao < bo ? -1 : 1;
     return a.mrfNo.localeCompare(b.mrfNo);
   });
+}
+
+// --- The client due date comes from the order -----------------------------------
+
+/**
+ * The owner: *"wire Client Due date in order workflow to purchase plan … Gray out
+ * the client due date in purchase plan, Editing client due date will be
+ * available only in order workflow. Do not remove the history link in purchase
+ * plan."*
+ *
+ * Once an order has a client due date record of its own (a date, or a history
+ * — cleared counts), it is the source for every MRF row of that order, and its
+ * history heads the row's trail. Changes made on the plan before the move stay
+ * in the trail beneath it — nothing anybody did is dropped. An order with no
+ * record yet falls back to whatever was typed on the plan for that MRF, flagged
+ * `fromOrder: false`, so no date silently disappears the day this ships.
+ */
+export function planClientDue(
+  order: OrderClientDue | null,
+  legacy: { date: string | null; byName: string | null; at: string | null } | null,
+  legacyEdits: PlanEdit[],
+): { clientDue: string | null; clientDueByName: string | null; clientDueAt: string | null; clientDueFromOrder: boolean; edits: PlanEdit[] } {
+  const older = legacyEdits.filter((e) => e.field === "clientDue");
+  if (order) {
+    const fromOrder: PlanEdit[] = order.history.map((h) => ({ field: "clientDue", from: h.from, to: h.to, byName: h.byName, at: h.at }));
+    return {
+      clientDue: order.date,
+      clientDueByName: order.date ? order.byName || null : null,
+      clientDueAt: order.date ? order.at || null : null,
+      clientDueFromOrder: true,
+      edits: [...fromOrder, ...older].sort((a, b) => b.at.localeCompare(a.at)),
+    };
+  }
+  return {
+    clientDue: legacy?.date ?? null,
+    clientDueByName: legacy?.byName ?? null,
+    clientDueAt: legacy?.at ?? null,
+    clientDueFromOrder: false,
+    edits: older,
+  };
 }
 
 // --- The edit trail ------------------------------------------------------------

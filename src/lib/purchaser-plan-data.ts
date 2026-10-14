@@ -18,6 +18,7 @@ import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { saleRecognitionDate } from "@/lib/department-pnl";
 import { readOrderWorkflow } from "@/lib/order-workflow";
 import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
+import { readClientDue } from "@/lib/order-client-due";
 import type { PRStatus } from "@/lib/purchasing";
 import {
   isPlanOpenMrf,
@@ -29,6 +30,7 @@ import {
   sortPlanRows,
   closedInfo,
   sortClosedRows,
+  planClientDue,
   type ClosedPlanRow,
   type PlanPr,
   type PlanEdit,
@@ -95,6 +97,8 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     if (!sale || !isSaleConfirmed(sale)) continue;
     const wf = readOrderWorkflow(q.classification);
     const orderedDate = manilaDay(saleRecognitionDate(sale));
+    // The order's client due date — set in its Phase 1 box, shown on every MRF row.
+    const orderDue = readClientDue(q.classification);
     for (const m of wf.materialRequests) {
       const mine = prsByMrf.get(m.id) ?? [];
       // Rejected / cancelled → the box below the plan, not the plan itself.
@@ -116,6 +120,12 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
       }
       if (!isPlanOpenMrf(m.status)) continue;
       const e = entryByMrf.get(m.id);
+      const allEdits = editsByMrf.get(m.id) ?? [];
+      const due = planClientDue(
+        orderDue,
+        e ? { date: e.clientDueDate ?? null, byName: e.clientDueByName ?? null, at: e.clientDueAt ? e.clientDueAt.toISOString() : null } : null,
+        allEdits,
+      );
       rows.push({
         key: `${q.id}:${m.id}`,
         quotationId: q.id,
@@ -135,10 +145,12 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         type: e && isPlanType(e.type) ? e.type : null,
         typeByName: e?.typeByName ?? null,
         typeAt: e?.typeAt ? e.typeAt.toISOString() : null,
-        clientDue: e?.clientDueDate ?? null,
-        clientDueByName: e?.clientDueByName ?? null,
-        clientDueAt: e?.clientDueAt ? e.clientDueAt.toISOString() : null,
-        edits: editsByMrf.get(m.id) ?? [],
+        clientDue: due.clientDue,
+        clientDueByName: due.clientDueByName,
+        clientDueAt: due.clientDueAt,
+        clientDueFromOrder: due.clientDueFromOrder,
+        // Type's trail as it was; the client due date's from the order (+ the plan's older lines).
+        edits: [...allEdits.filter((x) => x.field === "type"), ...due.edits],
       });
     }
   }

@@ -24,7 +24,7 @@ import {
   type SortDir,
   type PurchaserPlanRow,
 } from "@/lib/purchaser-plan";
-import { savePlanType, savePlanClientDue } from "./actions";
+import { savePlanType } from "./actions";
 
 /** "Oct 13, 2026" — the sheet spells dates out; so does this. */
 const fmtDay = (ymd: string | null) => {
@@ -125,13 +125,11 @@ function History({ row, field }: { row: PurchaserPlanRow; field: PlanEditField }
 export function PurchaserPlanTable({
   rows: initial,
   canEditType,
-  canEditClientDue,
   tableMissing,
   todayYMD,
 }: {
   rows: PurchaserPlanRow[];
   canEditType: boolean;
-  canEditClientDue: boolean;
   tableMissing: boolean;
   /** Today in Manila, from the server — so every viewer's colours agree. */
   todayYMD: string;
@@ -203,15 +201,6 @@ export function PurchaserPlanTable({
     patch(r.key, { type: (value || null) as PurchaserPlanRow["type"], typeByName: res.byName, typeAt: res.at, edits: [res.edit, ...r.edits] });
   }
 
-  async function setClientDue(r: PurchaserPlanRow, value: string) {
-    if ((r.clientDue ?? "") === value) return;
-    setBusy(`${r.key}:due`); setErr(null);
-    const res = await savePlanClientDue(r.quotationId, r.mrfId, value);
-    setBusy(null);
-    if (!res.ok) { setErr({ key: r.key, msg: res.error }); return; }
-    if (!res.edit) return;
-    patch(r.key, { clientDue: value || null, clientDueByName: res.byName, clientDueAt: res.at, edits: [res.edit, ...r.edits] });
-  }
 
   // A header click is the same control as the Sort-by box: the same column again
   // flips the direction, a new column starts ascending.
@@ -301,20 +290,24 @@ export function PurchaserPlanTable({
           )}
         </td>
         <td className="px-2.5 py-2">
-          {canEditClientDue ? (
-            <input
-              type="date"
-              defaultValue={r.clientDue ?? ""}
-              disabled={busy === `${r.key}:due`}
-              onBlur={(e) => setClientDue(r, e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-              className="h-8 w-36 rounded-md border bg-background px-2 text-sm"
-              aria-label={`Client due date for MRF #${r.mrfNo}`}
-            />
-          ) : (
-            <span>{fmtDay(r.clientDue) ?? "—"}</span>
-          )}
+          {/* Greyed out: the owner — "Editing client due date will be available only
+              in order workflow." It is the order's date (its Phase 1 box), the same on
+              every MRF row of that order. */}
+          <div
+            className="inline-flex h-8 w-36 cursor-not-allowed items-center rounded-md border border-dashed bg-muted/60 px-2 text-sm text-muted-foreground"
+            aria-label={`Client due date for MRF #${r.mrfNo} (set on the order)`}
+            aria-disabled="true"
+            title="Set in the order's Phase 1 box"
+          >
+            {fmtDay(r.clientDue) ?? "—"}
+          </div>
           <Stamp by={r.clientDueByName} at={r.clientDueAt} />
+          {!r.clientDueFromOrder && r.clientDue && (
+            <div className="mt-0.5 text-[10px] leading-tight text-amber-700">Set on this plan before — set it on the order</div>
+          )}
+          <a href={`${r.orderHref}#phase-1`} className="mt-0.5 block text-[10px] font-medium text-primary hover:underline">
+            {r.clientDue ? "Change on the order" : "Set on the order"}
+          </a>
           <History row={r} field="clientDue" />
           {err?.key === r.key && <div className="mt-0.5 text-[11px] text-destructive">{err.msg}</div>}
         </td>

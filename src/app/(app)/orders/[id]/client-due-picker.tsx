@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { purchaseDueTone, dueCountdown, type DueTone } from "@/lib/purchaser-plan";
-import type { OrderClientDue } from "@/lib/order-client-due";
+import { describeClientDueChange, type OrderClientDue } from "@/lib/order-client-due";
 import { setOrderClientDue } from "./client-due-actions";
 
 /** The Purchase Plan's due-date colours, so a date reads the same everywhere. */
@@ -23,7 +23,9 @@ const fmtStamp = (iso: string) =>
 /**
  * "Client Due Date" with a date picker under it, at the right of the Phase 1
  * box — the owner's ask, to monitor the client due. Saves as soon as a date is
- * picked; read-only for those who may not set it.
+ * picked; read-only for those who may not set it. This is the ONLY place the
+ * date is edited; the Purchase Plan shows it, greyed out, on every MRF row of
+ * the order. "History" lists every change — who, when, from what, to what.
  */
 export function ClientDuePicker({
   orderId,
@@ -40,6 +42,8 @@ export function ClientDuePicker({
   const [value, setValue] = useState(initial?.date ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const history = initial?.history ?? [];
 
   async function save(next: string) {
     setValue(next);
@@ -84,6 +88,24 @@ export function ClientDuePicker({
       )}
       {initial?.byName && value === initial.date && (
         <p className="text-[11px] text-muted-foreground">Set by {initial.byName}{initial.at ? ` · ${fmtStamp(initial.at)}` : ""}</p>
+      )}
+      {history.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setShowHistory((v) => !v)} className="text-[11px] font-medium text-primary hover:underline" aria-expanded={showHistory}>
+            {showHistory ? "Hide history" : `History (${history.length})`}
+          </button>
+          {showHistory && (
+            <ol className="mt-1 space-y-0.5 border-l-2 border-muted pl-2 text-left text-[11px] leading-tight text-muted-foreground sm:ml-auto sm:max-w-[16rem]">
+              {history.map((h, i) => (
+                <li key={`${h.at}-${i}`}>
+                  <span className="text-foreground">{describeClientDueChange(h, fmtDay)}</span>
+                  <br />
+                  {h.byName} · {fmtStamp(h.at)}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
       )}
       {err && <p className="text-xs text-destructive">{err}</p>}
     </div>

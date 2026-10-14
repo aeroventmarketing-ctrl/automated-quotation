@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { readOrderWorkflow } from "@/lib/order-workflow";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
-import { isPlanType, isPlanOpenMrf, normaliseDueDate, type PlanEdit, type PlanEditField } from "@/lib/purchaser-plan";
+import { isPlanType, isPlanOpenMrf, type PlanEdit, type PlanEditField } from "@/lib/purchaser-plan";
 
 /**
  * A failure is RETURNED, not thrown: a thrown Server Action error has its message
@@ -20,17 +20,21 @@ export type PlanSaveResult =
   | { ok: true; byName: string; at: string; edit: PlanEdit | null }
   | { ok: false; error: string };
 
-/** Who may set each field — read from the same rule the page draws its inputs from. */
-const REFUSAL: Record<PlanEditField, string> = {
+/**
+ * Who may set the Type — read from the same rule the page draws its input from.
+ * The Client due date is NOT set here any more: the owner — "Editing client due
+ * date will be available only in order workflow" — so it lives on the order
+ * (`orders/[id]/client-due-actions.ts`) and the plan shows it read-only.
+ */
+const REFUSAL: Partial<Record<PlanEditField, string>> = {
   type: "Only the Purchaser, an Engineer, the Payment Approver or an admin can set the Type.",
-  clientDue: "Only Sales, an Engineer, the Payment Approver or an admin can set the Client due date.",
 };
 
 async function guard(quotationId: string, mrfId: string, field: PlanEditField): Promise<{ id: string; name: string }> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Please sign in again.");
   const a = purchaserPlanAccess(user, await getWorkflowRoles());
-  if (!(field === "type" ? a.canEditType : a.canEditClientDue)) throw new Error(REFUSAL[field]);
+  if (field !== "type" || !a.canEditType) throw new Error(REFUSAL[field] ?? "The Client due date is set on the order, not here.");
   // The MRF must really be an open MRF on that order — the ids arrive from a
   // browser, and an entry for an MRF that doesn't exist would be a row nobody
   // can ever see or clear.
@@ -96,14 +100,5 @@ export async function savePlanType(quotationId: string, mrfId: string, type: str
   return asResult(async () => {
     if (type !== "" && !isPlanType(type)) throw new Error("Choose Purchase to supplier or For fabrication.");
     return saveField(quotationId, mrfId, "type", type || null);
-  });
-}
-
-/** Set (or clear, with "") an MRF's Client due date (YYYY-MM-DD). */
-export async function savePlanClientDue(quotationId: string, mrfId: string, ymd: string): Promise<PlanSaveResult> {
-  return asResult(async () => {
-    const day = normaliseDueDate(ymd);
-    if (ymd.trim() !== "" && !day) throw new Error("Enter a valid date.");
-    return saveField(quotationId, mrfId, "clientDue", day);
   });
 }

@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isPlanOpenMrf,
+  planClientDue,
   planMrfStatus,
   purchasingTabName,
   earliestPurchaseDue,
@@ -122,7 +123,7 @@ describe("Type", () => {
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", mrfNo,
-    mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
+    mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
 
   it("dated rows first, soonest first; undated last, by order date", () => {
@@ -193,7 +194,7 @@ describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", orderHref: "#", mrfHref: "#", orderedDate: "2026-10-08",
     accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
-    clientDue: null, clientDueByName: null, clientDueAt: null, edits: [], ...over,
+    clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [], ...over,
   });
   const rows = [
     r("0450", { purchaseDue: "2026-10-20", clientDue: "2026-10-24", mrfStatus: "Budgeted", type: "for_fabrication", accountHolder: "Kurt Calucin" }),
@@ -369,7 +370,7 @@ describe("sorting by Purchase due date puts what's still due first", () => {
   const r = (mrfNo: string, purchaseDue: string | null, receivedOn: string | null = null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
     accountHolder: "x", mrfNo, mrfStatus: "Approved", purchaseDue, receivedOn, type: null, typeByName: null, typeAt: null,
-    clientDue: null, clientDueByName: null, clientDueAt: null, edits: [],
+    clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
   const rows = [
     r("0262", "2026-09-08", "2026-09-12"), // received, late
@@ -391,5 +392,33 @@ describe("sorting by Purchase due date puts what's still due first", () => {
 
   it("other columns are unaffected by receipt", () => {
     expect(order(sortPlanBy([r("b", "2026-09-01", "2026-09-02"), r("a", "2026-10-01")], "mrfNo", "asc"))).toEqual(["a", "b"]);
+  });
+});
+
+describe("the client due date comes from the order", () => {
+  const legacy = { date: "2026-09-14", byName: "JayR Basal", at: "2026-10-12T05:02:00.000Z" };
+  const legacyEdits = [
+    { field: "clientDue" as const, from: "", to: "2026-09-14", byName: "JayR Basal", at: "2026-10-12T05:02:00.000Z" },
+    { field: "type" as const, from: "", to: "purchase_to_supplier", byName: "Reyjellan Gil", at: "2026-10-12T02:34:00.000Z" },
+  ];
+  it("the order's date wins, and its history heads the trail above the plan's older lines", () => {
+    const r = planClientDue(
+      { date: "2026-10-20", byName: "Sam Sales", at: "2026-10-14T03:00:00.000Z", history: [{ from: "", to: "2026-10-20", byName: "Sam Sales", at: "2026-10-14T03:00:00.000Z" }] },
+      legacy,
+      legacyEdits,
+    );
+    expect(r).toMatchObject({ clientDue: "2026-10-20", clientDueByName: "Sam Sales", clientDueFromOrder: true });
+    expect(r.edits.map((e) => [e.to, e.byName])).toEqual([["2026-10-20", "Sam Sales"], ["2026-09-14", "JayR Basal"]]);
+    expect(r.edits.every((e) => e.field === "clientDue")).toBe(true);
+  });
+  it("an order cleared on purpose shows blank, not the plan's old date", () => {
+    const r = planClientDue({ date: null, byName: "Ana", at: "x", history: [{ from: "2026-10-20", to: "", byName: "Ana", at: "2026-10-15T00:00:00.000Z" }] }, legacy, legacyEdits);
+    expect(r.clientDue).toBeNull();
+    expect(r.clientDueFromOrder).toBe(true);
+  });
+  it("an order with no date yet keeps showing what was typed on the plan, flagged as such", () => {
+    const r = planClientDue(null, legacy, legacyEdits);
+    expect(r).toMatchObject({ clientDue: "2026-09-14", clientDueByName: "JayR Basal", clientDueFromOrder: false });
+    expect(r.edits).toHaveLength(1);
   });
 });
