@@ -1,3 +1,50 @@
+## 2026-10-14 · Client due date: set on the order, shown (greyed) on the Purchase Plan
+
+The owner: *"wire Client Due date in order workflow to purchase plan, Sales role, admin role, engineer
+role, payment approver role will input the client due date in order workflow and will reflect in client
+due purchase plan. Gray out the client due date in purchase plan, Editing client due date will be
+available only in order workflow. Do not remove the history link in purchase plan and add history link
+in order workflow."*
+
+**One date, on the order.** The Phase 1 picker is now the only place the client due date is edited
+(same four seats, `canEditClientDue`). The plan's `savePlanClientDue` action is removed; its Client due
+date cell is a greyed, dashed, read-only box with the date, who set it, "Change on the order" (→
+`/orders/{id}#phase-1`) and History.
+
+**History, atomically.** `classification.clientDue` now carries `history` (from → to, who, when; newest
+first). The action writes the date, the stamp and the new history line in ONE `jsonb_set` statement,
+so there is no state where the date moved and the trail doesn't say who moved it; re-saving the same
+date writes nothing. The order's box has "History (n)".
+
+**The plan reads the order** (`planClientDue`): once an order has a record, every MRF row of that
+order shows the order's date, and its History is the order's trail followed by any client-due edits
+made on the plan before the move — nothing anybody did is dropped. An order with no record yet keeps
+showing a date that was typed on the plan for that MRF, with "Set on this plan before — set it on the
+order", so no date disappears the day this ships.
+
+Rendered: Sam Sales sets Oct 20 then Oct 24 on the order → History (2) on the order ("Oct 20 → Oct 24",
+"Set to Oct 20"); on the plan both MRF rows of that order show Oct 24 greyed, no input, the same
+History (2) and the link; a third order's MRF with a pre-move plan date (Sep 14, JayR Basal) still
+shows it with the note. Purchaser and Sales alike get no input on the plan.
+
+## 2026-10-14 · Client Due Date in the Phase 1 box
+
+The owner: *"In phase 1 box at the farthest right side put a word 'Client Due Date' put a date picker
+below the word. This addition will help us monitor the client due."* Phase 1 is frozen; this is the
+owner's own explicit ask, and it is display + a date — it changes nothing about who acts, the steps,
+the gating or the stage progression.
+
+Stored on the quotation's classification as its own key, `clientDue` ({date, byName, at}) — beside the
+workflow, never inside it — and written with a single `jsonb_set` (or `- 'clientDue'` to clear), not
+a read-modify-write of the blob, so a date pick can't undo a workflow step saved a moment earlier.
+Who may set it is the owner's existing ruling for a client due date (`purchaserPlanAccess`
+`canEditClientDue`: Admin, Engineer, Payment Approver, Sales); everyone else sees it read-only. Under
+the date: the Purchase Plan's colour and "Due in N days / Overdue by N days", and "Set by … · when".
+
+Rendered: Sam Sales picks Oct 17 → saved, "Due in 3 days" (amber), survives reload; stored with name
+and time; the workflow JSON byte-identical before and after. Purchaser and Accounting see "Oct 17, 2026
+· Due in 3 days · Set by Sam Sales" with no picker. The picker sits at the card's right edge.
+
 ## 2026-10-13 · Delivery Receipt over several pages — 13 lines a page, DR (2), DR (3)…
 
 The owner: *"allow printing of multiple pages for Delivery receipt."* Their answers: **13 lines** fit

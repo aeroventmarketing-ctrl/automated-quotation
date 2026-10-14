@@ -34,7 +34,11 @@ export interface PurchaserPlanAccess {
   canView: boolean;
   /** Set Type — "Purchase to supplier" / "For fabrication". */
   canEditType: boolean;
-  /** Set the Client due date. */
+  /**
+   * Set the Client due date — on the ORDER (its Phase 1 box). The owner moved it
+   * there: "Editing client due date will be available only in order workflow";
+   * the Purchase Plan shows the order's date read-only. Same people as before.
+   */
   canEditClientDue: boolean;
 }
 

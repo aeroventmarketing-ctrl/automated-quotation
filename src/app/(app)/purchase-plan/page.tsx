@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function PurchasePlanPage() {
   const [viewer, roles] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
-  const { canView, canEditType, canEditClientDue } = purchaserPlanAccess(viewer, roles);
+  const { canView, canEditType } = purchaserPlanAccess(viewer, roles);
 
   if (!viewer || !canView) {
     return (
@@ -43,14 +43,14 @@ export default async function PurchasePlanPage() {
       <div>
         <h1 className="text-2xl font-bold">Purchase Plan</h1>
         <p className="text-sm text-muted-foreground">
-          Every open MRF on a paid order. Type and Client due date are filled in by people; the rest comes straight from the order and Purchasing.
+          Every open MRF on a paid order. Type is filled in here; the Client due date comes from the order (set in its Phase 1 box); the rest comes straight from the order and Purchasing.
         </p>
       </div>
       {failed ? (
         <p className="text-sm text-destructive">The plan couldn&apos;t be loaded just now. Refresh to try again.</p>
       ) : (
         <>
-          <PurchaserPlanTable rows={data.rows} canEditType={canEditType} canEditClientDue={canEditClientDue} tableMissing={data.tableMissing} todayYMD={todayYMD} />
+          <PurchaserPlanTable rows={data.rows} canEditType={canEditType} tableMissing={data.tableMissing} todayYMD={todayYMD} />
           <ClosedPlanBox rows={data.closed} />
         </>
       )}

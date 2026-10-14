@@ -80,6 +80,10 @@ import { FulfillmentActions } from "./fulfillment-actions";
 import { CommissionFlow } from "./commission-flow";
 import { commissionHolds } from "@/lib/commission-holds";
 import { ReceiptGeneration } from "./receipt-generation";
+import { ClientDuePicker } from "./client-due-picker";
+import { readClientDue } from "@/lib/order-client-due";
+import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
+import { manilaDay } from "@/lib/purchaser-plan";
 import { canGenerateReceipts } from "@/lib/receipts-access";
 import { receiptsApplyTo } from "@/lib/bir-receipts";
 import { receiptPrefillFor } from "@/lib/receipt-prefill";
@@ -986,7 +990,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {/* Phase 1 — approvals */}
       <Card id="phase-1" className="scroll-mt-24">
         <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 1 · Order intake &amp; payment clearing</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm">
+        <CardContent className="flex flex-col gap-4 text-sm sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
           <div className="flex items-center gap-2">
             {docCheck ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
             <span>Documents checked{docCheck ? ` — ${withDesig(docCheck.byName, designationOf("doc_check"))}, ${fmtWhen(docCheck.at)}` : ""}</span>
@@ -998,6 +1003,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
           ) : null}
+          </div>
+          {/* Client Due Date — the owner: "at the farthest right side … a date picker
+              below the word … to monitor the client due." A date to watch; it gates
+              nothing (lib/order-client-due). */}
+          <ClientDuePicker
+            orderId={quote.id}
+            initial={readClientDue(quote.classification)}
+            canEdit={purchaserPlanAccess(viewer, assignments).canEditClientDue}
+            todayYMD={manilaDay(new Date()) ?? ""}
+          />
         </CardContent>
       </Card>
 
