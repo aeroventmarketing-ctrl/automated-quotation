@@ -1,3 +1,23 @@
+## 2026-10-14 · HVAC Tools: Pressurization section view (option D)
+
+The owner: *"Build option D now"*. The Pressurization tab's results have two views, "Chart &
+schedule" (option C) and **"Section view"** (option D) — the same solve either way.
+
+The section (`tools/pressurization/section-view.tsx`) draws the building: the roof fan with its CFM and
+Pa, supply air down the stair shaft, every floor with its stair door (a solid bar when shut; on the fire
+floor a gap with the air going through at the criteria velocity, the floor tinted red with a flame), a
+pressure tag per floor coloured by the floor's check (green / red over the door-force limit / amber
+under the minimum), and an arrow showing which way stack effect raises the pressure. Click (or
+Enter on) a floor to make it the fire floor — the form's fire-floor field follows and the airflow is
+re-solved; hover a floor for its pressure, leakage, door force and check. "Save image (.png)" exports
+the drawing at 2× for proposals; the drawing carries its own colours (a white engineering sheet), so the
+PNG matches the screen in either theme. Tall stairs thin the labels (every 2nd or 5th floor) but always
+label the fire floor and any floor that fails a check.
+
+Rendered as an Engineer on the sample: clicking L14 moved the fire floor (the form's field read 14)
+and the fan went 5,882 → 5,889 CFM; hovering G showed 61.9 Pa, 0.131 m³/s, 104 N, "Over the limit";
+the PNG saved (1280 px wide) with the fan, the open door on L14, G–L4 red and the stack arrow.
+
 ## 2026-10-14 · HVAC Tools: Pressurization (floor by floor) and Smoke Exhaust
 
 The owner asked for building pressurization and smoke evacuation design in HVAC Tools, saw four mock

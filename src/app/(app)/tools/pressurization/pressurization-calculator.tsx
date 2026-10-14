@@ -15,6 +15,7 @@ import {
   type PressResult,
 } from "@/lib/hvac/pressurization";
 import { Group, Field, Picker, SelectFanLink, num, numOr, fmt0, fmtN } from "../calc-fields";
+import { SectionView } from "./section-view";
 
 /**
  * Stair pressurization — the floor-by-floor schedule the owner chose ("C, plus
@@ -32,6 +33,8 @@ export function PressurizationCalculator() {
   const [criteria, setCriteria] = useState("en12101_a");
   const [doorType, setDoorType] = useState("single-in");
   const [project, setProject] = useState("Office tower — Stair 1");
+  // Option C's chart & schedule, or option D's building section — the same solve either way.
+  const [view, setView] = useState<"schedule" | "section">("schedule");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const set = (k: keyof PressInput) => (v: string) => setF((p) => ({ ...p, [k]: v }));
@@ -166,6 +169,22 @@ export function PressurizationCalculator() {
 
       {ok && (
         <>
+          <div className="flex flex-wrap gap-2" role="tablist" aria-label="Results view">
+            {([["schedule", "Chart & schedule"], ["section", "Section view"]] as const).map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${view === k ? "border-primary bg-primary/10 text-primary" : "hover:bg-accent"}`}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {view === "section" ? (
+            <Card>
+              <CardContent className="pt-6">
+                <SectionView input={input} result={ok} project={project} onFireFloor={(level) => set("fireFloor")(String(level))} />
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardContent className="space-y-2 pt-6">
@@ -214,6 +233,7 @@ export function PressurizationCalculator() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           <Card>
             <CardContent className="grid gap-6 pt-6 md:grid-cols-2">
