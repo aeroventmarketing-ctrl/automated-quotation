@@ -1,3 +1,42 @@
+## 2026-10-14 · HVAC Tools: Pressurization (floor by floor) and Smoke Exhaust
+
+The owner asked for building pressurization and smoke evacuation design in HVAC Tools, saw four mock
+programs (A quick calculator, B wizard, C floor-by-floor schedule, D building section view) and chose
+*"C, plus D later"*. This is C; D (the clickable section drawing) is not built.
+
+**Pressurization** (`/tools/pressurization`, `lib/hvac/pressurization.ts`). Quick answer at the top —
+fan CFM @ in.wg, a status chip, "Select fan" and "Calc sheet (.xlsx)". Inputs: criteria preset (EN
+12101-6 Class A / Class B, NFPA 92 sprinklered, custom), the stair (floors, floor height, outdoor and
+stair temperatures), the door (size, leakage area from EN 12101-6 Annex A, exit door, other leakage,
+closer force), fire floor, duct leakage %, duct losses. Each floor gets ΔP, leakage, door force and a
+check: the fan is sized so the weakest floor holds the design pressure, and stack effect
+(3460·h·(1/T_out − 1/T_stair)) lifts the rest; a floor whose door force passes the limit is "Over", one
+below the minimum "Under". Airflow = max(all doors closed, fire-floor door open at the criteria velocity
++ the others' leakage) + duct leakage; fan pressure = top floor + losses; relief vent area for the
+open-door air. Chart and schedule side by side. The sample (15 storeys, 32 °C out / 26 °C stair, Class
+A) shows the point of the tool: L15 holds 50 Pa, the ground floor ~62 Pa, and the lowest floors are over
+the 58.2 Pa a 100 N door force allows on a 0.9 × 2.1 m door.
+
+**Calc sheet** (`/api/tools/pressurization/xlsx`, `lib/excel/pressurization-xlsx.ts`): criteria,
+inputs, the floor schedule with coloured checks, airflow and fan, flags, method — solved again on the
+server from the inputs. Page Break view at 120%. Sales / Engineer / admin, like the HVAC Tools menu.
+
+**Smoke Exhaust** (`/tools/smoke-exhaust`, `lib/hvac/smoke-exhaust.ts`): atrium / mall by the NFPA 92
+axisymmetric plume (flame height, mass flow, smoke temperature and density, exhaust volume, per-point
+plugholing limit and the fewest points that avoid it, make-up air and its opening area, suggested EN
+12101-3 fan temperature class), or car park / basement by air changes. "Select fan" per exhaust point.
+
+**Fan Selector** reads `?airflow=&airflowUnit=&pressure=&pressureUnit=` and pre-fills the duty; the
+user still presses Select. (Its "tag" control is the fan-family filter, so nothing is passed to it.)
+
+Rendered as an Engineer: the sample shows 5,882 CFM @ 1.20 in.wg, "5 floors over the door-force
+limit" (G–L4 red on the chart and in the schedule, L5 at 58.0 Pa just inside 58.2); the sheet downloads
+(~10 KB); "Select fan" lands on the Fan Selector with 5882 CFM and 1.2 in.wg filled in. Smoke Exhaust:
+71,832 CFM, 4 × 17,958 CFM, no plugholing; the car-park sample 42,378 CFM over 2 fans.
+
+Criteria and design fires are starting figures; the screens and the sheet say to confirm them against
+the Fire Code (RA 9514 IRR) and the PSME Code.
+
 ## 2026-10-14 · Bought-in orders: "awaiting" follows the purchase request
 
 The owner: *"Order 3512 is flashing for Allan Ramos and Purchaser but we cannot find anything to be
