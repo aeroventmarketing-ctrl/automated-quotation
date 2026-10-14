@@ -1,3 +1,10 @@
+## 2026-10-14 · Receipt unit: "pc", not "Pcs"
+
+The owner: *"change Pcs to pc"*. The Receipt Generation prefill now prints pieces as "pc": a line with
+no unit, or any spelling of piece(s) from the catalogue ("Pcs", "pcs", "Pc.", "piece"…), reads "pc"
+(`receiptUnit`); other units (set, lot, m, kg) pass as written. A blank line added in the box starts
+at "pc" too. The unit is still editable before download.
+
 ## 2026-10-14 · Receipt Generation: Engineers too
 
 The owner: *"Add receipt generation in engineer role"*. `canGenerateReceipts` now also lets a user

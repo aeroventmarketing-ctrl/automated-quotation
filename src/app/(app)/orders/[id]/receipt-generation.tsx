@@ -19,7 +19,7 @@ import {
   type ReceiptLine,
 } from "@/lib/bir-receipts";
 
-const blankLine = (): ReceiptLine => ({ qty: null, unit: "Pcs", description: "", unitPrice: null });
+const blankLine = (): ReceiptLine => ({ qty: null, unit: "pc", description: "", unitPrice: null });
 const padLines = (ls: ReceiptLine[]) => [...ls, ...Array.from({ length: Math.max(0, SI_MAX_LINES - ls.length) }, blankLine)];
 
 const toNum = (s: string): number | null => {
