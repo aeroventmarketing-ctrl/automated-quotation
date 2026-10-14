@@ -1,5 +1,6 @@
 /**
- * THE RECEIPT GENERATION GRID — Accounting, the Payment Approver and Admin;
+ * THE RECEIPT GENERATION GRID — Accounting, the Payment Approver, the Engineer
+ * and Admin;
  * every other seat asserted shut, so a widening shows up here as a moved cell.
  */
 import { describe, it, expect } from "vitest";
@@ -28,7 +29,7 @@ const GRID: Record<Who, boolean> = {
   accounting: true,
   paymentApprover: true,
   sales: false,
-  engineer: false,
+  engineer: true,
   purchaser: false,
   warehouse: false,
   plantManager: false,

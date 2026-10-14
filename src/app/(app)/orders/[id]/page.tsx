@@ -598,7 +598,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Receipt Generation — the owner: *"make it appear to the Order workflow, this
   // will appear only on VAT Inclusive, Zero Rated and VAT Exclusive +12%
   // transactions … below Phase 6 - Sales Commissions box"*. Accounting, the
-  // Payment Approver and Admin. Read only when it will be shown.
+  // Payment Approver, the Engineer and Admin. Read only when it will be shown.
   const receiptInitial =
     receiptsApplyTo(quote.vatMode) && canGenerateReceipts(viewer, assignments)
       ? await receiptPrefillFor(quote.id).catch(() => null)

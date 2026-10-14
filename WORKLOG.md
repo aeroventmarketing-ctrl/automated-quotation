@@ -1,3 +1,11 @@
+## 2026-10-14 · Receipt Generation: Engineers too
+
+The owner: *"Add receipt generation in engineer role"*. `canGenerateReceipts` now also lets a user
+whose base role is ENGINEER in — the order page's Receipt Generation box (still only on VAT Inclusive,
+Zero Rated and VAT Exclusive +12% orders) and the download route, both read the one rule. The grid's
+Engineer cell moved false → true; nothing else moved (Sales, Sales Head, Purchaser, Warehouse, Plant
+Manager, Logistics stay shut).
+
 ## 2026-10-14 · Purchase due date on combined POs (Approved / Budgeted)
 
 The owner: *"Add purchase due date same as 1st picture to combine PO of Purchasing Approved, Budgeted
