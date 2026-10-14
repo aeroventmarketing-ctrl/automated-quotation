@@ -215,14 +215,14 @@ export const DESCRIPTION_ROW_CHARS = 48;
  * "Ceiling Cassette / KDK Brand / Model: 24CHG" — as receipt text. The owner:
  * *"Fit the product Selection box description rows to Receipt Generation
  * description row, separate Product Selection Description with
- * 'space-dash-space'."*
+ * 'space-dash-space'."* — then: *"change the - to /"*, so " / ".
  */
 export const joinDescription = (description: string): string =>
   description
     .split(/\r?\n/)
     .map((s) => s.trim().replace(/\s+/g, " "))
     .filter(Boolean)
-    .join(" - ");
+    .join(" / ");
 
 /**
  * Break a description into rows of at most `width` characters — the owner: *"If
@@ -252,7 +252,7 @@ export function wrapDescription(text: string, width = DESCRIPTION_ROW_CHARS): st
  * The quotation's lines as receipt rows.
  *
  * Qty, unit and description come from the quotation's Product Selection: the
- * description's lines joined with " - ", wrapped over as many rows as it needs —
+ * description's lines joined with " / ", wrapped over as many rows as it needs —
  * the first row carries the qty, unit and price; a continuation row carries
  * only the rest of the description.
  *

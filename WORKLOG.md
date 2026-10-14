@@ -1,3 +1,32 @@
+## 2026-10-14 · Purchase due date on combined POs (Approved / Budgeted)
+
+The owner: *"Add purchase due date same as 1st picture to combine PO of Purchasing Approved, Budgeted
+tab. Add purchase due date in single PO of Purchasing Budgeted tab."* (Phase 4 — approved by the owner
+in this request.)
+
+**Combined PO.** The combined-PO card's footer now carries the same purchase due control as a single
+PO, in the same place: after "Print PO & 2307", before the check badge. A combined PO is bought in one
+go, so it has one date: `setPurchaseDueFor(ids, date)` writes it to every request on the PO in one
+`updateMany` (same rule as before — Purchaser, Payment Approver, admin; `canSetPurchaseDue`), and
+`setPurchaseDue` is now that action for one id. If a combined PO's requests ever carry different dates
+(set before they were combined), the card shows the earliest with "(earliest)"; changing it sets one
+date for all.
+
+**Single PO, Budgeted.** Already rendered the control (`PurchasingChain`, next to Print PO): for the
+Purchaser, Payment Approver and admin it shows "Add one" / "Change"; other roles see it only once a date
+is set. Nothing to change there.
+
+Rendered as the Purchaser, Budgeted tab: both combined POs show "No purchase due date · Add one"; set Oct
+20 on PO-…770 → "Buy by Oct 20, 2026 · Change", and both of its requests hold 2026-10-20. One request of
+PO-…762 given Oct 10 → "Overdue — Oct 10, 2026 (earliest)". Admin and Payment Approver the same;
+Accounting sees no control where no date is set.
+
+## 2026-10-14 · Receipt description details joined with " / "
+
+The owner: *"change the - to /"*. `joinDescription` now joins the Product Selection description lines
+with " / " ("Ceiling Cassette / KDK Brand / Model: 24CHG"); a continuation row reads "/ Belt driven /
+Galvanized housing". Wrapping (48 characters a row) is unchanged.
+
 ## 2026-10-14 · Receipt lines take the quotation's full Product Selection description
 
 The owner, on order 2026 - AFBM00003289S: the receipt's qty, unit and description must come from the

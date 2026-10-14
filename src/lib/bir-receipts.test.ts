@@ -64,7 +64,7 @@ describe("prefill from an order", () => {
       1350, // a 10% discount off 1,500
     );
     expect(ls).toEqual([
-      { qty: 2, unit: "Pcs", description: "Fan A - with motor", unitPrice: 450 },
+      { qty: 2, unit: "Pcs", description: "Fan A / with motor", unitPrice: 450 },
       { qty: 1, unit: "Pcs", description: "Damper", unitPrice: 450 },
     ]);
   });
@@ -74,12 +74,12 @@ describe("prefill from an order", () => {
 });
 
 describe("the description, from the quotation's Product Selection", () => {
-  it("joins the detail lines with space-dash-space — the owner's KDK example", () => {
-    expect(joinDescription("Ceiling Cassette\nKDK Brand\nModel: 24CHG")).toBe("Ceiling Cassette - KDK Brand - Model: 24CHG");
-    expect(joinDescription("  A  \r\n\n  B  ")).toBe("A - B");
+  it("joins the detail lines with space-slash-space — the owner's KDK example", () => {
+    expect(joinDescription("Ceiling Cassette\nKDK Brand\nModel: 24CHG")).toBe("Ceiling Cassette / KDK Brand / Model: 24CHG");
+    expect(joinDescription("  A  \r\n\n  B  ")).toBe("A / B");
   });
   it("a row holds 48 characters; the rest continues on the next row, between words", () => {
-    const text = "Centrifugal Blower - Model: CB-18 - 2HP 3PH 230V - Belt driven - Galvanized housing";
+    const text = "Centrifugal Blower / Model: CB-18 / 2HP 3PH 230V / Belt driven / Galvanized housing";
     const rows = wrapDescription(text);
     expect(rows.every((r) => r.length <= DESCRIPTION_ROW_CHARS)).toBe(true);
     expect(rows.join(" ")).toBe(text);
@@ -96,11 +96,11 @@ describe("the description, from the quotation's Product Selection", () => {
       16374,
     );
     expect(ls.map((l) => [l.qty, l.unit, l.description, l.unitPrice])).toEqual([
-      [2, "Pcs", "Ceiling Cassette - KDK Brand - Model: 24CHG", 7687],
+      [2, "Pcs", "Ceiling Cassette / KDK Brand / Model: 24CHG", 7687],
       [1, "Pcs", row1, 1000],
       [null, "", row2, null],
     ]);
-    expect(row1).toBe("Centrifugal Blower - Model: CB-18 - 2HP 3PH 230V");
-    expect(row2).toBe("- Belt driven - Galvanized housing");
+    expect(row1).toBe("Centrifugal Blower / Model: CB-18 / 2HP 3PH 230V");
+    expect(row2).toBe("/ Belt driven / Galvanized housing");
   });
 });

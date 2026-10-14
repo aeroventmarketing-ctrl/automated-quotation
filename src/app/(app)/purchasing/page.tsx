@@ -6,9 +6,9 @@ import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
 import { getWorkflowRoles, userHasWorkflowRole, usersWithWorkflowRole, workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { Card, CardContent } from "@/components/ui/card";
 import { formatDateTime } from "@/lib/utils";
-import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, statusBucket, canCancelPurchase, type PRStatus } from "@/lib/purchasing";
+import { purchaseStepsFrom, isPoApproved, effectiveStepRole, isDeptRequisition, PR_STATUS_LABEL, statusBucket, canCancelPurchase, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { readOrderWorkflow, requisitionDeptLabel, REQUISITION_DEPTS } from "@/lib/order-workflow";
-import { jobOrderDues, type JobOrderDue } from "@/lib/job-order-due";
+import { jobOrderDues, canSetPurchaseDue, type JobOrderDue } from "@/lib/job-order-due";
 import { PH_TIME_ZONE } from "@/lib/utils";
 import { buildPurchaseChainRow, buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
@@ -435,7 +435,16 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const canSettleReconcile = canAct("accounting") || canAct("purchaser");
       const canEscalateReconcile = canAct("accounting") || canAct("purchaser");
       const canApproveReconcile = canAct("payment_approver");
+      // One purchase due date for the whole combined PO — stored on every
+      // request, shown as the earliest if they ever disagree.
+      const dues = [...new Set(members.map((m) => (m.purchaseDueAt ? m.purchaseDueAt.toISOString().slice(0, 10) : "")))];
+      const setDues = dues.filter(Boolean).sort();
       return {
+        memberIds: members.map((m) => m.id),
+        purchaseDueAt: setDues[0] ?? null,
+        purchaseDueMixed: dues.length > 1,
+        canSetPurchaseDue: canSetPurchaseDue({ admin, purchaser: isPurchaser, paymentApprover: isPaymentApprover }),
+        purchased: prMainIndex(status) >= prMainIndex("PURCHASED"),
         checkDocs: coerceCheckDocs(anchor.voucherCheckDocs),
         cashPaid: coerceCashPayment(anchor.cashPayment),
         supplierGivesTerms: givesTerms(po?.supplier.company),
