@@ -64,13 +64,16 @@ describe("prefill from an order", () => {
       1350, // a 10% discount off 1,500
     );
     expect(ls).toEqual([
-      { qty: 2, unit: "pc", description: "Fan A / with motor", unitPrice: 450 },
+      { qty: 2, unit: "pcs", description: "Fan A / with motor", unitPrice: 450 },
       { qty: 1, unit: "pc", description: "Damper", unitPrice: 450 },
     ]);
   });
-  it("pieces print as \"pc\" — the owner's \"change Pcs to pc\"; other units as written", () => {
-    expect(["Pcs", "pcs", "PCS", "pc", "Pc.", "piece", "Pieces", "", null, undefined].map(receiptUnit)).toEqual(Array(10).fill("pc"));
-    expect(["set", "lot", "m", "kg"].map(receiptUnit)).toEqual(["set", "lot", "m", "kg"]);
+  it("pieces: \"pc\" for one, \"pcs\" for two or more — other units as written", () => {
+    const pieces = ["Pcs", "pcs", "PCS", "pc", "Pc.", "piece", "Pieces", "", null, undefined];
+    expect(pieces.map((u) => receiptUnit(u, 1))).toEqual(Array(10).fill("pc"));
+    expect(pieces.map((u) => receiptUnit(u, 2))).toEqual(Array(10).fill("pcs"));
+    expect(receiptUnit("pc", 6)).toBe("pcs");
+    expect(["set", "lot", "m", "kg"].map((u) => receiptUnit(u, 4))).toEqual(["set", "lot", "m", "kg"]);
   });
   it("dates print the template's way", () => {
     expect(receiptDate("2026-10-13")).toBe("October 13, 2026");
@@ -100,7 +103,7 @@ describe("the description, from the quotation's Product Selection", () => {
       16374,
     );
     expect(ls.map((l) => [l.qty, l.unit, l.description, l.unitPrice])).toEqual([
-      [2, "pc", "Ceiling Cassette / KDK Brand / Model: 24CHG", 7687],
+      [2, "pcs", "Ceiling Cassette / KDK Brand / Model: 24CHG", 7687],
       [1, "pc", row1, 1000],
       [null, "", row2, null],
     ]);
