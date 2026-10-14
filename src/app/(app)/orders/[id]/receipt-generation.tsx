@@ -11,6 +11,7 @@ import {
   isFilledLine,
   lineAmount,
   receiptTotals,
+  receiptUnit,
   splitWords,
   DR_LINES_PER_PAGE,
   MAX_LINES,
@@ -139,7 +140,7 @@ export function ReceiptGeneration({ initial }: { initial: ReceiptInput }) {
             <tbody>
               {form.lines.map((l, i) => (
                 <tr key={i}>
-                  <td className="px-1 py-0.5"><Input className="h-8" inputMode="decimal" value={l.qty ?? ""} onChange={(e) => setLine(i, { qty: toNum(e.target.value) })} aria-label={`Line ${i + 1} qty`} /></td>
+                  <td className="px-1 py-0.5"><Input className="h-8" inputMode="decimal" value={l.qty ?? ""} onChange={(e) => { const qty = toNum(e.target.value); setLine(i, { qty, ...(l.unit === "pc" || l.unit === "pcs" ? { unit: receiptUnit(l.unit, qty) } : {}) }); }} aria-label={`Line ${i + 1} qty`} /></td>
                   <td className="px-1 py-0.5"><Input className="h-8" value={l.unit} onChange={(e) => setLine(i, { unit: e.target.value })} aria-label={`Line ${i + 1} unit`} /></td>
                   <td className="px-1 py-0.5"><Input className="h-8" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} aria-label={`Line ${i + 1} description`} /></td>
                   <td className="px-1 py-0.5"><Input className="h-8" inputMode="decimal" value={l.unitPrice ?? ""} onChange={(e) => setLine(i, { unitPrice: toNum(e.target.value) })} aria-label={`Line ${i + 1} unit price`} /></td>

@@ -1,3 +1,10 @@
+## 2026-10-14 · Receipt unit: "pc" for one, "pcs" for two or more
+
+The owner: *"retain pc if Qty=1, if Qty=2 or more use pcs instead"*. `receiptUnit(unit, qty)`: a
+piece unit (any spelling, or none) prints "pc" when the qty is 1 and "pcs" when it is 2 or more; other
+units pass as written. In the box, changing a line's qty flips its unit between "pc" and "pcs" (only
+when the unit is one of those two, so a typed "set" or "lot" is never touched).
+
 ## 2026-10-14 · Receipt unit: "pc", not "Pcs"
 
 The owner: *"change Pcs to pc"*. The Receipt Generation prefill now prints pieces as "pc": a line with

@@ -263,12 +263,14 @@ export function wrapDescription(text: string, width = DESCRIPTION_ROW_CHARS): st
  * a centavo per unit otherwise.
  */
 /**
- * The unit as the receipt prints it — the owner: *"change Pcs to pc"*. Any
- * spelling of piece(s) reads "pc"; other units (set, lot, m…) pass as written.
+ * The unit as the receipt prints it — the owner: *"change Pcs to pc"*, then
+ * *"retain pc if Qty=1, if Qty=2 or more use pcs instead"*. Any spelling of
+ * piece(s), or no unit, reads "pc" for one and "pcs" for more; other units
+ * (set, lot, m…) pass as written.
  */
-export function receiptUnit(unit?: string | null): string {
+export function receiptUnit(unit: string | null | undefined, qty: number | null | undefined): string {
   const u = unit?.trim() ?? "";
-  if (u === "" || /^(pcs?|pieces?)\.?$/i.test(u)) return "pc";
+  if (u === "" || /^(pcs?|pieces?)\.?$/i.test(u)) return (qty ?? 1) > 1 ? "pcs" : "pc";
   return u;
 }
 
@@ -286,7 +288,7 @@ export function linesFromQuotation(
     running = round2(running + lineValue);
     const [first, ...rest] = wrapDescription(joinDescription(it.description));
     return [
-      { qty, unit: receiptUnit(it.unit), description: first, unitPrice: round2(lineValue / qty) },
+      { qty, unit: receiptUnit(it.unit, qty), description: first, unitPrice: round2(lineValue / qty) },
       ...rest.map((d): ReceiptLine => ({ qty: null, unit: "", description: d, unitPrice: null })),
     ];
   });
