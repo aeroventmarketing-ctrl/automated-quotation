@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
-import { getPnlDetail, deletePnlRecord, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlOrderAmount, type PnlPricingAudit, type PnlDeleteRef } from "./pnl-actions";
+import { getPnlDetail, deletePnlRecord, type PnlDetail, type PnlSaleDetail, type PnlSaleLine, type PnlCostSource, type PnlOrderAmount, type PnlPricingAudit, type PnlDeleteRef } from "./pnl-actions";
 import { DEPT_LABEL, type DeptKey } from "@/lib/department-pnl";
 import { formatCurrency, cn } from "@/lib/utils";
 
@@ -301,7 +301,9 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
     const lines: { l: PnlSaleLine; amt: number }[] = [];
     for (const l of s.lines) {
       const amt = isOffice ? l.officeShare : l.dept === deptKey ? l.deptShare : 0;
-      if (amt > 0) lines.push({ l, amt });
+      // Negative amounts too: a line sold below its booked cost is exactly what
+      // must show here — leaving it out made this table disagree with the summary.
+      if (amt !== 0) lines.push({ l, amt });
     }
     if (lines.length) groups.push({ s, lines });
   }
@@ -318,6 +320,8 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
   return (
     <div className="space-y-4">
       <VatTiles output={vat.output} input={vat.input} payable={vat.payable} />
+
+      {isOffice && <LossLines detail={detail} />}
 
       <div className="space-y-2">
         <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{DEPT_LABEL[deptKey]} sales ({rowCount})</div>
@@ -404,6 +408,97 @@ export function DeptDrill({ detail, deptKey, admin = false, onChanged = () => {}
       </div>
 
       <ExpenseTable items={exp} extra={isOffice ? { label: "Client Discount", rows: detail.discountByOrder } : null} admin={admin} onChanged={onChanged} />
+    </div>
+  );
+}
+
+const COST_BY_LABEL: Record<PnlCostSource["by"], string> = {
+  sku: "matched by SKU",
+  model: "matched by model code",
+  name: "matched by product name",
+  grid: "roof-ventilator supplier grid",
+  stock: "stock item unit cost",
+};
+
+/**
+ * Office lines that LOSE money — the booked cost is more than the line sells
+ * for — biggest loss first, each with where its cost came from (the product /
+ * stock item, its unit cost × qty, and how it was matched). A cost matched to
+ * the wrong product, a stock item costed per box but sold per piece, or a
+ * negative-priced line all show up here at the top instead of among hundreds of
+ * sales.
+ */
+function LossLines({ detail }: { detail: PnlDetail }) {
+  const [showAll, setShowAll] = useState(false);
+  const rows = detail.sales
+    .flatMap((s) => s.lines.filter((l) => l.officeShare < 0).map((l) => ({ s, l })))
+    .sort((a, b) => a.l.officeShare - b.l.officeShare);
+  if (rows.length === 0) return null;
+  const total = rows.reduce((a, r) => a + r.l.officeShare, 0);
+  const shown = showAll ? rows : rows.slice(0, 15);
+  return (
+    <div className="space-y-2 rounded-md border border-red-200 bg-red-50/50 p-3 dark:border-red-900 dark:bg-red-950/20">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-400">
+          Lines losing money ({rows.length})
+        </div>
+        <div className="text-xs text-red-700 dark:text-red-400">
+          Together they take <span className="font-semibold tabular-nums">{formatCurrency(Math.abs(total))}</span> off Office sales
+        </div>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Each line&rsquo;s booked cost is more than it sells for. Check where the cost came from: a <b>wrong product</b> means the
+        line was priced by an unrelated product — fix that product&rsquo;s name / model / SKU on the Products tab; a <b>wrong unit
+        cost</b> (e.g. per box against a per-piece qty) is fixed on the Products tab or the stock item; a <b>negative line net</b> is
+        a minus line on the quotation.
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[44rem] text-xs">
+          <thead>
+            <tr className="border-b text-[11px] text-muted-foreground">
+              <th className="py-1.5 pr-2 text-left font-medium">Date · Quote · Customer</th>
+              <th className="py-1.5 px-2 text-left font-medium">Item</th>
+              <th className="py-1.5 px-2 text-right font-medium">Line net</th>
+              <th className="py-1.5 px-2 text-left font-medium">Cost came from</th>
+              <th className="py-1.5 px-2 text-right font-medium">Less COGS</th>
+              <th className="py-1.5 pl-2 text-right font-medium">To Office</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(({ s, l }, i) => (
+              <tr key={`${s.quotationId}-${i}`} className="border-t align-top">
+                <td className="py-1 pr-2"><SaleRef s={s} /></td>
+                <td className="py-1 px-2">{l.label}{l.qty > 1 ? ` ×${l.qty}` : ""}</td>
+                <td className={cn("py-1 px-2 text-right tabular-nums", l.net < 0 && "font-medium text-red-600 dark:text-red-400")}>{formatCurrency(l.net)}</td>
+                <td className="py-1 px-2">
+                  {l.net < 0 ? (
+                    <span className="text-red-600 dark:text-red-400">Negative line net on the quotation</span>
+                  ) : l.costFrom?.length ? (
+                    <ul className="space-y-0.5">
+                      {l.costFrom.map((c, j) => (
+                        <li key={j}>
+                          <span className="font-medium">{c.name}</span>
+                          <span className="tabular-nums text-muted-foreground"> · {formatCurrency(c.unitCost)} × {c.qty}</span>
+                          <div className="text-[10px] text-muted-foreground">{COST_BY_LABEL[c.by]}{c.via ? ` “${c.via.toUpperCase()}”` : ""}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </td>
+                <td className="py-1 px-2 text-right tabular-nums text-muted-foreground">{l.officeCost != null ? `− ${formatCurrency(l.officeCost)}` : "—"}</td>
+                <td className="py-1 pl-2 text-right font-semibold tabular-nums text-red-600 dark:text-red-400">{formatCurrency(l.officeShare)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 15 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)} className="text-xs font-medium text-primary hover:underline">
+          {showAll ? "Show the 15 biggest only" : `Show all ${rows.length}`}
+        </button>
+      )}
     </div>
   );
 }

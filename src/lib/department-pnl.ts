@@ -568,6 +568,12 @@ export interface OfficeCostHit {
   unitCost: number;
   vatInclusive: boolean;
   company?: string | null; // supplier company (for input-VAT attribution)
+  /** The Products-tab product the cost came from (absent for the roof-ventilator grid). */
+  product?: string;
+  /** How it matched: the SKU, a model code, every word of the name, or the roof-ventilator grid. */
+  by?: "sku" | "model" | "name" | "grid";
+  /** The SKU / model code that matched (for "sku" / "model"). */
+  via?: string;
 }
 
 const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
@@ -575,11 +581,22 @@ const normText = (s: unknown) => str(s).toLowerCase().replace(/\s+/g, " ");
 const COST_STOP = new Set(["fan", "fans", "the", "and", "brand", "model", "type", "with", "for", "pc", "pcs", "unit", "units", "set", "sets"]);
 const tokenize = (text: unknown): string[] =>
   normText(text).split(/[^a-z0-9]+/).filter((t) => t.length >= 2 && !COST_STOP.has(t));
-const hasDigit = (t: string) => /\d/.test(t);
+// A number with a unit, or a dimension — "220v", "60hz", "3ph", "1hp", "12in",
+// "200x300". These are ratings and sizes that dozens of unrelated products share,
+// not model codes.
+const UNIT_TOKEN = /^\d+(?:v|vac|vdc|hz|ph|phase|hp|kw|w|a|amp|amps|mm|cm|m|in|inch|inches|ft|rpm|cfm|cmh|kg|pa|lpm|db|deg|c|f)$/;
+/**
+ * A model-code token: letters AND digits ("25nsb", "dc500"), not a bare number
+ * ("12", "500") and not a rating or size ("220v", "60hz", "200x300"). Only these
+ * may price a line on their own — a bare number or a rating matched unrelated
+ * products and booked their cost against the line.
+ */
+export const isModelCodeToken = (t: string): boolean =>
+  /\d/.test(t) && /[a-z]/.test(t) && t.length >= 3 && !UNIT_TOKEN.test(t) && !/^\d+x\d+(?:x\d+)?$/.test(t);
 
 interface PreparedCost {
   tokens: string[]; // significant name tokens
-  codes: string[]; // model-code tokens (contain a digit)
+  codes: string[]; // model-code tokens (letters + digits, not a rating / size)
   sku: string | null; // compacted sku
   hit: OfficeCostHit;
 }
@@ -595,6 +612,13 @@ interface PreparedCost {
  *      "Duct Canvass Connector - AlphaAir").
  * A product that carries a model code is matched ONLY by that code, so a
  * different model of the same brand is never priced by the wrong cost.
+ *
+ * A model code must mix letters and digits and must not be a rating or a size
+ * (`isModelCodeToken`). Any token with a digit used to count, so a line saying
+ * "220V" or "12" took the cost of whichever unrelated product also said "220V"
+ * or "12" — booking that product's cost × the line's qty against Office. A
+ * product whose name has numbers but no real model code now needs EVERY word of
+ * its name on the line (rule 3), numbers included.
  * Returns null when nothing matches.
  */
 export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string) => OfficeCostHit | null {
@@ -602,9 +626,9 @@ export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string)
     const tokens = tokenize(e.name);
     return {
       tokens,
-      codes: tokens.filter(hasDigit),
+      codes: tokens.filter(isModelCodeToken),
       sku: e.sku ? normText(e.sku).replace(/[^a-z0-9]/g, "") : null,
-      hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive, company: e.company ?? null },
+      hit: { unitCost: e.unitCost, vatInclusive: e.vatInclusive, company: e.company ?? null, product: e.name },
     };
   });
   return (haystackRaw: string): OfficeCostHit | null => {
@@ -613,10 +637,22 @@ export function officeCostLookup(entries: OfficeCostEntry[]): (haystack: string)
     let best: { score: number; hit: OfficeCostHit } | null = null;
     for (const p of prepared) {
       let score = 0;
-      if (p.sku && p.sku.length >= 4 && lineCompact.includes(p.sku)) score = 1000 + p.tokens.length;
-      else if (p.codes.length && p.codes.some((c) => lineTokens.has(c))) score = 500 + p.tokens.length;
-      else if (!p.codes.length && p.tokens.length >= 2 && p.tokens.every((t) => lineTokens.has(t))) score = 100 + p.tokens.length;
-      if (score > 0 && (!best || score > best.score)) best = { score, hit: p.hit };
+      let by: OfficeCostHit["by"];
+      let via: string | undefined;
+      const code = p.codes.find((c) => lineTokens.has(c));
+      if (p.sku && p.sku.length >= 4 && lineCompact.includes(p.sku)) {
+        score = 1000 + p.tokens.length;
+        by = "sku";
+        via = p.sku;
+      } else if (code) {
+        score = 500 + p.tokens.length;
+        by = "model";
+        via = code;
+      } else if (!p.codes.length && p.tokens.length >= 2 && p.tokens.every((t) => lineTokens.has(t))) {
+        score = 100 + p.tokens.length;
+        by = "name";
+      }
+      if (score > 0 && (!best || score > best.score)) best = { score, hit: { ...p.hit, by, via } };
     }
     return best?.hit ?? null;
   };
@@ -655,7 +691,7 @@ export function windVentSupplierCost(specs: Specs): OfficeCostHit | null {
   const unitCost = WIND_VENT_SUPPLIER_COST[col]?.[size];
   if (unitCost == null) return null;
   // Prices are VAT-exclusive (net) — no creditable input VAT assumed.
-  return { unitCost, vatInclusive: false };
+  return { unitCost, vatInclusive: false, by: "grid", via: `${size}" ${col === "giPaint" ? "G.I. with paint" : col === "gi" ? "G.I." : col}` };
 }
 
 // --- Sale recognition -----------------------------------------------------
