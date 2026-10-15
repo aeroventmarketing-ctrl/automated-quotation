@@ -38,17 +38,21 @@ export function SectionView({
   const [hover, setHover] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const n = result.rows.length; // G + floors
+  const n = result.rows.length; // basements + G + floors
+  const B = input.basements ?? 0;
+  const rowOf = (level: number) => result.rows[level + B];
   const rowH = Math.max(10, Math.min(30, 560 / n));
   const top = 96, bottom = top + rowH * n;
   const W = 640, H = bottom + 64;
   const sx = 70, sw = 84, fx = sx + sw, fw = 300, tagX = fx + fw + 14;
   const labelEvery = rowH >= 16 ? 1 : rowH >= 11 ? 2 : 5;
-  const yTop = (level: number) => bottom - (level + 1) * rowH;
+  const yTop = (level: number) => bottom - (level + B + 1) * rowH;
+  // Ground level: the bottom of G. Basements are drawn below it.
+  const grade = bottom - B * rowH;
   const fire = input.fireFloor;
   const doorOpen = result.openDoorM3s > 0;
   const shown = hover ?? fire;
-  const shownRow = result.rows[shown];
+  const shownRow = rowOf(shown);
 
   async function savePng() {
     const svg = svgRef.current;
@@ -83,7 +87,7 @@ export function SectionView({
   }
 
   const tone = (level: number) => {
-    const r = result.rows[level];
+    const r = rowOf(level);
     if (level === fire && doorOpen) return { fill: C.fireSoft, ink: C.fire };
     return r.status === "over" ? { fill: C.badSoft, ink: C.bad } : r.status === "under" ? { fill: C.warnSoft, ink: C.warn } : { fill: C.okSoft, ink: C.ok };
   };
@@ -118,12 +122,12 @@ export function SectionView({
             const y = yTop(r.level), mid = y + rowH / 2;
             const isFire = r.level === fire && doorOpen;
             const t = tone(r.level);
-            const showLabel = r.level % labelEvery === 0 || r.level === n - 1 || isFire || r.status !== "ok";
+            const showLabel = r.level % labelEvery === 0 || r.level === input.floors || r.level === -B || isFire || r.status !== "ok";
             return (
               <g key={r.level}>
                 {hover === r.level && <rect x={fx} y={y} width={fw} height={rowH} fill={C.hover} />}
                 {isFire && <rect x={fx + 0.75} y={y + 0.75} width={fw - 1.5} height={rowH - 1.5} fill={C.fireSoft} />}
-                {r.level > 0 && <line x1={sx} x2={fx + fw} y1={y + rowH} y2={y + rowH} stroke={C.grid} strokeWidth={1} />}
+                {r.level > -B && <line x1={sx} x2={fx + fw} y1={y + rowH} y2={y + rowH} stroke={C.grid} strokeWidth={1} />}
                 {/* The stair door: a solid bar when shut, a gap with the air going through when open. */}
                 {isFire ? (
                   <>
@@ -159,8 +163,11 @@ export function SectionView({
             );
           })}
 
-          {/* Ground and exit. */}
-          <line x1={20} x2={W - 20} y1={bottom} y2={bottom} stroke={C.ink} strokeWidth={2} />
+          {/* Ground and exit. Below grade, the earth is shaded. */}
+          {B > 0 && <rect x={20} y={grade} width={W - 40} height={bottom - grade} fill="#a8a29e" opacity={0.18} />}
+          {B > 0 && <text x={W - 24} y={bottom + 16} fontSize={9.5} textAnchor="end" fill={C.muted}>shaded: below grade</text>}
+          <line x1={20} x2={W - 20} y1={grade} y2={grade} stroke={C.ink} strokeWidth={2} />
+          {B > 0 && <line x1={sx} x2={sx + sw + fw} y1={bottom} y2={bottom} stroke={C.ink} strokeWidth={1.5} />}
           <text x={sx + sw / 2} y={bottom + 16} fontSize={10.5} textAnchor="middle" fill={C.muted}>STAIR</text>
 
           {/* Stack effect: which way the pressure rises. */}

@@ -12,7 +12,7 @@ const body = z.object({
   project: z.string().max(120),
   criteria: z.string().max(120),
   input: z.object({
-    floors: n, floorHeight: n, designPa: n, minPa: n, doorForceLimitN: n, closerForceN: n,
+    floors: n, basements: n.optional(), floorHeight: n, designPa: n, minPa: n, doorForceLimitN: n, closerForceN: n,
     doorWidth: n, doorHeight: n, doorLeakArea: n, exitLeakArea: n, otherLeakArea: n,
     outdoorC: n, stairC: n, openDoorVelocity: n, fireFloor: n, ductLeakPct: n, systemLossPa: n,
   }),
