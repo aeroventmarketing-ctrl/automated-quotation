@@ -6,6 +6,7 @@ import {
   firstReleaseForMonth,
   releaseDateFor,
   netOfVat,
+  legacyNetOfVat,
   commissionOn,
   fullyPaidOn,
   groupByPersonMonth,
@@ -209,11 +210,39 @@ describe("rule 6 — 1.5% of gross sales less VAT", () => {
     expect(commissionOn(1_120_000) - commissionOn(1_000_000)).toBe(1_800);
   });
 
-  it("keeps flat VAT-exempt lines at face value inside a VAT-inclusive deal", () => {
-    // ₱1,000,000 total of which ₱200,000 is a flat exempt line: only the other
-    // ₱800,000 is divided by 1.12.
-    const q = { total: 1_000_000, vatMode: "INCLUSIVE", classification: { vatExemptTotal: 200_000 } };
-    expect(netOfVat(q, 1_000_000)).toBe(200_000 + Math.round((800_000 / 1.12) * 100) / 100);
+  it("the owner's order 3289S: ₱71,766.80 gross → ₱64,077.50 base → ₱961.16 — KDK lines included", () => {
+    // Most of 3289S is KDK (flat-price) cassettes. Their price carries VAT like
+    // any other line, so the whole gross is divided by 1.12.
+    const q = { total: 71_766.8, vatMode: "INCLUSIVE", classification: { vatExemptTotal: 55_269.11 } };
+    expect(netOfVat(q, 71_766.8)).toBe(64_077.5);
+    expect(commissionOn(netOfVat(q, 71_766.8))).toBe(961.16);
+    // …where the old rule kept the KDK share at face value: the voucher's 69,999.19.
+    expect(legacyNetOfVat(q, 71_766.8)).toBe(69_999.19);
+    expect(commissionOn(legacyNetOfVat(q, 71_766.8))).toBe(1_049.99);
+  });
+
+  it("flat-price lines on a VAT-exclusive (÷1.12) or zero-rated order: still no deduction", () => {
+    for (const vatMode of ["EXCLUSIVE", "ZERO_RATED"]) {
+      expect(netOfVat({ total: 50_000, vatMode, classification: { vatExemptTotal: 50_000 } }, 50_000)).toBe(50_000);
+    }
+  });
+
+  it("a PAID commission keeps the base it was paid on; an unpaid one uses today's", () => {
+    const nets = { current: 64_077.5, legacy: 69_999.19 };
+    const unpaid = deal({ refId: "a", gross: 1_100_000, net: nets.current, nets });
+    const paid = deal({ refId: "b", gross: 71_766.8, net: nets.legacy, nets, paid: true });
+    const [m] = groupByPersonMonth([unpaid, paid]);
+    expect(m.deals.find((d) => d.refId === "a")!.amount).toBe(961.16);
+    expect(m.deals.find((d) => d.refId === "b")!.amount).toBe(1_049.99);
+  });
+
+  it("the Sales Head's override uses today's base even when the rep's row was paid on the old one", () => {
+    const nets = { current: 64_077.5, legacy: 69_999.19 };
+    const rep = deal({ refId: "r", salespersonId: "rey", salespersonName: "Rey", gross: 1_100_000, net: nets.legacy, nets, paid: true });
+    const out = withOverrides([rep], new Map([["head", "JayR"]]), new Set(["rey"]));
+    const ov = out.find((d) => d.payeeKind === "override")!;
+    expect(ov.net).toBe(64_077.5);
+    expect(ov.amount).toBe(overrideOn(64_077.5));
   });
 
   it("computes 1.5%, not 1.5% of the gross", () => {

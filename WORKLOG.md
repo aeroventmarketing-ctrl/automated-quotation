@@ -1,3 +1,22 @@
+## 2026-10-15 · Commission base: VAT comes out of flat-price lines too
+
+The owner, on the commission voucher line *"2026 - AFBM00003289S · TERNION ENGINEERING COMPANY — 1.5% of
+69,999.19"*: *"Gross Amount for 3289S is 71766.80 base should be 64,077.50 and commission should be
+961.16"*, and for the change, *"Unpaid only"*.
+
+**Cause.** `netOfVat` kept flat-price lines (KDK, Aerovent Jet Fan / Inline Duct Fan —
+`classification.vatExemptTotal`) at face value and divided only the rest by 1.12. 3289S is mostly KDK
+ceiling cassettes, so its base came out at 69,999.19 instead of 71,766.80 ÷ 1.12. "Flat" only means the
+quote never rescales the price by the VAT presentation; the price is VAT-inclusive like any other. The
+BIR receipts, the P&L and counter sales already take VAT out of the whole amount — only the commission
+didn't.
+
+**Fix.** On VAT Inclusive and VAT Exclusive +12% orders the base is now gross ÷ 1.12, every line
+included; VAT Exclusive (÷1.12) and Zero Rated still deduct nothing. Each order deal carries
+`nets: { current, legacy }`: a commission already marked PAID keeps the old base it was paid on
+(`legacyNetOfVat`), everything unpaid uses the new one. The Sales Head's 0.25% override follows its own
+row's paid state the same way. Tests pin 3289S: 71,766.80 → 64,077.50 → 961.16 (old: 69,999.19 → 1,049.99).
+
 ## 2026-10-14 · HVAC Tools: Pressurization section view (option D)
 
 The owner: *"Build option D now"*. The Pressurization tab's results have two views, "Chart &
