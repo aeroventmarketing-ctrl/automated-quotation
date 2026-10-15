@@ -76,7 +76,8 @@ export async function buildPressurizationWorkbook(opts: {
   row++;
 
   section("THE STAIR");
-  pair("Floors above ground (schedule G to top)", i.floors);
+  pair("Floors above ground", i.floors);
+  pair("Basement levels (same stair, below G)", i.basements ?? 0);
   pair("Floor-to-floor height", i.floorHeight, "m");
   pair("Outdoor / stair temperature", `${i.outdoorC} / ${i.stairC}`, "°C");
   pair("Stair door (W × H)", `${i.doorWidth} × ${i.doorHeight}`, "m");
@@ -88,7 +89,7 @@ export async function buildPressurizationWorkbook(opts: {
   row++;
 
   section("FLOOR SCHEDULE");
-  const head = ["Floor", "Height (m)", "ΔP (Pa)", "Leakage (m³/s)", "Door force (N)", "Check"];
+  const head = ["Floor", "Height from G (m)", "ΔP (Pa)", "Leakage (m³/s)", "Door force (N)", "Check"];
   head.forEach((h, k) => {
     const c = ws.getRow(row).getCell(k + 1);
     c.value = h;

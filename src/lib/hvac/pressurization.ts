@@ -61,6 +61,12 @@ export const DOOR_LEAKAGE: { key: string; label: string; area: number }[] = [
 export interface PressInput {
   /** Floors above ground served by the stair; the schedule is G plus these. */
   floors: number;
+  /**
+   * Basement levels the same stair continues down to (B1, B2…), below G. Their
+   * doors leak too and their height adds to the stack effect. 0 or absent: the
+   * stair starts at G.
+   */
+  basements?: number;
   floorHeight: number;
   designPa: number;
   minPa: number;
@@ -77,7 +83,7 @@ export interface PressInput {
   outdoorC: number;
   stairC: number;
   openDoorVelocity: number;
-  /** The floor whose door is open in the open-door case (0 = ground). */
+  /** The floor whose door is open in the open-door case (0 = ground, −1 = B1). */
   fireFloor: number;
   /** Added to the airflow for ductwork leakage, %. */
   ductLeakPct: number;
@@ -88,8 +94,10 @@ export interface PressInput {
 export type FloorStatus = "ok" | "over" | "under";
 
 export interface PressFloor {
+  /** 0 = G, 1 = L1…, −1 = B1, −2 = B2… */
   level: number;
   name: string;
+  /** Above (+) or below (−) the ground floor, m. */
   heightM: number;
   dpPa: number;
   leakageM3s: number;
@@ -123,7 +131,7 @@ export interface PressResult {
 export type PressOutcome = PressResult | { error: string };
 export const isPressError = (r: PressOutcome | null): r is { error: string } => !!r && "error" in r;
 
-export const levelName = (i: number) => (i === 0 ? "G" : `L${i}`);
+export const levelName = (i: number) => (i === 0 ? "G" : i < 0 ? `B${-i}` : `L${i}`);
 
 export function maxPaForDoorForce(limitN: number, closerN: number, width: number, height: number): number {
   return ((limitN - closerN) * 2 * (width - KNOB_TO_EDGE_M)) / (width * width * height);
@@ -140,39 +148,46 @@ export function solvePressurization(i: PressInput): PressOutcome {
   if (!(i.doorWidth > KNOB_TO_EDGE_M) || !(i.doorHeight > 0)) return { error: "Enter the stair door's width and height." };
   if (!(i.doorLeakArea >= 0) || !(i.exitLeakArea >= 0) || !(i.otherLeakArea >= 0)) return { error: "Leakage areas can't be negative." };
   if (!(i.doorForceLimitN > i.closerForceN)) return { error: "The door-force limit must be more than the closer force." };
-  if (!Number.isInteger(i.fireFloor) || i.fireFloor < 0 || i.fireFloor > i.floors) return { error: `Fire floor: G to L${i.floors}.` };
+  const B = i.basements ?? 0;
+  if (!Number.isInteger(B) || B < 0 || B > 20) return { error: "Basement levels: a whole number from 0 to 20." };
+  if (!Number.isInteger(i.fireFloor) || i.fireFloor < -B || i.fireFloor > i.floors) {
+    return { error: `Fire floor: ${levelName(-B)} to L${i.floors}.` };
+  }
   const To = i.outdoorC + 273.15;
   const Ti = i.stairC + 273.15;
   if (!(To > 0) || !(Ti > 0)) return { error: "Check the temperatures." };
 
-  const H = i.floors * i.floorHeight;
+  // Heights are worked from the bottom of the stair (the lowest basement), so
+  // the stack effect covers its whole height; the schedule shows them from G.
+  const H = (i.floors + B) * i.floorHeight;
   const K = 3460 * (1 / To - 1 / Ti); // Pa per metre of height
   const doorArea = i.doorWidth * i.doorHeight;
+  // The weakest floor holds the design pressure; the rest sit above it.
+  const dpAt = (level: number) => {
+    const h = (level + B) * i.floorHeight;
+    return i.designPa + (K < 0 ? -K * (H - h) : K * h);
+  };
+  // The exit door is at G, whatever lies below it.
+  const areaAt = (level: number) => (level === 0 ? i.exitLeakArea : i.doorLeakArea) + i.otherLeakArea;
 
   const rows: PressFloor[] = [];
-  for (let level = 0; level <= i.floors; level++) {
-    const h = level * i.floorHeight;
-    // The weakest floor holds the design pressure; the rest sit above it.
-    const dp = i.designPa + (K < 0 ? -K * (H - h) : K * h);
-    const area = (level === 0 ? i.exitLeakArea : i.doorLeakArea) + i.otherLeakArea;
-    const leak = 0.83 * area * Math.sqrt(dp);
+  const leaks: number[] = [];
+  for (let level = -B; level <= i.floors; level++) {
+    const dp = dpAt(level);
+    // Summed unrounded, so the totals don't drift with the floor count.
+    const leak = 0.83 * areaAt(level) * Math.sqrt(dp);
+    leaks.push(leak);
     const force = doorForce(dp, i.closerForceN, i.doorWidth, i.doorHeight);
     const status: FloorStatus = force > i.doorForceLimitN ? "over" : dp < i.minPa ? "under" : "ok";
-    rows.push({ level, name: levelName(level), heightM: r1(h), dpPa: r1(dp), leakageM3s: r3(leak), doorForceN: Math.round(force), status });
+    rows.push({ level, name: levelName(level), heightM: r1(level * i.floorHeight), dpPa: r1(dp), leakageM3s: r3(leak), doorForceN: Math.round(force), status });
   }
 
-  // Sums from the unrounded figures, so the totals don't drift with the floor count.
-  const leaks = rows.map((r) => {
-    const area = (r.level === 0 ? i.exitLeakArea : i.doorLeakArea) + i.otherLeakArea;
-    const dp = i.designPa + (K < 0 ? -K * (H - r.level * i.floorHeight) : K * r.level * i.floorHeight);
-    return 0.83 * area * Math.sqrt(dp);
-  });
   const leakClosed = leaks.reduce((a, b) => a + b, 0);
   const openDoor = i.openDoorVelocity > 0 ? i.openDoorVelocity * doorArea : 0;
-  const openCase = openDoor > 0 ? openDoor + leakClosed - leaks[i.fireFloor] : 0;
+  const openCase = openDoor > 0 ? openDoor + leakClosed - leaks[i.fireFloor + B] : 0;
   const governing = Math.max(leakClosed, openCase);
   const fan = governing * (1 + Math.max(0, i.ductLeakPct) / 100);
-  const topDp = i.designPa + (K < 0 ? 0 : K * H);
+  const topDp = dpAt(i.floors);
   const fanPa = topDp + Math.max(0, i.systemLossPa);
   const relief = openDoor > 0 ? (openCase - leakClosed) / (0.83 * Math.sqrt(i.designPa)) : 0;
 
@@ -198,6 +213,7 @@ export function solvePressurization(i: PressInput): PressOutcome {
 /** The sample job the screen opens with: a 15-storey office stair on a Manila afternoon. */
 export const PRESS_SAMPLE: PressInput = {
   floors: 15,
+  basements: 0,
   floorHeight: 3.5,
   designPa: 50,
   minPa: 45,

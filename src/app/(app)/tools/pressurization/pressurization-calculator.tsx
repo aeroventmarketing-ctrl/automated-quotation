@@ -40,7 +40,7 @@ export function PressurizationCalculator() {
   const set = (k: keyof PressInput) => (v: string) => setF((p) => ({ ...p, [k]: v }));
 
   const input: PressInput = useMemo(() => ({
-    floors: num(f.floors), floorHeight: num(f.floorHeight),
+    floors: num(f.floors), basements: numOr(f.basements, 0), floorHeight: num(f.floorHeight),
     designPa: num(f.designPa), minPa: numOr(f.minPa, 0),
     doorForceLimitN: num(f.doorForceLimitN), closerForceN: numOr(f.closerForceN, 0),
     doorWidth: num(f.doorWidth), doorHeight: num(f.doorHeight),
@@ -48,7 +48,7 @@ export function PressurizationCalculator() {
     outdoorC: num(f.outdoorC), stairC: num(f.stairC),
     openDoorVelocity: numOr(f.openDoorVelocity, 0),
     // A fire floor above a shortened stair falls back to its top floor.
-    fireFloor: Math.min(numOr(f.fireFloor, 0), Math.max(0, Math.floor(numOr(f.floors, 0)))),
+    fireFloor: Math.max(-Math.max(0, Math.floor(numOr(f.basements, 0))), Math.min(numOr(f.fireFloor, 0), Math.max(0, Math.floor(numOr(f.floors, 0))))),
     ductLeakPct: numOr(f.ductLeakPct, 0), systemLossPa: numOr(f.systemLossPa, 0),
   }), [f]);
   const result = useMemo(() => solvePressurization(input), [input]);
@@ -95,6 +95,7 @@ export function PressurizationCalculator() {
   }
 
   const floorsN = Number.isInteger(input.floors) && input.floors > 0 ? input.floors : 0;
+  const basementsN = Number.isInteger(input.basements) && (input.basements ?? 0) > 0 ? input.basements! : 0;
 
   return (
     <div className="space-y-4">
@@ -144,6 +145,7 @@ export function PressurizationCalculator() {
           </Group>
           <Group label="The stair">
             <Field label="Floors above ground" value={f.floors} onChange={set("floors")} />
+            <Field label="Basement levels" value={f.basements} onChange={set("basements")} placeholder="0" />
             <Field label="Floor to floor (m)" value={f.floorHeight} onChange={set("floorHeight")} />
             <Field label="Outdoor (°C)" value={f.outdoorC} onChange={set("outdoorC")} width="w-24" />
             <Field label="Stair (°C)" value={f.stairC} onChange={set("stairC")} width="w-24" />
@@ -160,7 +162,7 @@ export function PressurizationCalculator() {
           </Group>
           <Group label="Open-door case and fan">
             <Picker label="Fire floor (door open)" value={String(input.fireFloor)} onChange={set("fireFloor")} className="w-36"
-              options={Array.from({ length: floorsN + 1 }, (_, i) => [String(i), levelName(i)] as [string, string])} />
+              options={Array.from({ length: floorsN + basementsN + 1 }, (_, k) => k - basementsN).reverse().map((i) => [String(i), levelName(i)] as [string, string])} />
             <Field label="Duct leakage (%)" value={f.ductLeakPct} onChange={set("ductLeakPct")} width="w-24" />
             <Field label="Duct & grille losses (Pa)" value={f.systemLossPa} onChange={set("systemLossPa")} width="w-32" />
           </Group>
@@ -205,7 +207,7 @@ export function PressurizationCalculator() {
                     <thead className="sticky top-0 bg-card text-muted-foreground">
                       <tr>
                         <th className="px-2 py-1 text-left font-medium">Floor</th>
-                        <th className="px-2 py-1 text-right font-medium">Height m</th>
+                        <th className="px-2 py-1 text-right font-medium">Height from G m</th>
                         <th className="px-2 py-1 text-right font-medium">ΔP Pa</th>
                         <th className="px-2 py-1 text-right font-medium">Leakage m³/s</th>
                         <th className="px-2 py-1 text-right font-medium">Door force N</th>

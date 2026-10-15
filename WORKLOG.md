@@ -1,3 +1,20 @@
+## 2026-10-15 · Pressurization: basement levels
+
+The owner, reading the user guide: *"If there is a basement. Should we include basement in the floor
+count?"* — then *"yes please build"* a proper field instead of the count-it-as-floors workaround.
+
+**Basement levels** (`PressInput.basements`, 0–20, absent = 0) on the Pressurization tab, beside "Floors
+above ground". The schedule now runs B2, B1, G, L1 … with heights from G (basements negative); the
+stack effect is worked over the whole stair, lowest basement to top floor; the exit door's leakage stays
+at G; basement doors leak like any floor door; a basement can be the fire floor (the picker lists top
+floor down to the lowest basement). The section drawing puts the grade line under G and shades the
+basements below it ("BELOW GRADE"); the calc sheet records the basement count and labels heights "from
+G". With no basements the result is exactly as before (tested).
+
+Rendered as an Engineer on the sample: 2 basements → 6,203 CFM (was 5,882; two more doors leaking and
+7 m more stack), "7 floors over the door-force limit" (B2 63.5 Pa … L4); fire floor B1 → schedule marks
+it, the drawing opens its door below grade; the sheet downloads.
+
 ## 2026-10-15 · Commission base: VAT comes out of flat-price lines too
 
 The owner, on the commission voucher line *"2026 - AFBM00003289S · TERNION ENGINEERING COMPANY — 1.5% of

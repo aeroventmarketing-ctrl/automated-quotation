@@ -74,6 +74,39 @@ describe("stair pressurization — other cases", () => {
   });
 });
 
+describe("stair pressurization — basements", () => {
+  const r = press({ basements: 2 });
+  it("the schedule runs B2, B1, G, L1 … L15; heights from G, basements negative", () => {
+    expect(r.rows.map((x) => x.name).slice(0, 4)).toEqual(["B2", "B1", "G", "L1"]);
+    expect(r.rows.at(-1)!.name).toBe("L15");
+    expect(r.rows.find((x) => x.name === "B2")!.heightM).toBe(-7);
+    expect(r.rows.find((x) => x.name === "G")!.heightM).toBe(0);
+  });
+  it("stack effect covers the whole stair, basements included", () => {
+    expect(r.stackPa).toBeCloseTo(Math.abs(3460 * (17 * 3.5) * (1 / 305.15 - 1 / 299.15)), 1);
+    expect(r.rows.find((x) => x.name === "L15")!.dpPa).toBe(50);
+    expect(r.rows[0].dpPa).toBeCloseTo(50 + r.stackPa, 1);
+  });
+  it("the exit door stays at G; basement doors leak like any floor door", () => {
+    const g = r.rows.find((x) => x.name === "G")!, b1 = r.rows.find((x) => x.name === "B1")!;
+    expect(g.leakageM3s).toBeCloseTo(0.83 * 0.02 * Math.sqrt(g.dpPa), 3);
+    expect(b1.leakageM3s).toBeCloseTo(0.83 * 0.01 * Math.sqrt(b1.dpPa), 3);
+  });
+  it("two more doors leaking → a bigger fan than the same stair without basements", () => {
+    expect(r.leakClosedM3s).toBeGreaterThan(press().leakClosedM3s);
+    expect(r.fanCfm).toBeGreaterThan(press().fanCfm);
+  });
+  it("a basement can be the fire floor; below the lowest basement is refused", () => {
+    const fireB1 = press({ basements: 2, fireFloor: -1 });
+    expect(fireB1.openCaseM3s).toBeCloseTo(fireB1.openDoorM3s + fireB1.leakClosedM3s - fireB1.rows[1].leakageM3s, 2);
+    expect(isPressError(solvePressurization({ ...PRESS_SAMPLE, basements: 2, fireFloor: -3 }))).toBe(true);
+    expect(isPressError(solvePressurization({ ...PRESS_SAMPLE, basements: 1.5 }))).toBe(true);
+  });
+  it("no basements is exactly the stair as before", () => {
+    expect(press({ basements: 0 })).toEqual(press({ basements: undefined }));
+  });
+});
+
 describe("smoke exhaust — NFPA 92 axisymmetric plume, the 5 MW mall atrium", () => {
   const r = solvePlume(PLUME_SAMPLE) as PlumeResult;
   it("flame height 0.166·Qc^0.4; mass flow above it 0.071·Qc^⅓·z^5⁄3 + 0.0018·Qc", () => {
