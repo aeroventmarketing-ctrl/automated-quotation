@@ -1,3 +1,32 @@
+## 2026-10-15 · P&L: "Lines losing money" on Office, stricter bought-in cost matching
+
+The owner, on the Departmental P&L (Aug–Oct 2026: Office sales −₱16,127,879.00, total sales
+−₱13,691,669.56): *"please check what I need so details will tally?"*, then *"yes please build both"*.
+
+The department rows do add up to the totals; it is Office that is negative. Office books a bought-in
+line as its net less the supplier cost, so −₱16M means some lines carry a cost far above their sale.
+Three things were found and fixed:
+
+- **The Office breakdown hid those lines.** It listed only lines with a positive amount, so every
+  loss-making line was left out, and the breakdown could never add up to the summary. Negative lines
+  are now listed (in red), so the breakdown matches the summary.
+- **"Lines losing money"** (new, top of the Office breakdown). Every Office line whose cost exceeds its
+  sale, biggest loss first (15 shown, "Show all"), with the total they take off Office. Each shows
+  where its cost came from: the Products-tab product (unit cost × qty, and whether it matched by SKU,
+  model code or name, and on which code), the roof-ventilator supplier grid, or a counter sale's stock
+  items. A negative-priced quotation line is named as such.
+- **Stricter cost matching** (`officeCostLookup`). Any word with a digit used to count as a model
+  code, so a line saying "220V", "60Hz" or "12" took the cost of an unrelated product that also said
+  it, multiplied by the line's qty. A model code must now mix letters and digits and not be a rating
+  or size (`isModelCodeToken`: not 220V / 60Hz / 3PH / 1HP / 12in / 200x300 / bare numbers). A product
+  with numbers but no real model code needs every word of its name on the line. Lines that no longer
+  match show "no COGS" (amber) instead of a wrong cost. The Office-resale flag uses the same matcher.
+
+Tests: `src/lib/office-cost-lookup.test.ts`. Rendered on the role harness as admin with a counter sale
+of 100 × a ₱850 stock item sold for ₱1,000: "Lines losing money (1) — take ₱84,000.00 off Office
+sales", "GI SHEET 24GA · ₱850.00 × 100 · stock item unit cost", and the row now appears in the Office
+sales table too.
+
 ## 2026-10-15 · Expenses ↔ Checks reconciliation; combined POs counted once in Expenses Records
 
 The owner, comparing PO-AFBM20260000607 on Expenses Records (₱79,337.70) with Check monitoring

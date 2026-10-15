@@ -495,6 +495,16 @@ export interface PnlSaleLine {
   cogs: number | null; // fan-body COGS used (fan lines)
   officeCost: number | null; // supplier cost booked to Office (bought-in), null if unmatched
   service?: boolean; // typed service / charge line (no product) — carries no COGS by design
+  /** Where the cost booked against the line came from — shown on "Lines losing money". */
+  costFrom?: PnlCostSource[];
+}
+/** One source of a line's cost: the product / stock item, its unit cost, and how it was matched. */
+export interface PnlCostSource {
+  name: string;
+  unitCost: number;
+  qty: number;
+  by: "sku" | "model" | "name" | "grid" | "stock";
+  via?: string;
 }
 /** The underlying record a P&L row deletes (admin "delete test row" tool). */
 export type PnlDeleteKind = "quotation" | "countersale" | "transfer" | "po" | "voucher" | "payroll";
@@ -706,6 +716,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
       let officeCost: number | null = null;
       let deptShare = 0;
       let officeShare = 0;
+      let costFrom: PnlCostSource[] | undefined;
       const service = isServiceLine(specs, it.descriptionSnapshot);
       if (routing === "fan") {
         cogs = round2(Math.min(Math.max(cogsOf(specs), 0), net));
@@ -716,6 +727,12 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         const hit = service ? null : officeCostOfLine(specs, officeLineHaystack(it.descriptionSnapshot, specs));
         officeCost = hit ? round2(hit.unitCost * it.qty) : null;
         officeShare = round2(net - (officeCost ?? 0)); // margin: selling less supplier cost
+        if (hit) {
+          costFrom = [{
+            name: hit.by === "grid" ? "Wind Driven Roof Ventilator supplier grid" : hit.product || "Products tab",
+            unitCost: hit.unitCost, qty: Number(it.qty) || 0, by: hit.by ?? "name", via: hit.via,
+          }];
+        }
         // While the go-live gate is on, resold goods are pre-launch opening stock,
         // so their input VAT belongs to the pre-launch period — skip it (only
         // post-go-live material POs generate input VAT).
@@ -736,7 +753,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
         orderOutputVat = round2(orderOutputVat + round2(net * VAT_RATE));
       }
       const label = productLabel(specs, it.descriptionSnapshot);
-      lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost, service });
+      lines.push({ label, qty: it.qty, net, routing, dept, deptShare, officeShare, cogs, officeCost, service, costFrom });
     }
     if (!lines.length) continue;
     const customer = q.inquiry?.customer?.company ?? "—";
@@ -777,7 +794,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
   // Counter sales (walk-in) → Office, as margin (net less stock COGS).
   const counterSalesD = await prisma.counterSale.findMany({
     where: { status: "COMPLETED", ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { id: true, saleNumber: true, vatMode: true, subtotal: true, completedAt: true, customerId: true, customer: { select: { company: true } }, items: { select: { qty: true, stockItemId: true } } },
+    select: { id: true, saleNumber: true, vatMode: true, subtotal: true, completedAt: true, customerId: true, customer: { select: { company: true } }, items: { select: { qty: true, stockItemId: true, description: true } } },
   });
   const csCost = await counterSaleCostMap(counterSalesD);
   for (const cs of counterSalesD) {
@@ -798,7 +815,12 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     if (fansCogs > 0) {
       lines.push({ label: "Duct hardware — production cost", qty: 1, net: fansCogs, routing: "production_markup", dept: "fans", deptShare: fansCogs, officeShare: 0, cogs: null, officeCost: null });
     }
-    lines.push({ label: `Counter sale · ${n} item${n === 1 ? "" : "s"}`, qty: 1, net: round2(net - fansCogs), routing: "office_full", dept: "office", deptShare: 0, officeShare: round2(net - cogs), cogs: null, officeCost: round2(cogs - fansCogs) || null });
+    // The stock items whose unit cost made up the COGS (for "Lines losing money").
+    const csFrom: PnlCostSource[] = cs.items.flatMap((i) => {
+      const hit = i.stockItemId ? csCost.get(i.stockItemId) : null;
+      return hit && hit.cost > 0 ? [{ name: hit.name || i.description || "Stock item", unitCost: hit.cost, qty: Number(i.qty) || 0, by: "stock" as const }] : [];
+    });
+    lines.push({ label: `Counter sale · ${n} item${n === 1 ? "" : "s"}`, qty: 1, net: round2(net - fansCogs), routing: "office_full", dept: "office", deptShare: 0, officeShare: round2(net - cogs), cogs: null, officeCost: round2(cogs - fansCogs) || null, costFrom: csFrom.length ? csFrom : undefined });
     sales.push({
       quotationId: cs.id,
       href: `/counter-sales/${cs.id}`,
