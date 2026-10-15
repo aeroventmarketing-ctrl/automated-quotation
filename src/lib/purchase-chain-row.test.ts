@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPurchaseChainRow, type PurchaseRequestLike } from "./purchase-chain-row";
+import { buildPurchaseChainRow, buildPurchaseTrail, isAutoRaisedBoughtIn, type PurchaseRequestLike } from "./purchase-chain-row";
 import type { PRStatus } from "./purchasing";
 
 /**
@@ -162,5 +162,21 @@ describe("a PO settled in cash", () => {
       canManagePO: false, namesForRole: () => [], canAct: () => false,
     });
     expect(row.cashPaid).toBeNull();
+  });
+});
+
+describe("the requisition the system raises when a bought-in order's payment is cleared", () => {
+  const auto = { kind: "department", dept: "office", note: "Bought-in items for order 2026 - AFBM00003874S" };
+  it("is recognised; an ordinary department or MRF requisition is not", () => {
+    expect(isAutoRaisedBoughtIn(auto)).toBe(true);
+    expect(isAutoRaisedBoughtIn({ ...auto, note: "Need GI sheets" })).toBe(false);
+    expect(isAutoRaisedBoughtIn({ ...auto, dept: "duct" })).toBe(false);
+    expect(isAutoRaisedBoughtIn({ ...auto, kind: "order" })).toBe(false);
+  });
+  it("its trail says it was raised automatically, not 'Requested … (Requestor)'", () => {
+    const trail = buildPurchaseTrail({ ...pr("APPROVED"), ...auto, createdByName: "Reyjellan Gil" });
+    expect(trail[0]).toMatch(/^Raised automatically when the payment was cleared — Reyjellan Gil \(cleared by\)/);
+    expect(trail.join(" ")).not.toContain("Requestor");
+    expect(buildPurchaseTrail({ ...pr("APPROVED"), createdByName: "Sam" })[0]).toMatch(/^Requested — Sam \(Requestor\)/);
   });
 });

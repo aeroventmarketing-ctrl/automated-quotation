@@ -19,7 +19,8 @@ import { AutoRefresh } from "@/components/auto-refresh";
 import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText, ClipboardCheck } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
-import { getExpensesReport } from "../management/pnl-actions";
+import { getExpensesReport, getExpenseCheckRecon } from "../management/pnl-actions";
+import { ExpenseCheckReconCard } from "./expense-check-recon";
 import { ExpensesReport } from "./expenses-report";
 import { getManualReconciliations, getUnreconciledCounts } from "@/lib/manual-reconciliations";
 import { UnreconciledCard } from "./unreconciled-card";
@@ -489,8 +490,16 @@ export default async function MyDashboardPage() {
     ? await (async () => {
         const phToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
         const monthStart = `${phToday.slice(0, 7)}-01`;
-        const initial = await getExpensesReport(monthStart, phToday).catch(() => null);
-        return initial ? <ExpensesReport initial={initial} /> : null;
+        const [initial, recon] = await Promise.all([
+          getExpensesReport(monthStart, phToday).catch(() => null),
+          getExpenseCheckRecon(monthStart, phToday).catch(() => null),
+        ]);
+        return (
+          <>
+            {initial && <ExpensesReport initial={initial} />}
+            {recon && <ExpenseCheckReconCard initial={recon} />}
+          </>
+        );
       })()
     : null;
 
