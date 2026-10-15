@@ -502,6 +502,56 @@ export async function advanceJobOrder(
   });
 }
 
+/** The Phase 2 stages an admin may close production from. */
+const ADMIN_FINISHABLE_STAGES = new Set(["released", "in_production", "jo_received", "producing"]);
+
+/**
+ * Admin-only: mark production finished in one step. The owner, 2026-10-15, on
+ * order 3439A sitting at "For JO creation": *"add an option that when pressed by
+ * admin the production will be Mark Finished"* (Phase 2 change, approved by the
+ * owner in that request).
+ *
+ * Every job order not yet finished is closed (stamped with the admin's name and
+ * "admin"), the stage moves to "Production finished", and the stamp
+ * `production_finished_admin` records who did it and when. From there the order
+ * carries on as any other: Sales notifies the client. An admin rollback undoes it.
+ */
+export async function adminFinishProduction(quotationId: string): Promise<{ error?: string }> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) return { error: "Only an admin can mark production finished." };
+  const { cls, wf } = await loadWorkflow(quotationId);
+  if (!ADMIN_FINISHABLE_STAGES.has(wf.stage)) {
+    return { error: "Production can be marked finished only while the order is in Phase 2 (job orders and production)." };
+  }
+  const now = new Date().toISOString();
+  const by = `${user.name} (admin)`;
+  const jobOrders = Object.fromEntries(
+    Object.entries(wf.jobOrders).map(([k, jo]) => [
+      k,
+      !jo || jo.status === "finished"
+        ? jo
+        : { ...jo, status: "finished", startedAt: jo.startedAt ?? now, startedByName: jo.startedByName ?? by, finishedAt: now, finishedByName: by },
+    ]),
+  ) as typeof wf.jobOrders;
+  await saveWorkflow(quotationId, cls, {
+    ...wf,
+    jobOrders,
+    stage: "production_finished",
+    approvals: stamp(wf, "production_finished_admin", user),
+  });
+  await logActivity(user, {
+    action: "order.production.admin_finish",
+    category: "order",
+    summary: `Production marked finished by admin — ${await orderRefLabel(quotationId)}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}#phase-2`,
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  return {};
+}
+
 /**
  * Attach a proofing picture to a department's job order. Uploaded by the
  * department's production head (or an admin). At least one proof is required by

@@ -58,6 +58,7 @@ import { MultiBatchPickupToggle } from "./multi-batch-pickup-toggle";
 import { FulfillmentModeSelector } from "./fulfillment-mode-selector";
 import { COMPANY } from "@/lib/config";
 import { JobOrderManager } from "./job-order-manager";
+import { AdminFinishProduction } from "./admin-finish-production";
 import { DeptProductionControls } from "./dept-production-controls";
 import { FansJobOrderPanel } from "./fans-job-order-panel";
 import { AutofillJobOrdersButton } from "./autofill-jo-button";
@@ -1035,6 +1036,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
             <FulfillmentModeSelector orderId={quote.id} mode={wf.fulfillmentMode} available={availableModes} canSet={canSetMode} />
           </div>
+          {/* Admin: finish production for the whole order in one press. */}
+          {adminViewer && ["released", "in_production", "jo_received", "producing"].includes(wf.stage) && (
+            <div className="mb-4">
+              <AdminFinishProduction
+                orderId={quote.id}
+                openJobOrders={Object.values(wf.jobOrders).filter((j) => j && j.status !== "finished").length}
+              />
+            </div>
+          )}
+          {wf.approvals.production_finished_admin && stageIndex(wf.stage) >= stageIndex("production_finished") && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              ✓ Production marked finished by admin — {wf.approvals.production_finished_admin.byName}, {fmtWhen(wf.approvals.production_finished_admin.at)}
+            </p>
+          )}
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="text-sm text-muted-foreground">Job orders are issued once Phase 1 is complete.</p>
           ) : boughtInOnly && wf.stage === "released" ? (
