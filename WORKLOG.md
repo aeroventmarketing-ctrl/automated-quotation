@@ -1,3 +1,64 @@
+## 2026-10-15 · Acknowledgement Form badges: admin and Payment Approver only
+
+The owner: *"only admin and payment approver can see the badge, no one else"*.
+
+The Ack. Form badge, the AI verdict badge, the Orders list's **Documents** filter and the "Check with
+AI" buttons now show only for an admin or the Payment Approver; for everyone else the page doesn't
+even send the Acknowledgement Form data. `/api/ai/verify-ack-form` refuses Accounting now too (was
+Accounting / Payment Approver / admin).
+
+Rendered on the role harness: admin and Payment Approver see the filter, both badges and the button;
+Accounting and Sales see none of them and the route answers 403.
+
+## 2026-10-15 · Acknowledgement Form: AI check that the upload really is one
+
+The owner: *"use the AI reading capacity to verify if the uploaded image is an acknowledgement form or
+acknowledgement receipt"*.
+
+**`POST /api/ai/verify-ack-form`** `{quotationId, path}` — Accounting, the Payment Approver or an
+admin. The file must be one of that order's Acknowledgement Form uploads (`ackFormFiles`: the order's
+`or_cr_af` / `unsigned_or_cr_af`, and each live delivery batch's). The AI names the document by its
+printed title: Acknowledgement Form / Acknowledgement Receipt / Collection Receipt / Official Receipt /
+Sales Invoice / Delivery Receipt / Delivery Form / other, with the title it saw, a confidence and a
+one-line reason. Verdict (`ackVerdict`): **ack** for an Acknowledgement Form or Receipt, **not_ack**
+for anything else, **unclear** under 70% sure. Stored per file in `classification.ackFormChecks` with
+one atomic `jsonb` merge (so a workflow step saved at the same moment isn't overwritten). Same read
+allowance as the closing-document reader: 3 per file, unlimited for admin / Payment Approver.
+Advisory only — it never blocks a step.
+
+**Orders list.** Under each order's Ack. Form badge: "✓ AI: is an Acknowledgement Form", "✗ AI: not
+an Acknowledgement Form", "? AI couldn't tell" or "Not checked by AI". Click it for each file's verdict,
+the title the AI read, who checked it and when. "Check with AI" per order, and with a Documents filter
+on, "✨ Check N files with AI" runs every unchecked file in view one by one with progress. Two more
+Documents options: "AI says it isn't one" and "not checked by AI". Buttons only for the three roles.
+
+Rendered on the role harness: as Accounting, three orders with a flagged, a confirmed and an unchecked
+file show the right badges, details and filters; "Check with AI" and the bulk button call the route and
+show its error (the harness has no file storage or AI key, so the AI read itself was not exercised
+here). As Sales: badges shown, no buttons, the route answers 403. A path that isn't one of the
+order's Acknowledgement Form uploads is refused (400).
+
+## 2026-10-15 · Orders: filter by Acknowledgement Form uploaded
+
+The owner, on the Orders list: *"in orders, list all order number that have been uploaded with
+acknowledgement form"*.
+
+The Acknowledgement Form is the `or_cr_af` closing-document slot on a **VAT-exclusive** order (on a
+VAT-inclusive order the same slot is the Collection Receipt). It is uploaded on the order, or on each
+batch of a multiple-batch delivery; the unsigned copy made when the delivery documents are prepared is
+`unsigned_or_cr_af`. `ackFormState` (`src/lib/ack-form.ts`, tested) reads all of these (ignoring
+cancelled batches).
+
+The Orders list gets a **Documents** filter: All orders / Acknowledgement Form uploaded / … — signed /
+… — not yet (VAT-exclusive orders without one), with the count of orders shown. Each order with one
+carries a badge under its number: "✓ Ack. Form" (signed) or "Ack. Form · unsigned". Read-only — no
+workflow change.
+
+Rendered on the role harness as admin: with a signed AF on one non-VAT order, an unsigned one on
+another, a third non-VAT order without one, and a VAT-inclusive order with a Collection Receipt —
+"uploaded" lists the first two, "signed" the first, "not yet" the third; the VAT-inclusive order is
+in none.
+
 ## 2026-10-15 · P&L: "Lines losing money" on Office, stricter bought-in cost matching
 
 The owner, on the Departmental P&L (Aug–Oct 2026: Office sales −₱16,127,879.00, total sales

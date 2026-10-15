@@ -26,6 +26,7 @@ import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { formatAccessoriesJoNumber } from "@/lib/accessories-job-order";
 import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { OrdersTable } from "./orders-table";
+import { ackFormState, ackFormFiles, ackAiState, coerceAckChecks } from "@/lib/ack-form";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // Purchaser view: swap the money columns (Value/Collected/Balance) for the
   // Engineer-generated Job Order numbers. Admins keep the full financial view.
   const isPurchaserView = !adminViewer && viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser");
+  // Acknowledgement Form badges, filter and AI check: admin and the Payment
+  // Approver only — *"only admin and payment approver can see the badge, no one else"*.
+  const ackVisible = adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
 
   // Who each bought-in order at "For PO creation" is really waiting on — its
   // purchase request's next step (one small query for all of them).
@@ -205,6 +209,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         blockedReason,
         awaiting: awaitingAll,
         awaitingNames,
+        // Acknowledgement Form (VAT-exclusive orders) — on the order or any batch.
+        ackForm: ackVisible ? ackFormState(q.vatMode, sale.docs, wf.deliveryBatches) : null,
+        nonVat: q.vatMode === "EXCLUSIVE",
+        // Each Acknowledgement Form file with the AI's verdict on it, if checked.
+        ...(() => {
+          if (!ackVisible) return { ackFiles: [], ackAi: null };
+          const files = ackFormFiles(q.vatMode, sale.docs, wf.deliveryBatches);
+          const checks = coerceAckChecks((q.classification as Record<string, unknown> | null)?.ackFormChecks);
+          return {
+            ackFiles: files.map((f) => ({ ...f, check: checks[f.path] ?? null })),
+            ackAi: ackAiState(files, checks),
+          };
+        })(),
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)
@@ -257,6 +274,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               progressHidden={progressHidden}
               restricted={restricted}
               isPurchaser={isPurchaserView}
+              canVerifyAck={ackVisible}
               initialStage={stageParam}
               initialStageLabel={stageParam ? stageLabel(stageParam) : undefined}
               initialDept={deptParam}
