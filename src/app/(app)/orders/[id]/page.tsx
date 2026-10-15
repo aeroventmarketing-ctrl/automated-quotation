@@ -33,7 +33,7 @@ import {
   type FulfillmentMode,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
-import { buildPurchaseTrail, buildReturnViews, buildReconcileView } from "@/lib/purchase-chain-row";
+import { buildPurchaseTrail, buildReturnViews, buildReconcileView, isAutoRaisedBoughtIn } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems, withSpecDetail } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
@@ -886,6 +886,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       poDefaultLines: poLinesFromPRItems(prItems, prSkus),
       canManagePO,
       isDept: isDeptRequisition(pr),
+      autoRaised: isAutoRaisedBoughtIn(pr),
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       returnAdvanceRoles: [],

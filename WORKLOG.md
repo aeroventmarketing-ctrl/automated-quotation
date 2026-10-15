@@ -1,3 +1,25 @@
+## 2026-10-15 · Bought-in requisition: say it was raised automatically
+
+The owner, on order 2026 - AFBM00003874S's purchase card ("Requested — Reyjellan Gil (Requestor)",
+"Plant Manager approved — awaiting purchase approval"): *"Admin or payment approver did not request
+this."*
+
+**What happened.** When payment is cleared on a bought-in order, `autoRaiseBoughtInRequisition` raises
+the Office requisition for the bought-in lines by itself — created already approved, under the name of
+whoever pressed "Payment cleared". Nobody requested it and no Plant Manager saw it, but the card read as
+if that person had requested it and the Plant Manager had approved it. The workflow itself was right:
+the next step really is the Payment Approver's "Approve purchase".
+
+**Fix (labels only).** `isAutoRaisedBoughtIn` (Office, kind department, note "Bought-in items for order
+…") marks these rows. Their trail's first line reads "Raised automatically when the payment was cleared
+— <name> (cleared by) · date" instead of "Requested — <name> (Requestor)", and the status reads
+"Bought-in items — awaiting purchase approval" instead of "Plant Manager approved — …". Every other
+requisition, and MRF-escalated ones, are unchanged. No steps, roles or gating changed.
+
+Rendered on the role harness as the Payment Approver, with a system-raised requisition on a bought-in
+order: the order page and the Purchasing page's Pending tab both read "Bought-in items — awaiting
+purchase approval" and "Raised automatically when the payment was cleared — Reyjellan Gil (cleared by)".
+
 ## 2026-10-15 · Admin: "Mark production finished" for the whole order
 
 The owner, on order 2026 - AFBM00003439A at "For JO creation": *"add an option that when pressed by
