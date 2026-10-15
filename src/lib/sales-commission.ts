@@ -139,11 +139,29 @@ const PESO_EPS = 0.005;
  * the same predicate the P&L and the Sales Summary use — do not swap it for a
  * name check on "EXCLUSIVE".
  *
- * Flat VAT-exempt lines (KDK / jet fans) carry no VAT and stay at face value.
- * Their share is pro-rated off the quote's own total, because `gross` here is the
- * payable total — already through the quote's mark-up / discount.
+ * Every line's VAT comes out, the flat-price ones too (KDK, Aerovent Jet Fan /
+ * Inline Duct Fan). The owner, 2026-10-15, on order 3289S: *"Gross Amount for
+ * 3289S is 71766.80 base should be 64,077.50 and commission should be 961.16"* —
+ * 71,766.80 ÷ 1.12. A flat line's price is VAT-INCLUSIVE: "flat" only means the
+ * quote never scales it by the VAT presentation (no ÷1.12 in exclusive mode, no
+ * 12% added on top), not that it carries no VAT. The BIR receipts, the P&L and
+ * the counter-sale net already take VAT out of the whole amount.
  */
 export function netOfVat(
+  q: { total: number | { toString(): string }; vatMode: string; classification?: unknown },
+  gross: number,
+  vatRate = config.vatRate,
+): number {
+  if (!vatModeChargesOutputVat(q.vatMode)) return round2(gross);
+  return round2(gross / (1 + vatRate));
+}
+
+/**
+ * The base before 2026-10-15, which kept flat-price lines at face value. A
+ * commission already marked PAID was paid on this, and keeps showing it — the
+ * owner chose "unpaid only" for the change.
+ */
+export function legacyNetOfVat(
   q: { total: number | { toString(): string }; vatMode: string; classification?: unknown },
   gross: number,
   vatRate = config.vatRate,
@@ -291,6 +309,11 @@ export interface CommissionDeal {
   gross: number;
   /** Rule 6's base: gross less VAT (= gross when the deal charged no output VAT). */
   net: number;
+  /**
+   * An order's base under today's rule and under the pre-2026-10-15 one. `net`
+   * is `legacy` once the row is PAID (what it was paid on), `current` otherwise.
+   */
+  nets?: { current: number; legacy: number };
   /** Whether VAT was actually deducted — false for a VAT-exclusive / zero-rated deal. */
   vatDeducted: boolean;
   collected: number;
@@ -615,7 +638,10 @@ export function withOverrides(
           salespersonName: headName,
           sourceSalespersonName: d.salespersonName,
           ratePct: OVERRIDE_RATE_PCT,
-          amount: overrideOn(d.net),
+          // Today's base — the rep's row may show the paid (older) one, but this
+          // row's own paid state is only known once its record is attached.
+          net: d.nets?.current ?? d.net,
+          amount: overrideOn(d.nets?.current ?? d.net),
           // The payout record is this row's own — never the rep's.
           paid: false, paidAt: null, paidByName: null, receivedAt: null, receivedByName: null, paymentProof: [], commissionId: null,
         });
@@ -779,8 +805,9 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     if (recognisedYMD < SALES_START_YMD) continue; // hidden, not deleted
 
     const gross = round2(payableTotal(q));
-    const net = netOfVat(q, gross);
     const record = payout.get(`q:${q.id}:base`);
+    const nets = { current: netOfVat(q, gross), legacy: legacyNetOfVat(q, gross) };
+    const net = record?.paid ? nets.legacy : nets.current;
     // Rule 7 — "File Documents-Close Order" is what closes the order, on both the
     // single and the multiple-batch path; its stamp dates it.
     const wf = readOrderWorkflow(q.classification);
@@ -805,6 +832,7 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
       basis: sale.arrangement === "terms" ? "po" : "payment",
       gross,
       net,
+      nets,
       vatDeducted: net < gross - PESO_EPS,
       collected: round2(collectedTotal(sale)),
       fullyPaid: false, // filled below (needs fullyPaidOn)
@@ -901,6 +929,11 @@ async function buildCommissionsUncached(salespersonId?: string): Promise<Commiss
     d.receivedByName = mine?.receivedByName ?? null;
     d.paymentProof = coerceProofDocs(mine?.paymentProof);
     d.commissionId = mine?.id ?? null;
+    // A paid override keeps the base it was paid on.
+    if (d.paid && d.nets) {
+      d.net = d.nets.legacy;
+      d.amount = overrideOn(d.net);
+    }
   }
 
   let months = groupByPersonMonth(withOverride);
