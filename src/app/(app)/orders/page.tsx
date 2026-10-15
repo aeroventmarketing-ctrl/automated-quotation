@@ -26,6 +26,7 @@ import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { formatAccessoriesJoNumber } from "@/lib/accessories-job-order";
 import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { OrdersTable } from "./orders-table";
+import { ackFormState } from "@/lib/ack-form";
 
 export const dynamic = "force-dynamic";
 
@@ -205,6 +206,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         blockedReason,
         awaiting: awaitingAll,
         awaitingNames,
+        // Acknowledgement Form (VAT-exclusive orders) — on the order or any batch.
+        ackForm: ackFormState(q.vatMode, sale.docs, wf.deliveryBatches),
+        nonVat: q.vatMode === "EXCLUSIVE",
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)

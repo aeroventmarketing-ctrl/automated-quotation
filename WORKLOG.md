@@ -1,3 +1,24 @@
+## 2026-10-15 · Orders: filter by Acknowledgement Form uploaded
+
+The owner, on the Orders list: *"in orders, list all order number that have been uploaded with
+acknowledgement form"*.
+
+The Acknowledgement Form is the `or_cr_af` closing-document slot on a **VAT-exclusive** order (on a
+VAT-inclusive order the same slot is the Collection Receipt). It is uploaded on the order, or on each
+batch of a multiple-batch delivery; the unsigned copy made when the delivery documents are prepared is
+`unsigned_or_cr_af`. `ackFormState` (`src/lib/ack-form.ts`, tested) reads all of these (ignoring
+cancelled batches).
+
+The Orders list gets a **Documents** filter: All orders / Acknowledgement Form uploaded / … — signed /
+… — not yet (VAT-exclusive orders without one), with the count of orders shown. Each order with one
+carries a badge under its number: "✓ Ack. Form" (signed) or "Ack. Form · unsigned". Read-only — no
+workflow change.
+
+Rendered on the role harness as admin: with a signed AF on one non-VAT order, an unsigned one on
+another, a third non-VAT order without one, and a VAT-inclusive order with a Collection Receipt —
+"uploaded" lists the first two, "signed" the first, "not yet" the third; the VAT-inclusive order is
+in none.
+
 ## 2026-10-15 · P&L: "Lines losing money" on Office, stricter bought-in cost matching
 
 The owner, on the Departmental P&L (Aug–Oct 2026: Office sales −₱16,127,879.00, total sales
