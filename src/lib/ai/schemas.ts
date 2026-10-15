@@ -155,3 +155,11 @@ export const bir2303ReadSchema = z.object({
 });
 
 export type Bir2303ReadResult = z.infer<typeof bir2303ReadSchema>;
+
+// --- Acknowledgement Form check (is the uploaded file really one?) ------------
+export const ackFormCheckSchema = z.object({
+  kind: z.string().nullable().default(null), // one of ACK_DOC_KINDS
+  titleSeen: z.string().nullable().default(null), // the printed title, e.g. "ACKNOWLEDGEMENT RECEIPT"
+  confidence: z.number().nullable().default(null), // 0..1
+  reason: z.string().nullable().default(null), // one short sentence
+});
