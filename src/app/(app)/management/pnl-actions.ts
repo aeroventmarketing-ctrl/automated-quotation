@@ -12,6 +12,9 @@ import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
+import { groupByPurchaseOrder, reconcile, reconSummary, type ReconRow, type ReconSummary } from "@/lib/expense-check-recon";
+import { coerceCheckDocs, effectiveCheckAmount } from "@/lib/voucher-check";
+import { coerceCashPayment } from "@/lib/cash-payment";
 import { getProducts } from "@/lib/product-catalog";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
 import { getSuppliers } from "@/lib/suppliers";
@@ -398,14 +401,17 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
   // Booked to the requesting department, net of VAT, on the cash-released date.
   const prs = await prisma.purchaseRequest.findMany({
     where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
-    select: { dept: true, po: true, chainLog: true },
+    select: { id: true, dept: true, po: true, chainLog: true },
   });
-  for (const pr of prs) {
+  // One per PURCHASE ORDER: a combined PO's requests all carry the whole PO, and
+  // summing them request by request counted it once per request.
+  for (const members of groupByPurchaseOrder(prs)) {
+    const pr = members.find((m) => PROD_DEPT_KEYS.has(m.dept as DeptKey));
+    if (!pr) continue;
     const releasedAt = coerceChainLog(pr.chainLog).release_cash?.at;
     if (!releasedAt) continue;
     if (!ymdInRange(manilaYMD(releasedAt), lo, hi)) continue;
     const dept = pr.dept as DeptKey;
-    if (!PROD_DEPT_KEYS.has(dept)) continue;
     const po = coercePurchaseOrder(pr.po);
     if (!po) continue;
     // VAT-inclusive supplier (EWT-capable) → strip VAT to net and credit input
@@ -814,11 +820,13 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { id: true, dept: true, po: true, chainLog: true },
   });
-  for (const pr of prs) {
+  for (const members of groupByPurchaseOrder(prs)) {
+    // One per purchase order — see the summary loop above.
+    const pr = members.find((m) => PROD_DEPT_KEYS.has(m.dept as DeptKey));
+    if (!pr) continue;
     const releasedAt = coerceChainLog(pr.chainLog).release_cash?.at;
     if (!releasedAt || !ymdInRange(manilaYMD(releasedAt), lo, hi)) continue;
     const dept = pr.dept as DeptKey;
-    if (!PROD_DEPT_KEYS.has(dept)) continue;
     const po = coercePurchaseOrder(pr.po);
     if (!po) continue;
     const incl = supplierVatInclusive(po.supplier.company);
@@ -956,21 +964,26 @@ export async function getExpensesReport(from: string, to: string): Promise<Expen
     where: { dept: { not: null }, status: { not: "CANCELLED" }, ...(cutoff ? { createdAt: cutoff } : {}) },
     select: { id: true, dept: true, po: true, chainLog: true, quotationId: true, createdByName: true },
   });
-  for (const pr of prs) {
+  for (const members of groupByPurchaseOrder(prs)) {
+    // One record per purchase order: a combined PO's requests each carry the
+    // whole PO, so listing them request by request repeated its full amount.
+    const pr = members.find((m) => PROD_DEPT_KEYS.has(m.dept as DeptKey));
+    if (!pr) continue;
     const log = coerceChainLog(pr.chainLog);
     const releasedAt = log.release_cash?.at;
     if (!releasedAt || !ymdInRange(manilaYMD(releasedAt), lo, hi)) continue;
     const dept = pr.dept as DeptKey;
-    if (!PROD_DEPT_KEYS.has(dept)) continue;
     const po = coercePurchaseOrder(pr.po);
     if (!po) continue;
+    const otherDepts = [...new Set(members.map((m) => m.dept).filter((d): d is string => !!d && d !== dept))];
     const incl = supplierVatInclusive(po.supplier.company);
     const gross = poTotals(po).total;
     const net = incl ? round2(gross / (1 + VAT_RATE)) : round2(gross);
     records.push({
       id: `po-${pr.id}`, date: manilaYMD(releasedAt), source: "Purchase order", ref: po.poNumber || "—",
       dept, deptLabel: DEPT_LABEL[dept], who: log.release_cash?.byName || pr.createdByName || "—",
-      detail: po.supplier.company || "", amount: net,
+      detail: (po.supplier.company || "") + (members.length > 1 ? ` · combined PO, ${members.length} requests${otherDepts.length ? ` (also ${otherDepts.map(deptLabelOf).join(", ")})` : ""}` : ""),
+      amount: net,
       href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
     });
   }
@@ -1035,4 +1048,74 @@ export async function getExpensesReport(from: string, to: string): Promise<Expen
   records.sort((a, b) => b.date.localeCompare(a.date) || a.dept.localeCompare(b.dept));
   const total = round2(records.reduce((s, r) => s + r.amount, 0));
   return { from: lo, to: hi, records, total };
+}
+
+export interface ExpenseCheckRecon {
+  from: string;
+  to: string;
+  rows: ReconRow[];
+  summary: ReconSummary;
+}
+
+/**
+ * Expenses ↔ Checks reconciliation — every purchase order whose cash was
+ * released in the range (the date Expenses Records books it on), one row per
+ * PO, with what Expenses Records books, the VAT, the EWT, what the check should
+ * say and what the check photo says. See `lib/expense-check-recon`.
+ *
+ * Every department's POs are listed, not only the production ones Expenses
+ * Records books, so a check for an Office PO is reconciled too; `inExpenses`
+ * says which rows Expenses Records carries.
+ */
+export async function getExpenseCheckRecon(from: string, to: string): Promise<ExpenseCheckRecon> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "accounting" as WorkflowRoleKey))) {
+    throw new Error("Only Accounting or an admin can view the reconciliation.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error("Invalid date range.");
+  const [lo0, hi] = from <= to ? [from, to] : [to, from];
+  const goLiveFloor = await goLiveFloorYMD();
+  const lo = goLiveFloor && goLiveFloor > lo0 ? goLiveFloor : lo0;
+  const { supplierVatInclusive } = await buildCostResolvers();
+  const cutoff = testModeCreatedAtFilter(await getTestMode());
+  const deptLabelOf = (d: string | null) => (d && d in DEPT_LABEL ? DEPT_LABEL[d as DeptKey] : d ? d[0].toUpperCase() + d.slice(1) : "—");
+
+  const prs = await prisma.purchaseRequest.findMany({
+    where: { status: { notIn: ["CANCELLED", "REJECTED"] }, po: { not: Prisma.DbNull }, ...(cutoff ? { createdAt: cutoff } : {}) },
+    select: { id: true, dept: true, po: true, chainLog: true, quotationId: true, voucherCheckDocs: true, cashPayment: true },
+  });
+
+  const rows: ReconRow[] = [];
+  for (const members of groupByPurchaseOrder(prs)) {
+    // Booked under the same request Expenses Records uses; else the first.
+    const pr = members.find((m) => PROD_DEPT_KEYS.has(m.dept as DeptKey)) ?? members[0];
+    const releasedAt = coerceChainLog(pr.chainLog).release_cash?.at;
+    if (!releasedAt) continue;
+    const releasedYMD = manilaYMD(releasedAt);
+    if (!ymdInRange(releasedYMD, lo, hi)) continue;
+    const po = coercePurchaseOrder(pr.po);
+    if (!po) continue;
+    const totals = poTotals(po);
+    const depts = [...new Set([pr.dept, ...members.map((m) => m.dept)].filter((d): d is string => !!d))];
+    rows.push(reconcile({
+      key: pr.id,
+      poNumber: po.poNumber || "—",
+      supplier: po.supplier.company || "",
+      deptLabels: depts.map(deptLabelOf),
+      inExpenses: PROD_DEPT_KEYS.has(pr.dept as DeptKey),
+      releasedYMD,
+      gross: totals.total,
+      ewt: totals.ewt,
+      vatInclusive: supplierVatInclusive(po.supplier.company),
+      checkAmounts: members.flatMap((m) => coerceCheckDocs(m.voucherCheckDocs).map((d) => effectiveCheckAmount(d))),
+      paidInCash: members.some((m) => !!coerceCashPayment(m.cashPayment)),
+      requests: members.length,
+      href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",
+    }, VAT_RATE));
+  }
+  // Discrepancies first, then by release date (newest first).
+  const rank = { mismatch: 0, unread: 1, "no-check": 2, match: 3, cash: 4 } as const;
+  rows.sort((a, b) => rank[a.status] - rank[b.status] || b.releasedYMD.localeCompare(a.releasedYMD) || a.poNumber.localeCompare(b.poNumber));
+  return { from: lo, to: hi, rows, summary: reconSummary(rows) };
 }

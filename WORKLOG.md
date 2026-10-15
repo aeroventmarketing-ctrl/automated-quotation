@@ -1,3 +1,34 @@
+## 2026-10-15 · Expenses ↔ Checks reconciliation; combined POs counted once in Expenses Records
+
+The owner, comparing PO-AFBM20260000607 on Expenses Records (₱79,337.70) with Check monitoring
+(₱88,064.84): *"please check amount is different in expenses and check monitoring. Check and compare
+other expenses and check for discrepancies"*, then *"yes please build the reconciliation view"*.
+
+**Why the two differ.** They are the same purchase on two bases. Expenses Records books a PO net of
+VAT (total ÷ 1.12 for a VAT-registered supplier: 88,858.22 ÷ 1.12 = 79,337.70). The check pays the
+supplier the total less EWT (88,858.22 − 793.38 = 88,064.84). The only real discrepancy is a check
+that isn't total − EWT.
+
+**The view.** It is a new "Expenses ↔ Checks reconciliation" card beside Expenses Records, on the
+Management Dashboard (admin) and on Accounting's My Dashboard. It has one row per purchase order whose
+cash was released in the range. Each row shows the PO total, the expense (net of VAT), the VAT, the
+EWT, what the check should say (total − EWT) and what the check photo says (or the typed correction).
+It also shows the difference and a status: Matches, Check differs (more than ₱1 out, red, listed
+first), Check not read, No check yet, or Paid in cash. You can set the From/To dates, search, and tick
+"Discrepancies only". Office POs are listed too, marked "not in Expenses Records". Pure logic is in
+`src/lib/expense-check-recon.ts` (tested); the read is `getExpenseCheckRecon` (Accounting / admin).
+
+**Bug found while comparing: combined POs were counted several times.** A combined PO's requests each
+carry the whole PO. Expenses Records, the P&L summary and the P&L detail summed them request by
+request, so a 3-request combined PO was booked three times. All three now group by purchase order
+(same key as Check monitoring) and book it once, under its first production-department request.
+Expenses Records' detail reads "· combined PO, N requests (also <depts>)". The Phase 4 cash-voucher
+tally was not touched.
+
+Rendered on the role harness: as Accounting (My Dashboard) and admin (Management), the card shows
+mismatched checks in red first, a combined PO as one row "combined · 3 requests", and Expenses Records
+lists that combined PO once. The Purchaser does not see the card.
+
 ## 2026-10-15 · Bought-in requisition: say it was raised automatically
 
 The owner, on order 2026 - AFBM00003874S's purchase card ("Requested — Reyjellan Gil (Requestor)",
