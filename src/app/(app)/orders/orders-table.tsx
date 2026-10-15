@@ -100,7 +100,7 @@ export function OrdersTable({
   initialStageLabel?: string;
   initialDept?: string;
   initialDeptLabel?: string;
-  /** Accounting / Payment Approver / admin: may run the AI Acknowledgement Form check. */
+  /** Admin / Payment Approver: sees the Acknowledgement Form badges and filter, and may run the AI check. */
   canVerifyAck?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -255,12 +255,12 @@ export function OrdersTable({
             {SORT_OPTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        {canVerifyAck && <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
           Documents
           <select value={docFilter} onChange={(e) => setDocFilter(e.target.value as DocFilter)} className="h-8 rounded-md border bg-background px-2 text-sm text-foreground">
             {DOC_FILTERS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
           </select>
-        </label>
+        </label>}
         <button
           type="button"
           onClick={() => setDir((d) => (d === "asc" ? "desc" : "asc"))}
@@ -342,7 +342,7 @@ function GroupRows({ groupKey, rows, showHeader, currency, progressHidden, restr
         <TableRow key={o.id}>
           <TableCell>
             <Link href={`/quotations/${o.id}`} className="font-medium text-primary hover:underline">{o.quoteNumber}</Link>
-            {o.ackForm && (
+            {canVerifyAck && o.ackForm && (
               <AckFormBadge orderId={o.id} state={o.ackForm} ai={o.ackAi ?? null} files={o.ackFiles ?? []} canVerify={canVerifyAck} onChecked={onChecked} />
             )}
           </TableCell>

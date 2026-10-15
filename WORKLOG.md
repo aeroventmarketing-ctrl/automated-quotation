@@ -1,3 +1,15 @@
+## 2026-10-15 · Acknowledgement Form badges: admin and Payment Approver only
+
+The owner: *"only admin and payment approver can see the badge, no one else"*.
+
+The Ack. Form badge, the AI verdict badge, the Orders list's **Documents** filter and the "Check with
+AI" buttons now show only for an admin or the Payment Approver; for everyone else the page doesn't
+even send the Acknowledgement Form data. `/api/ai/verify-ack-form` refuses Accounting now too (was
+Accounting / Payment Approver / admin).
+
+Rendered on the role harness: admin and Payment Approver see the filter, both badges and the button;
+Accounting and Sales see none of them and the route answers 403.
+
 ## 2026-10-15 · Acknowledgement Form: AI check that the upload really is one
 
 The owner: *"use the AI reading capacity to verify if the uploaded image is an acknowledgement form or

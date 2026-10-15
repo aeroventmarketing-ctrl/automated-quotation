@@ -119,6 +119,9 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   // Purchaser view: swap the money columns (Value/Collected/Balance) for the
   // Engineer-generated Job Order numbers. Admins keep the full financial view.
   const isPurchaserView = !adminViewer && viewer != null && userHasWorkflowRole(assignments, viewer.id, "purchaser");
+  // Acknowledgement Form badges, filter and AI check: admin and the Payment
+  // Approver only — *"only admin and payment approver can see the badge, no one else"*.
+  const ackVisible = adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver"));
 
   // Who each bought-in order at "For PO creation" is really waiting on — its
   // purchase request's next step (one small query for all of them).
@@ -207,10 +210,11 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         awaiting: awaitingAll,
         awaitingNames,
         // Acknowledgement Form (VAT-exclusive orders) — on the order or any batch.
-        ackForm: ackFormState(q.vatMode, sale.docs, wf.deliveryBatches),
+        ackForm: ackVisible ? ackFormState(q.vatMode, sale.docs, wf.deliveryBatches) : null,
         nonVat: q.vatMode === "EXCLUSIVE",
         // Each Acknowledgement Form file with the AI's verdict on it, if checked.
         ...(() => {
+          if (!ackVisible) return { ackFiles: [], ackAi: null };
           const files = ackFormFiles(q.vatMode, sale.docs, wf.deliveryBatches);
           const checks = coerceAckChecks((q.classification as Record<string, unknown> | null)?.ackFormChecks);
           return {
@@ -270,7 +274,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
               progressHidden={progressHidden}
               restricted={restricted}
               isPurchaser={isPurchaserView}
-              canVerifyAck={adminViewer || (viewer != null && (userHasWorkflowRole(assignments, viewer.id, "accounting") || userHasWorkflowRole(assignments, viewer.id, "payment_approver")))}
+              canVerifyAck={ackVisible}
               initialStage={stageParam}
               initialStageLabel={stageParam ? stageLabel(stageParam) : undefined}
               initialDept={deptParam}

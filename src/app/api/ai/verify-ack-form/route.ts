@@ -64,8 +64,8 @@ export async function POST(req: NextRequest) {
   const roles = await getWorkflowRoles();
   const admin = isAdmin(user);
   const isPaymentApprover = userHasWorkflowRole(roles, user.id, "payment_approver");
-  if (!(admin || isPaymentApprover || userHasWorkflowRole(roles, user.id, "accounting"))) {
-    return NextResponse.json({ error: "Only Accounting, the Payment Approver or an admin can run this check." }, { status: 403 });
+  if (!(admin || isPaymentApprover)) {
+    return NextResponse.json({ error: "Only the Payment Approver or an admin can run this check." }, { status: 403 });
   }
 
   const quote = await prisma.quotation.findUnique({
