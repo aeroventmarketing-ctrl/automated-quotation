@@ -1,3 +1,23 @@
+## 2026-10-15 · Admin: "Mark production finished" for the whole order
+
+The owner, on order 2026 - AFBM00003439A at "For JO creation": *"add an option that when pressed by
+admin the production will be Mark Finished"*. (Phase 2 is frozen; this change was asked for — and so
+approved — by the owner in that request.)
+
+**On the Phase 2 card**, for an admin only, while the order is at For JO creation / JO released / JO
+Received / In Production: a **Mark production finished** button (with a confirmation that says how many
+job orders it will close). `adminFinishProduction` closes every job order not yet finished (stamped
+"<name> (admin)", start time filled if it never started), moves the stage to **Production finished**
+and records the stamp `production_finished_admin`; the card then shows "✓ Production marked finished
+by admin — name, time". From there the order carries on as normal: Sales notifies the client (Phase
+5). Server-side it refuses anyone but an admin and any stage outside Phase 2; an admin rollback undoes
+it as for any stage.
+
+Rendered on the role harness: as an Engineer the button is not shown. As admin on an order at For JO
+creation with no job orders → "Production finished", "Notify client the order is ready · Sales";
+on an order In Production with Fans in production and Duct finished → Fans closed as "Admin Ana
+(admin)", Duct untouched, same next step; the card shows the admin stamp and the button is gone.
+
 ## 2026-10-15 · Pressurization: basement levels
 
 The owner, reading the user guide: *"If there is a basement. Should we include basement in the floor
