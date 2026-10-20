@@ -14,6 +14,7 @@ import { coerceChainLog } from "@/lib/purchase-chain-row";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { groupByPurchaseOrder, reconcile, reconSummary, type ReconRow, type ReconSummary } from "@/lib/expense-check-recon";
 import { coerceCheckDocs, effectiveCheckAmount } from "@/lib/voucher-check";
+import { distinctChecks } from "@/lib/check-monitor";
 import { coerceCashPayment } from "@/lib/cash-payment";
 import { getProducts } from "@/lib/product-catalog";
 import { getOfficeResaleProductIds } from "@/lib/office-resale";
@@ -1130,7 +1131,8 @@ export async function getExpenseCheckRecon(from: string, to: string): Promise<Ex
       gross: totals.total,
       ewt: totals.ewt,
       vatInclusive: supplierVatInclusive(po.supplier.company),
-      checkAmounts: members.flatMap((m) => coerceCheckDocs(m.voucherCheckDocs).map((d) => effectiveCheckAmount(d))),
+      // One amount per CHECK: the same check attached to two members is one check.
+      checkAmounts: distinctChecks(members.flatMap((m) => coerceCheckDocs(m.voucherCheckDocs).map((doc) => ({ doc })))).map(({ doc }) => effectiveCheckAmount(doc)),
       paidInCash: members.some((m) => !!coerceCashPayment(m.cashPayment)),
       requests: members.length,
       href: pr.quotationId ? `/orders/${pr.quotationId}` : "/purchasing",

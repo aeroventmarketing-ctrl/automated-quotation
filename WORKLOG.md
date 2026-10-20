@@ -1,3 +1,27 @@
+## 2026-10-20 · Check monitoring: one check attached to two requests of a combined PO counts once
+
+The owner, searching Check monitoring for ₱5,834.44: *"found a duplicate in check monitoring"* —
+PO-AFBM2026000762 (VIS Industrial, a combined PO of three requests) on Upcoming as check 0000486775
+"Overdue — not cleared", and "1 more on Cleared".
+
+**Cause.** The same check had been attached to two of the combined PO's requests. The register makes a
+row per attached photo, so the one check was two records: one copy was marked cleared, the other stayed
+overdue — alarming the admin, counted in Overdue / Needs attention, and in "Still to clear" and the Cash
+Position's payables, as ₱5,834.44 still to pay on a check that had already cleared.
+
+**Fix.** `distinctChecks` (`src/lib/check-monitor.ts`): within one purchase order, copies carrying the
+same check number (normalised, so "0000486775" = "486775") are one check. The copy that speaks for it
+is the most settled — cleared beats not cleared, then one a person has corrected or moved. Checks whose
+number couldn't be read are never merged; two different checks on one PO (a split payment) stay two
+rows. `buildCheckWatch` uses it, so the register, its tiles, the Excel/PDF exports, the Management and
+My Dashboard alarms and the Cash Position all count the check once. The row says "attached 2× on this
+PO — counted once" so someone can remove the extra copy. The Expenses ↔ Checks reconciliation sums
+distinct checks too (it would have read 2 × 5,834.44 against a 5,834.44 PO).
+
+Two test fixtures had several checks on one PO all sharing the default check number; each now has its
+own number. Rendered on the role harness with PO-762's check attached to cmb-a (not cleared) and cmb-b
+(cleared): Upcoming has no row for ₱5,834.44, Cleared has one, "attached 2× on this PO — counted once".
+
 ## 2026-10-15 · Acknowledgement Form badges: admin and Payment Approver only
 
 The owner: *"only admin and payment approver can see the badge, no one else"*.
