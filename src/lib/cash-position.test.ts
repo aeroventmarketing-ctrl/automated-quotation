@@ -98,8 +98,10 @@ describe("the two figures the register supplies", () => {
     clearingYMD: clearing, amount, amountWords: null, bank: null,
     confidence: 0.95, warnings: [], issues: [], readByName: "M", readAt: "",
   });
+  // Each its own check number: the same number on one PO is one check.
+  let nextNo = 486800;
   const doc = (path: string, clearing: string | null, amount: number, over: Partial<CheckDoc> = {}): CheckDoc => ({
-    path, name: "c.jpg", uploadedAt: "", uploadedByName: "M", read: read(clearing, amount), ...over,
+    path, name: "c.jpg", uploadedAt: "", uploadedByName: "M", read: { ...read(clearing, amount), checkNo: `0000${nextNo++}` }, ...over,
   });
   const helpers = {
     coerceDocs: (v: unknown) => v as CheckDoc[],

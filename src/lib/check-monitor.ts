@@ -212,6 +212,48 @@ export interface CheckWatchRow {
   form: "PDC" | "Check" | "Cash";
   /** Why a date was moved, or the note left when it cleared. */
   remarks: string | null;
+  /**
+   * How many times this one check is attached across the PO's requests, when
+   * more than once. See `distinctChecks`.
+   */
+  copies?: number;
+}
+
+/**
+ * One entry per CHECK, not per attached photo.
+ *
+ * The owner, searching Check monitoring for ₱5,834.44: *"found a duplicate in
+ * check monitoring"* — PO-AFBM2026000762 on Upcoming ("Overdue — not cleared")
+ * AND on Cleared. A combined PO is several requests, and the same check
+ * (0000486775) had been attached to two of them. Each copy is its own record,
+ * so clearing one left the other overdue, alarming the admin and counted in
+ * "Still to clear" — a payable that had already been paid.
+ *
+ * A check number is printed once and spent once, so within ONE purchase order
+ * two copies carrying the same number are the same check. The copy that speaks
+ * for it is the most settled one: cleared beats not cleared, then a copy a
+ * person has worked on (a corrected or moved date, a corrected amount or
+ * number), then the order given. Copies whose number couldn't be read are
+ * never merged — nothing says they are the same check.
+ */
+export function distinctChecks<T extends { doc: CheckDoc }>(items: T[]): (T & { copies: number })[] {
+  const weight = (d: CheckDoc) =>
+    (d.cleared ? 100 : 0) + (d.dateFix || d.reschedules?.length ? 10 : 0) + (d.amountFix || d.checkNoFix ? 1 : 0);
+  const out: (T & { copies: number })[] = [];
+  const at = new Map<string, number>();
+  for (const it of items) {
+    const no = effectiveCheckNo(it.doc);
+    const key = no ? normalizeCheckNo(no) : "";
+    const i = key ? at.get(key) : undefined;
+    if (i === undefined) {
+      if (key) at.set(key, out.length);
+      out.push({ ...it, copies: 1 });
+      continue;
+    }
+    const kept = out[i];
+    out[i] = weight(it.doc) > weight(kept.doc) ? { ...it, copies: kept.copies + 1 } : { ...kept, copies: kept.copies + 1 };
+  }
+  return out;
 }
 
 /** The PurchaseRequest fields this reads — a subset, so callers can select narrowly. */
@@ -319,8 +361,12 @@ export function buildCheckWatch(
     const po = helpers.poOf(pr.po);
     // Every photo on the PO, whichever member holds it — and each keeps its own
     // member's id, so "attach"/"remove" still address the row that owns the file.
-    const docs = members.flatMap((m) =>
-      helpers.coerceDocs(m.voucherCheckDocs).map((doc) => ({ doc, owner: m })),
+    // …and the same check attached to two of its members is ONE check — see
+    // `distinctChecks`. The anchor's copies go first, so it wins a tie.
+    const docs = distinctChecks(
+      [pr, ...members.filter((m) => m !== pr)].flatMap((m) =>
+        helpers.coerceDocs(m.voucherCheckDocs).map((doc) => ({ doc, owner: m })),
+      ),
     );
 
     // A payable PO with no photo yet — the owner's *"For Payment"* row. It
@@ -390,7 +436,7 @@ export function buildCheckWatch(
       continue;
     }
 
-    for (const { doc, owner } of docs) {
+    for (const { doc, owner, copies } of docs) {
       const due = effectiveClearingYMD(doc);
       // What the check says — a person's correction if there was one. Comparing
       // the DUE date against the AI's discarded answer is what left the register
@@ -440,6 +486,7 @@ export function buildCheckWatch(
         // The register's Remarks column, filled with what the system actually
         // knows: why a date moved, or the note left when it cleared.
         remarks: doc.cleared?.note ?? (moves ? doc.reschedules![moves - 1].reason || null : null),
+        ...(copies > 1 ? { copies } : {}),
       });
       owners.push(ownerOf(owner, po?.poNumber ?? null));
     }

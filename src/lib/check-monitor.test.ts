@@ -322,9 +322,11 @@ describe("a clearing date nobody confirmed", () => {
 
   it("counts them, so a person knows how much of the register to check", () => {
     const rows = buildCheckWatch([
+      // Three different checks — the same number on one PO is one check (see
+      // "one check attached to two requests of a combined PO").
       { ...pr([doc()]), id: "ok" },
-      { ...pr([doc({ clearingYMD: "2026-07-17", dateBoxes: null })]), id: "bad1" },
-      { ...pr([doc({ clearingYMD: "2026-08-01", dateBoxes: null })]), id: "bad2" },
+      { ...pr([doc({ clearingYMD: "2026-07-17", dateBoxes: null, checkNo: "0000486710" })]), id: "bad1" },
+      { ...pr([doc({ clearingYMD: "2026-08-01", dateBoxes: null, checkNo: "0000486711" })]), id: "bad2" },
     ], TODAY, helpers);
     expect(checkWatchSummary(rows).unverifiedDates).toBe(2);
   });
@@ -771,5 +773,56 @@ describe("a purchase settled in cash", () => {
     const [row] = buildCheckWatch([pr("529", [])], TODAY, base);
     expect(row.state).toBe("awaiting");
     expect(row.form).not.toBe("Cash");
+  });
+});
+
+/**
+ * The owner, searching ₱5,834.44: *"found a duplicate in check monitoring"* —
+ * PO-AFBM2026000762 (a combined PO of three requests) on Upcoming as "Overdue —
+ * not cleared" AND on Cleared: check 0000486775 attached to two of its requests.
+ */
+describe("one check attached to two requests of a combined PO", () => {
+  const helpers = {
+    coerceDocs: (v: unknown) => v as CheckDoc[],
+    poOf: (v: unknown) => v as { poNumber: string; supplierCompany: string; date: string | null; net: number } | null,
+    batchIdOf: () => "batch-762",
+  };
+  const po = { poNumber: "PO-AFBM2026000762", supplierCompany: "VIS INDUSTRIAL CORP.", date: "2026-09-16", net: 5834.44 };
+  const check = (path: string, over: Partial<CheckDoc> = {}) =>
+    doc({ path, read: { ...doc().read!, checkNo: "0000486775", amount: 5834.44, clearingYMD: "2026-08-31" }, ...over });
+  const member = (id: string, docs: CheckDoc[]) => ({ id, quotationId: null, po, voucherCheckDocs: docs, status: "COMPLETED" });
+
+  it("is one row, cleared, when either copy was cleared", () => {
+    const rows = buildCheckWatch([
+      member("cmb-a", [check("a1")]),
+      member("cmb-b", [check("b1", { cleared: { on: "2026-09-01", byName: "Michelle", at: "" } })]),
+      member("cmb-c", []),
+    ], TODAY, helpers);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ state: "cleared", path: "b1", prId: "cmb-b", copies: 2 });
+    const s = checkWatchSummary(rows);
+    expect(s.open).toBe(0);
+    expect(s.overdue).toBe(0);
+  });
+
+  it("the same number however it was punctuated", () => {
+    const rows = buildCheckWatch([
+      member("cmb-a", [check("a1")]),
+      member("cmb-b", [check("b1", { checkNoFix: { checkNo: "486775", byName: "M", at: "" } as CheckDoc["checkNoFix"] })]),
+    ], TODAY, helpers);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("two DIFFERENT checks on one PO (a split payment) stay two rows", () => {
+    const other = doc({ path: "b1", read: { ...doc().read!, checkNo: "0000486776", amount: 1000, clearingYMD: "2026-09-10" } });
+    const rows = buildCheckWatch([member("cmb-a", [check("a1")]), member("cmb-b", [other])], TODAY, helpers);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.copies === undefined)).toBe(true);
+  });
+
+  it("checks whose number couldn't be read are never merged", () => {
+    const unread = (p: string) => doc({ path: p, read: { ...doc().read!, checkNo: null } });
+    const rows = buildCheckWatch([member("cmb-a", [unread("a1")]), member("cmb-b", [unread("b1")])], TODAY, helpers);
+    expect(rows).toHaveLength(2);
   });
 });

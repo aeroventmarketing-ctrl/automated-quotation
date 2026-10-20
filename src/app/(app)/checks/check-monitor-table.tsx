@@ -463,6 +463,16 @@ export function CheckMonitor({
                           on one check when it was read left the other looking
                           clean, which is the screen the owner was sent here by.
                           Named, so the reader can go and open the other one. */}
+                      {/* The same check attached to more than one of a combined
+                          PO's requests — shown once, as the most settled copy. */}
+                      {(r.copies ?? 1) > 1 && (
+                        <div
+                          className="mt-0.5 text-xs font-normal text-amber-700 dark:text-amber-400"
+                          title="The same check is attached to more than one request of this combined PO. It is counted once; remove the extra copy on the PO card."
+                        >
+                          attached {r.copies}× on this PO — counted once
+                        </div>
+                      )}
                       {r.duplicateOf.length > 0 && (
                         <div
                           className="mt-0.5 flex items-start gap-1 text-xs font-medium text-destructive"
