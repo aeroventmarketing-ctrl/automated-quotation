@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil, Eye } from "lucide-react";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
+import { StockOnHand } from "@/components/stock-on-hand";
+import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApproverHighlight } from "@/components/approver-highlight";
@@ -131,6 +133,7 @@ export function CombinedPurchasing({
   admin = false,
   showAmounts = true,
   showSupplier = true,
+  showOnHand = false,
   highlightId,
 }: {
   combinable: CombinableItem[];
@@ -148,6 +151,14 @@ export function CombinedPurchasing({
   admin?: boolean;
   showAmounts?: boolean;
   showSupplier?: boolean;
+  /**
+   * "N in stock" beside each line of a combined PO, as on a single request's
+   * card. The owner: *"word 0 pc in stock not showing when PO is combined …
+   * Stock availability must show in Purchasing pending, approved and budgeted
+   * tab."* The single-request card had it since 2026-10-07; the combined card
+   * never did.
+   */
+  showOnHand?: boolean;
   /** A combined-PO anchor id to scroll to / highlight (deep-link from a notification). */
   highlightId?: string;
 }) {
@@ -200,7 +211,7 @@ export function CombinedPurchasing({
       {/* Existing combined POs */}
       {batches.map((b) => (
         <div key={b.anchorId} id={`req-${b.anchorId}`} className={`scroll-mt-24 rounded-lg ${highlightId === b.anchorId ? "ring-2 ring-primary ring-offset-2" : ""}`}>
-          <BatchCardView batch={b} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+          <BatchCardView batch={b} showOnHand={showOnHand} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
         </div>
       ))}
 
@@ -288,10 +299,12 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true }: { batch: BatchCard; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true, showOnHand = false }: { batch: BatchCard; showOnHand?: boolean; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
   /** Name → item code, for the SKU beside each PO line ON SCREEN. The supplier's
    *  copy is built from `line.description` alone and never sees it. */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
+  /** Code / name → available quantity — the same index the single-request card uses. */
+  const onHandIndex = useMemo(() => buildOnHandIndex(showOnHand ? stockItems : []), [showOnHand, stockItems]);
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -399,7 +412,11 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           <tbody>
             {batch.lines.map((l, i) => (
               <tr key={i} className="border-b last:border-0">
-                <td className="py-1 pr-2">{l.description}<ItemSku code={skuFor(l.description, skuIndex)} /></td>
+                <td className="py-1 pr-2">
+                  {l.description}
+                  <ItemSku code={skuFor(l.description, skuIndex)} />
+                  {showOnHand && <StockOnHand on={onHandFor(l.description, skuFor(l.description, skuIndex), onHandIndex)} />}
+                </td>
                 <td className="py-1 px-1 text-right tabular-nums">{[l.qty, l.unit].filter(Boolean).join(" ")}</td>
                 {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>}
                 {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{poLineAmount(l) ? formatCurrency(poLineAmount(l), "PHP") : "—"}</td>}

@@ -1,3 +1,24 @@
+## 2026-10-21 · "N in stock" on combined POs, and on the Budgeted tab
+
+The owner, comparing a single request (MRF #0514, "VIBRATION ISOLATOR … · SKU CAT00250 · 0 pc in
+stock") with a combined PO: *"word 0 pc in stock not showing when PO is combined. This issue was
+already resolved before but silently failed. Stock availability must show in Purchasing pending,
+approved and budgeted tab."*
+
+**Why it was missing.** The 2026-10-07 change put the badge on `PurchasingChain` — the single-request
+card — only. A combined PO is drawn by a different component (`BatchCardView` in
+`combined-purchasing.tsx`), which showed the SKU but never got the badge, so every request that was
+combined into a PO lost its stock figure. And the badge was limited to Pending and Approved.
+
+**Fix.** `BatchCardView` builds the same `buildOnHandIndex` from the same inventory list and puts the
+same `StockOnHand` badge (green "N in stock", red "0 … in stock", grey "Not in inventory") beside each
+PO line, matched by its SKU then name. `showOnHand` is now on for **Pending, Approved and Budgeted**,
+for single requests and combined POs alike; Rejected and Cancelled stay without.
+
+Rendered on the role harness as the Purchaser: combined PO-AFBM2026000762 (GI SHEET 24GA, 50 in the
+warehouse) shows "SKU 10002 · 50 pc in stock" on Budgeted, the combined PO-770 the same on Approved;
+Budgeted single requests now carry badges too; Rejected none.
+
 ## 2026-10-21 · Bought-in orders: nothing requested automatically — the Purchaser requests the items
 
 The owner, on order 2026 - AFBM00003963J's Office request for 24 Spring Vibration Isolators ("Raised
