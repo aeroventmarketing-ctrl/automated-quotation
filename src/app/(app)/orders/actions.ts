@@ -65,6 +65,7 @@ import { unknownCatalogueItems, unknownItemsMessage } from "@/lib/catalogue-item
 import { saleFromClassification, docCheckMissing, closeDocsState, afterPaymentDocTypes, plantDocTypes, plantCloseState, type SaleDoc, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { orderBoughtInLines, isBoughtInOnlyOrder, isStockOnlyOrder } from "@/lib/department-pnl";
+import { BOUGHT_IN_REQUEST_NOTE } from "@/lib/purchase-chain-row";
 import {
   MB_DELIVERED_STEP,
   MB_FINAL_STEP,
@@ -240,8 +241,9 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
 
   // When payment is cleared (order → "For JO creation"), auto-generate the job
   // orders from the quotation lines so the engineer only reviews/edits/approves.
-  // A fully bought-in order has none — instead it files the supplier requisition
-  // ("Clear payment & create PO") so the Purchaser can prepare the PO.
+  // A fully bought-in order has none. It used to file the supplier requisition
+  // here as well; the owner: *"System must not automatically request any
+  // material."* The Purchaser now requests the items — `requestBoughtInItems`.
   const boughtInOnly = isBoughtInOnlyOrder(quote.items);
   // A from-stock order (in-house duct hardware, nothing fabricated / bought-in)
   // generates no job orders either — it's released from stock in Phase 2 instead.
@@ -254,9 +256,6 @@ export async function advanceOrderStage(quotationId: string, step: OrderStepKey)
     where: { id: quotationId },
     data: { classification: { ...cls, workflow } as unknown as Prisma.InputJsonObject },
   });
-  if (step === "payment_cleared" && boughtInOnly) {
-    await autoRaiseBoughtInRequisition(quotationId, quote.quoteNumber, quote.items, user);
-  }
   await logActivity(user, {
     action: "order.stage.advance",
     category: "order",
@@ -1404,26 +1403,101 @@ export async function createDepartmentRequisition(
 }
 
 /**
- * Raise a supplier requisition (→ PO) for an order's BOUGHT-IN products — the
- * "buy" equivalent of the auto job orders for fabricated items. Pulls only the
- * bought-in product lines (fabricated items and typed service / charges are
- * excluded), links the requisition to the order, and files it as an Office
- * requisition (APPROVED) so the Purchaser can prepare the PO directly.
+ * The Purchaser requests a bought-in order's items — the "buy" equivalent of the
+ * job orders for fabricated items.
+ *
+ * The owner: *"System is automatically raising a material request when payment
+ * was cleared by Payment Approver/admin. System must not automatically request
+ * any material."* — then: the Purchaser presses a button, and the request goes
+ * to the Payment Approver only. So nothing is raised when payment clears; on a
+ * bought-in order at "For PO creation" the Purchaser (or an admin) presses
+ * "Request bought-in items" on the order.
+ *
+ * It pulls only the bought-in product lines (fabricated items and typed service
+ * / charges are excluded) with the specification and supplier grid price, links
+ * the request to the order, and files it as an Office requisition already past
+ * the Plant Manager (APPROVED) — its next step is the Payment Approver's
+ * "Approve Purchase". Deduped + serialized per order (advisory lock): only a
+ * cancelled or rejected request lets another be raised.
  */
+export async function requestBoughtInItems(quotationId: string): Promise<{ error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized." };
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || userHasWorkflowRole(roles, user.id, "purchaser" as WorkflowRoleKey))) {
+    return { error: "Only the Purchaser or an admin can request the bought-in items." };
+  }
+  const quote = await prisma.quotation.findUnique({
+    where: { id: quotationId },
+    select: { quoteNumber: true, classification: true, items: { select: { qty: true, descriptionSnapshot: true, specsSnapshot: true } } },
+  });
+  if (!quote) return { error: "Order not found." };
+  if (!isBoughtInOnlyOrder(quote.items)) return { error: "This isn't a bought-in order." };
+  if (readOrderWorkflow(quote.classification).stage !== "released") {
+    return { error: "The items can be requested once the payment is cleared, while the order is For PO creation." };
+  }
+  const raised = await raiseBoughtInRequisition(quotationId, quote.quoteNumber, quote.items, user);
+  if (raised === "none") return { error: "This order has no bought-in product lines to request." };
+  if (raised === "exists") return { error: "The items for this order have already been requested." };
+  await logActivity(user, {
+    action: "order.boughtin.request",
+    category: "order",
+    summary: `Requested the bought-in items — order ${quote.quoteNumber}`,
+    entity: "order",
+    entityId: quotationId,
+    href: `/orders/${quotationId}`,
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  return {};
+}
+
 /**
- * Auto-file the supplier requisition for a bought-in order's products when its
- * payment is cleared ("Clear payment & create PO"). Encodes the supplier grid
- * price so the Purchaser's PO auto-fills the unit price. Deduped + serialized per
- * order (advisory lock) so a re-clear can't file a second requisition.
+ * Admin, once: cancel the requests the system raised by itself on payment
+ * clearing that nobody has approved yet — the owner's choice, *"Cancel them"*,
+ * so each order's items are requested again by the Purchaser. A request the
+ * Payment Approver already approved, or that has a PO, is left alone.
  */
-async function autoRaiseBoughtInRequisition(
+export async function cancelAutoRaisedBoughtInRequests(): Promise<{ error?: string; cancelled?: number }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized." };
+  if (!isAdmin(user)) return { error: "Only an admin can do this." };
+  const candidates = await prisma.purchaseRequest.findMany({
+    where: { kind: "department", dept: OFFICE_DEPT_KEY, status: "APPROVED", note: { startsWith: "Bought-in items for order" } },
+    select: { id: true, po: true, chainLog: true, quotationId: true },
+  });
+  const ids = candidates.filter((c) => c.po == null && !isPoApproved(c.chainLog)).map((c) => c.id);
+  if (ids.length === 0) return { cancelled: 0 };
+  const now = new Date();
+  await prisma.purchaseRequest.updateMany({
+    where: { id: { in: ids }, status: "APPROVED" },
+    data: { status: "CANCELLED", decidedByName: user.name, decidedAt: now },
+  });
+  await logActivity(user, {
+    action: "purchase.boughtin.cancel_auto",
+    category: "purchase",
+    summary: `Cancelled ${ids.length} bought-in request${ids.length === 1 ? "" : "s"} the system had raised automatically`,
+    entity: "purchase",
+    entityId: ids[0],
+    href: "/purchasing",
+  });
+  revalidatePath("/purchasing");
+  revalidatePath("/orders");
+  for (const qid of [...new Set(candidates.filter((c) => ids.includes(c.id)).map((c) => c.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  return { cancelled: ids.length };
+}
+
+/** The request itself — see `requestBoughtInItems`. */
+async function raiseBoughtInRequisition(
   quotationId: string,
   quoteNumber: string,
   items: { qty: number; descriptionSnapshot: string; specsSnapshot: unknown }[],
   user: { id: string; name: string },
-): Promise<void> {
+): Promise<"created" | "exists" | "none"> {
   const boughtIn = orderBoughtInLines(items);
-  if (boughtIn.length === 0) return;
+  if (boughtIn.length === 0) return "none";
   // The same description the line is composed from, resolved before it is glued.
   const itemSkus = await resolveItemSkus(boughtIn.map((b) => ({ description: [b.name, ...b.detail].join(" · ") })));
   const lines = boughtIn.map((b) => {
@@ -1436,21 +1510,17 @@ async function autoRaiseBoughtInRequisition(
     const line = mrfItemLine({ description, qty: String(b.qty), unit: "unit" });
     return b.unitPrice != null ? `${line} · @${b.unitPrice}` : line;
   });
-  await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx): Promise<"created" | "exists"> => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${quotationId}))`;
-    // Only a CANCELLED requisition lets a fresh one be raised. A cancellation is
-    // a withdrawal — nobody judged the request, so re-raising is the normal
-    // recovery path. Every other state must block:
-    //   REJECTED  — an approver said no. Re-clearing payment must not quietly
-    //               overturn that decision by raising an identical request.
-    //   COMPLETED — the items were bought and received; raising again re-buys.
-    //   anything else — still in flight.
-    // Previously this excluded REJECTED and COMPLETED and counted CANCELLED,
-    // i.e. exactly backwards on all three.
+    // A request still in flight, or already bought (COMPLETED), blocks another.
+    // A CANCELLED or REJECTED one doesn't: the request is now a person's
+    // deliberate act, so after a rejection the Purchaser may correct and request
+    // again. (When payment-clearing raised it by itself, a rejection had to
+    // block, or re-clearing would quietly overturn the approver.)
     const existing = await tx.purchaseRequest.count({
-      where: { quotationId, kind: "department", status: { not: "CANCELLED" } },
+      where: { quotationId, kind: "department", status: { notIn: ["CANCELLED", "REJECTED"] } },
     });
-    if (existing > 0) return; // already raised — don't duplicate on a re-clear
+    if (existing > 0) return "exists"; // already requested — don't duplicate
     await tx.purchaseRequest.create({
       data: {
         kind: "department",
@@ -1458,15 +1528,19 @@ async function autoRaiseBoughtInRequisition(
         quotationId,
         items: lines as Prisma.InputJsonValue,
         itemSkus: itemSkus as Prisma.InputJsonValue,
-        note: `Bought-in items for order ${quoteNumber}`,
+        // NOT "Bought-in items for order …" — that prefix marks the ones the
+        // system raised by itself (`isAutoRaisedBoughtIn`).
+        note: `${BOUGHT_IN_REQUEST_NOTE} ${quoteNumber}`,
         createdById: user.id,
         createdByName: user.name,
-        status: "APPROVED", // Office requisition → straight to the Purchaser for the PO
+        status: "APPROVED", // past the Plant Manager → the Payment Approver's "Approve Purchase"
       },
     });
+    return "created";
   });
   revalidatePath("/requisitions");
   revalidatePath("/purchasing");
+  return result;
 }
 
 /**

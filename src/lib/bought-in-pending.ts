@@ -21,7 +21,7 @@
  *       APPROVED, approved, no PO       → Purchaser, prepare the PO
  *       APPROVED with a PO              → Accounting, voucher & check
  *       later                           → that status's step;
- *   - no live request at all → the Purchaser, as before (nothing better to say).
+ *   - no live request at all → the Purchaser, to request the items.
  *
  * Pure. The rows are read by `boughtInPurchaseRows` (lib/bought-in-pending-data).
  */
@@ -41,8 +41,12 @@ export interface BoughtInPurchaseRow {
 /** Bought — the order may now be handed to Sales. Same list as `notifyClientBoughtInOrder`. */
 export const BOUGHT_STATUSES: readonly PRStatus[] = ["PURCHASED", "CHECKED", "DELIVERED", "RECEIVED", "PLANT_APPROVED", "COMPLETED"];
 
-/** What `pendingStep` said before — and still says when there is no request. */
-export const PREPARE_PO_STEP: PendingStep = { action: "Prepare & process the Purchase Order", roles: ["purchaser"] };
+/**
+ * No live request yet: the Purchaser requests the items. Nothing is raised by
+ * itself any more — the owner: *"System must not automatically request any
+ * material."* (`requestBoughtInItems`.)
+ */
+export const PREPARE_PO_STEP: PendingStep = { action: "Request the bought-in items", roles: ["purchaser"] };
 
 function nextFor(r: BoughtInPurchaseRow): { action: string; role: WorkflowRoleKey } | null {
   const status = r.status as PRStatus;

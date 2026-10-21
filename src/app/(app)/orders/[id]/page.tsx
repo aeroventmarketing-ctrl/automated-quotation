@@ -33,7 +33,7 @@ import {
   type FulfillmentMode,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
-import { buildPurchaseTrail, buildReturnViews, buildReconcileView, isAutoRaisedBoughtIn } from "@/lib/purchase-chain-row";
+import { buildPurchaseTrail, buildReturnViews, buildReconcileView, isAutoRaisedBoughtIn, isBoughtInRequest } from "@/lib/purchase-chain-row";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems, withSpecDetail } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
@@ -887,6 +887,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       canManagePO,
       isDept: isDeptRequisition(pr),
       autoRaised: isAutoRaisedBoughtIn(pr),
+      boughtInRequest: isBoughtInRequest(pr),
       returns: buildReturnViews(pr),
       canRaiseReturn: false,
       returnAdvanceRoles: [],
@@ -900,10 +901,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
 
   // A fully bought-in order (goods bought from a supplier, nothing fabricated)
-  // skips production and follows the PO flow: clearing payment files the supplier
-  // requisition, the Purchaser prepares the PO, the goods are bought, and Sales
+  // skips production and follows the PO flow: the Purchaser requests the items
+  // (nothing is requested automatically any more), the Payment Approver approves
+  // the purchase, the Purchaser prepares the PO, the goods are bought, and Sales
   // then notifies the client (→ Phase 5). (`boughtInOnly` is computed above.)
-  const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED");
+  const supplierReqRaised = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED" && r.status !== "CANCELLED");
+  // Same rule as `requestBoughtInItems`: the Purchaser / an admin, with no live request.
+  const canRequestBoughtIn = !supplierReqRaised && (adminViewer || hasRole("purchaser"));
   const supplierPoPrepared = purchaseRows.some((r) => r.isDept && r.status !== "REJECTED" && !!r.po);
   const supplierPurchased = purchaseRows.some((r) => r.isDept && prMainIndex(r.status as PRStatus) >= prMainIndex("PURCHASED"));
   const canNotifyBoughtIn = !restricted && (adminViewer || viewer?.role === "SALES" || viewer?.role === "ENGINEER" || quote.preparedById === viewer?.id);
@@ -1008,7 +1012,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
           <div className="flex items-center gap-2">
             {payCleared ? <span className="text-emerald-600">✓</span> : <span className="text-muted-foreground">○</span>}
-            <span>{boughtInOnly ? "Payment cleared & PO creation" : stockOnly ? "Payment cleared & stock release" : "Payment cleared & job orders released"}{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
+            <span>{boughtInOnly ? "Payment cleared — Purchaser to request the items" : stockOnly ? "Payment cleared & stock release" : "Payment cleared & job orders released"}{payCleared ? ` — ${withDesig(payCleared.byName, designationOf("payment_cleared"))}, ${fmtWhen(payCleared.at)}` : ""}</span>
           </div>
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
@@ -1057,6 +1061,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <BoughtInProduction
               orderId={quote.id}
               reqRaised={supplierReqRaised}
+              canRequest={canRequestBoughtIn}
               poPrepared={supplierPoPrepared}
               purchased={supplierPurchased}
               canNotify={canNotifyBoughtIn}

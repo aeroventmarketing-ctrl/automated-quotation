@@ -714,7 +714,7 @@ export function pendingStep(
       if (boughtIn) {
         // The Purchaser prepares & processes the PO (savePurchaseOrder is Purchaser /
         // admin only) — the Technical Head has no action here, so isn't an approver.
-        return boughtInPurchase ?? { action: "Prepare & process the Purchase Order", roles: ["purchaser"] };
+        return boughtInPurchase ?? { action: "Request the bought-in items", roles: ["purchaser"] };
       }
       return { action: "Issue job orders", roles: ["technical_head"] };
     }

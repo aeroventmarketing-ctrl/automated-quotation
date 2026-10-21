@@ -54,3 +54,9 @@ describe("pendingStep takes it only where it applies", () => {
     expect(pendingStep(at("payment_review"), false, false, false, false, pa)?.roles).toEqual(["accounting"]);
   });
 });
+
+describe("no request yet — nothing is raised automatically any more", () => {
+  it("waits on the Purchaser to request the items", () => {
+    expect(PREPARE_PO_STEP).toEqual({ action: "Request the bought-in items", roles: ["purchaser"] });
+  });
+});
