@@ -353,14 +353,12 @@ export function PurchasingWorkspace({
   const bulkDeleteTab = admin && (tab === "rejected" || tab === "cancelled");
   /**
    * "N in stock" beside every item line — the owner's *"In purchasing pending
-   * and approved tab, show the available quantity in each row."*
-   *
-   * Those two tabs and no others: Pending and Approved are where somebody is
-   * still deciding whether to buy the thing. Budgeted, Rejected and Cancelled
-   * are records of a decision already taken, and today's shelf count says
-   * nothing about them.
+   * and approved tab, show the available quantity in each row."* — and, since
+   * *"Stock availability must show in Purchasing pending, approved and budgeted
+   * tab"*, Budgeted too. Single requests AND combined POs. Rejected and
+   * Cancelled are records of a decision already taken.
    */
-  const showOnHand = tab === "pending" || tab === "approved";
+  const showOnHand = tab === "pending" || tab === "approved" || tab === "budgeted";
   const deletableIds = bulkDeleteTab
     ? [...filteredGroups.flatMap((g) => g.rows), ...shownDeptRows, ...shownReplenRows]
         .filter((r) => r.status === "REJECTED" || r.status === "CANCELLED")
@@ -474,6 +472,7 @@ export function PurchasingWorkspace({
           admin={admin}
           showAmounts={showAmounts}
           showSupplier={showSupplier}
+          showOnHand={showOnHand}
           highlightId={highlightId}
         />
       )}

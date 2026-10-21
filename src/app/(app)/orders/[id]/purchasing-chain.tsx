@@ -221,10 +221,8 @@ export function PurchasingChain({
   /**
    * Show "N in stock" beside every item line, from `stockItems`.
    *
-   * Off by default and switched on by the Purchasing workspace's Pending and
-   * Approved tabs, which is where the owner asked for it — those are the tabs
-   * where somebody is deciding whether to buy. A tab that is only a record of
-   * what already happened gains nothing from today's shelf count.
+   * Off by default and switched on by the Purchasing workspace's Pending,
+   * Approved and Budgeted tabs, which is where the owner asked for it.
    */
   showOnHand?: boolean;
   /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
