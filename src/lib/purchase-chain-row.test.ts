@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildPurchaseChainRow, buildPurchaseTrail, isAutoRaisedBoughtIn, type PurchaseRequestLike } from "./purchase-chain-row";
+import { buildPurchaseChainRow, buildPurchaseTrail, isAutoRaisedBoughtIn, isBoughtInRequest, BOUGHT_IN_REQUEST_NOTE, type PurchaseRequestLike } from "./purchase-chain-row";
 import type { PRStatus } from "./purchasing";
 
 /**
@@ -178,5 +178,27 @@ describe("the requisition the system raises when a bought-in order's payment is 
     expect(trail[0]).toMatch(/^Raised automatically when the payment was cleared — Reyjellan Gil \(cleared by\)/);
     expect(trail.join(" ")).not.toContain("Requestor");
     expect(buildPurchaseTrail({ ...pr("APPROVED"), createdByName: "Sam" })[0]).toMatch(/^Requested — Sam \(Requestor\)/);
+  });
+});
+
+/**
+ * The owner: *"System must not automatically request any material."* The
+ * Purchaser now requests a bought-in order's items (`requestBoughtInItems`).
+ */
+describe("the bought-in request the Purchaser raises", () => {
+  const manual = { kind: "department", dept: "office", note: `${BOUGHT_IN_REQUEST_NOTE} 2026 - AFBM00003963J` };
+  it("is a bought-in request, but not an automatic one", () => {
+    expect(isBoughtInRequest(manual)).toBe(true);
+    expect(isAutoRaisedBoughtIn(manual)).toBe(false);
+    expect(isBoughtInRequest({ kind: "department", dept: "office", note: "Bought-in items for order X" })).toBe(true);
+    expect(isBoughtInRequest({ kind: "department", dept: "office", note: "Need GI sheets" })).toBe(false);
+  });
+  it("its trail names the Purchaser who requested it; the card reads 'Bought-in items — awaiting purchase approval'", () => {
+    const trail = buildPurchaseTrail({ ...pr("APPROVED"), ...manual, createdByName: "Allan Ramos" });
+    expect(trail[0]).toMatch(/^Bought-in items requested — Allan Ramos \(Purchaser\)/);
+    expect(trail.join(" ")).not.toContain("Raised automatically");
+    const row = buildPurchaseChainRow({ ...pr("APPROVED"), ...manual }, { canManagePO: false, namesForRole: () => [], canAct: () => false });
+    expect(row.boughtInRequest).toBe(true);
+    expect(row.autoRaised).toBe(false);
   });
 });

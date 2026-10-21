@@ -229,6 +229,8 @@ export interface PurchaseChainRow {
   isDept: boolean;
   /** Raised by the system when a bought-in order's payment was cleared — see `isAutoRaisedBoughtIn`. */
   autoRaised?: boolean;
+  /** A bought-in request (the Purchaser's or an automatic one) — see `isBoughtInRequest`. */
+  boughtInRequest?: boolean;
   // The Purchaser may reject a still-pending request (in the pending bucket:
   // PENDING_APPROVAL, or a dept MRF approved by the Plant Manager but not yet
   // purchase-approved). Rendered as a Reject button on the interactive chain.
@@ -352,6 +354,23 @@ export function isAutoRaisedBoughtIn(pr: { kind?: string | null; dept?: string |
   return pr.kind === "department" && pr.dept === "office" && (pr.note ?? "").startsWith("Bought-in items for order");
 }
 
+/**
+ * The note on a bought-in request the PURCHASER raised (`requestBoughtInItems`)
+ * — since the owner's *"System must not automatically request any material"*.
+ * Deliberately not the auto-raised prefix above.
+ */
+export const BOUGHT_IN_REQUEST_NOTE = "Bought-in items requested for order";
+
+/**
+ * Either kind of bought-in request — the Purchaser's, or an old automatic one.
+ * Both are filed past the Plant Manager, so neither should read "Plant Manager
+ * approved".
+ */
+export function isBoughtInRequest(pr: { kind?: string | null; dept?: string | null; note?: string | null }): boolean {
+  return isAutoRaisedBoughtIn(pr)
+    || (pr.kind === "department" && pr.dept === "office" && (pr.note ?? "").startsWith(BOUGHT_IN_REQUEST_NOTE));
+}
+
 export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   const status = pr.status as PRStatus;
   const log = coerceChainLog(pr.chainLog);
@@ -387,7 +406,9 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   return [
     isAutoRaisedBoughtIn(pr)
       ? stamp("Raised automatically when the payment was cleared", "cleared by", pr.createdByName, pr.createdAt)
-      : stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
+      : isBoughtInRequest(pr)
+        ? stamp("Bought-in items requested", purchaser, pr.createdByName, pr.createdAt)
+        : stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
     firstLine,
     lstamp("Purchase order approved", approver, "approve_po"),
     lstamp("Purchase order rejected", approver, "reject_po"),
@@ -516,6 +537,7 @@ export function buildPurchaseChainRow(
     priorStatuses: ctx.admin ? priorPurchaseStatuses(status).map((s) => ({ key: s, label: PR_STATUS_LABEL[s] })) : [],
     isDept,
     autoRaised: isAutoRaisedBoughtIn(pr),
+    boughtInRequest: isBoughtInRequest(pr),
     canPurchaserReject: ctx.canAct("purchaser") && statusBucket(status, { isDept, poApproved }) === "pending",
     // PO prep opens once the request is approved (out of the pending bucket) and
     // still at APPROVED — before the voucher. Keeps Create-PO / Split off pending.

@@ -26,6 +26,8 @@ import { getPaymentTerms } from "@/lib/payment-terms";
 import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
+import { BoughtInToRequestPanel } from "./bought-in-to-request";
+import { boughtInOrdersToRequest, autoRaisedAwaitingCount, type BoughtInToRequest } from "@/lib/bought-in-pending-data";
 import { COMPLETED_PAGE, wantsAllCompleted, purchasingOrdersToLoad } from "@/lib/completed-page";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
 
@@ -613,6 +615,17 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     }
   }
 
+  // Bought-in orders whose items the Purchaser hasn't requested yet, and (admin)
+  // the automatic requests left over from before — see BoughtInToRequestPanel.
+  let toRequest: BoughtInToRequest[] = [];
+  let autoRaisedAwaiting = 0;
+  if (!tableMissing) {
+    [toRequest, autoRaisedAwaiting] = await Promise.all([
+      boughtInOrdersToRequest().catch(() => []),
+      admin ? autoRaisedAwaitingCount().catch(() => 0) : Promise.resolve(0),
+    ]);
+  }
+
   return (
     <div className="space-y-6">
       <AutoRefresh seconds={8} watch="purchasing" />
@@ -629,6 +642,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         <>
           <section className="space-y-3">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Order material requests</h2>
+            <BoughtInToRequestPanel orders={toRequest} canRequest={admin || isPurchaser} autoRaisedAwaiting={autoRaisedAwaiting} admin={admin} />
             <PurchasingWorkspace
               batches={batches}
               combinable={combinable}

@@ -90,6 +90,7 @@ interface PRRow {
   isDept?: boolean;
   /** Raised by the system when a bought-in order's payment was cleared. */
   autoRaised?: boolean;
+  boughtInRequest?: boolean;
   poApproved?: boolean;
   canPurchaserReject?: boolean;
   canPreparePO?: boolean;
@@ -359,7 +360,7 @@ export function PurchasingChain({
         const requisitionAwaitingPO =
           r.status === "APPROVED" && !r.po && (!r.isDept || r.poApproved);
         const statusLabel = requisitionAwaitingApproval
-          ? r.autoRaised
+          ? r.autoRaised || r.boughtInRequest
             ? "Bought-in items — awaiting purchase approval"
             : "Plant Manager approved — awaiting purchase approval"
           : requisitionAwaitingPO

@@ -202,7 +202,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
           : stageLabel(wf.stage),
         prodDepts,
         nextStep: next?.key ?? null,
-        nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment & create PO"
+        nextLabel: boughtInOnly && next?.key === "payment_cleared" ? "Clear payment"
           : stockOnly && next?.key === "payment_cleared" ? "Clear payment & release from stock"
           : (next?.label ?? null),
         canAct,

@@ -1,3 +1,42 @@
+## 2026-10-21 · Bought-in orders: nothing requested automatically — the Purchaser requests the items
+
+The owner, on order 2026 - AFBM00003963J's Office request for 24 Spring Vibration Isolators ("Raised
+automatically when the payment was cleared — Rey Gil"): *"System is automatically raising a material
+request when payment was cleared by Payment Approver/admin. System must not automatically request any
+material."* Their choices: the **Purchaser presses a button**; the request goes to the **Payment
+Approver only**; the automatic requests still awaiting approval are **cancelled**. (Phases 1 and 4 are
+frozen; this change was explicitly asked for and its shape chosen by the owner in this conversation.)
+
+- **Clearing payment no longer raises anything.** `advanceOrderStage`'s `payment_cleared` step on a
+  bought-in-only order just moves it to For PO creation (the Phase 1 line reads "Payment cleared —
+  Purchaser to request the items"; the Orders list button "Clear payment", not "… & create PO").
+- **`requestBoughtInItems(quotationId)`** — Purchaser or admin; bought-in-only order at `released`.
+  Files the same Office requisition as before (bought-in lines with spec and grid price, SKUs),
+  APPROVED, so its next step is the Payment Approver's "Approve Purchase". Note "Bought-in items
+  requested for order …" (`BOUGHT_IN_REQUEST_NOTE`) — distinct from the auto prefix. Blocked while a
+  request is live or bought; a cancelled or rejected one allows another (now a person's deliberate
+  act, not a quiet re-raise).
+- **Where the button is:** the order page's bought-in panel ("Request bought-in items"; others read
+  "Waiting for the Purchaser…"), and a new **"Bought-in orders to request"** list at the top of
+  Purchasing (`boughtInOrdersToRequest`, same tests as the action).
+- **Labels:** `isBoughtInRequest` — the card reads "Bought-in items — awaiting purchase approval" (not
+  "Plant Manager approved"), and the trail "Bought-in items requested — <name> (Purchaser)".
+- **Awaiting hint:** with no live request the order waits on the Purchaser, "Request the bought-in
+  items" (was "Prepare & process the Purchase Order").
+- **Old automatic requests:** for an admin, Purchasing shows "N bought-in requests were raised
+  automatically … still awaiting purchase approval — Cancel them" (`cancelAutoRaisedBoughtInRequests`:
+  APPROVED, no purchase approval, no PO; stamped with the admin's name). Those orders then appear in
+  the to-request list. Done by button rather than a SQL migration, since migrations are applied by
+  hand.
+
+Rendered on the role harness with a bought-in order at Documents checked: the Payment Approver cleared
+payment from the Orders list → stage For PO creation, **no request created**, "Waiting for the
+Purchaser…". As the Purchaser the button showed on the order page and in Purchasing; pressing it filed
+the request (APPROVED, "Bought-in items requested for order 2026 - AFBM00003963J", Allan Ramos). As the
+Payment Approver: "Bought-in items — awaiting purchase approval", "Bought-in items requested — Allan
+Ramos (Purchaser)", Approve Purchase. As admin with one old automatic request on another order: the
+banner said 1, "Cancel them" cancelled it (Admin Ana) and left the Purchaser's request alone.
+
 ## 2026-10-20 · Check monitoring: one check attached to two requests of a combined PO counts once
 
 The owner, searching Check monitoring for ₱5,834.44: *"found a duplicate in check monitoring"* —
