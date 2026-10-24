@@ -515,12 +515,12 @@ export function PurchasingChain({
               ) : null
             ) : receivingId === r.id ? (
               <StockMatchPanel
-                lines={r.items.map((it) => {
+                lines={r.items.map((it, i) => {
                   // Default the received qty to the good quantity: ordered minus any
                   // quantity still out on an unresolved supplier return. Editable.
                   const { qty, desc } = parseReqLine(it);
                   const returned = returnedQtyForLine(desc, r.returns ?? []);
-                  return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "" };
+                  return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "", sku: (r.itemSkus?.[i] ?? "").trim() || null };
                 })}
                 stockItems={stockItems}
                 submitLabel="Receive & add to stock"

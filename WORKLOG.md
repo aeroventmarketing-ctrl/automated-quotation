@@ -1,3 +1,26 @@
+## 2026-10-24 · Receiving (and releasing) into stock: pre-selected by SKU only
+
+The owner, after the SKU-only change to issuing: *"yes, switch receiving to SKU only too."*
+
+`StockMatchPanel` (`orders/[id]/stock-match-panel.tsx`) pre-selects, for each line, the stock item the
+quantity goes into (or comes out of). It scored names fuzzily (exact, contains, shared words and
+codes), with a SKU-in-the-text bonus — so goods bought as NIHONBOND #16 (1.3mm) could be pre-selected
+into the (1.2mm). Now it pre-selects only the stock item with exactly the line's SKU
+(`stockRowsForLine`): the line's recorded code (`MatchLine.sku`, passed from `itemSkus` by the
+single-PO receive), else the SKU chip's code; the department's location policy picks the row. No SKU
+or no such stock item → nothing pre-selected, and the line says "no SKU on this line" / "no stock item
+has SKU X — choose the item, or nothing will be posted for this line". The dropdown still lets the
+warehouse choose by hand (it shows each item's SKU) or skip.
+
+The one panel serves four places, all switched: receiving a single PO ("Receive & Add Stock"),
+receiving a combined PO, releasing an MRF to the requestor, and a stock-only order's release. Only the
+pre-selection changed — no step, role or gating.
+
+Rendered on the role harness as the Warehouse: a PO for NIHONBOND #16 (1.3mm) × 15 plus a line with no
+SKU — pre-selected "NIHONBOND #16 (1.3mm) (pc) · SKU CON000473 · Plant Warehouse" and "— skip —";
+"→ 15 received into NIHONBOND #16 (1.3mm)" and "→ no SKU on this line — choose the item …". Receiving
+took the 1.3mm 30 → 45; the 1.2mm stayed 0.
+
 ## 2026-10-24 · Stock availability & issue: match the line's own item, not a bracket-blind name
 
 The owner, on a Fans & Blower requisition: *"In inventory tab Nihonbond #16 has 30pcs in stock but
