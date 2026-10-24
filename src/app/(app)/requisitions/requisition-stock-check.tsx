@@ -52,7 +52,7 @@ export function RequisitionStockCheck({
   /** Requesting department — office/motor can pick Plant or Office; others use Plant. */
   dept?: string;
   items: string[];
-  /** Each line's recorded item code (`PurchaseRequest.itemSkus`), matched first. */
+  /** Each line's SKU — the one printed beside it. Stock is matched by this alone. */
   skus?: (string | null)[];
   stockItems: StockOpt[];
   canIssue: boolean;
@@ -71,11 +71,11 @@ export function RequisitionStockCheck({
 
   const policy = stockLocationPolicy(dept);
   const [lineLoc, setLineLoc] = useState<Record<number, string>>({});
-  // The line's own code first, then its exact name — see `stockRowsForLine`.
-  // Matching by a bracket-blind name used to treat "NIHONBOND #16 (1.3mm)" and
-  // "(1.2mm)" as one item and pick whichever came first.
-  const matchStock = (desc: string, lineIndex: number) =>
-    pickIssueRow(stockRowsForLine(desc, skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default);
+  // By the line's SKU and nothing else — see `stockRowsForLine`. Matching by a
+  // bracket-blind name used to treat "NIHONBOND #16 (1.3mm)" and "(1.2mm)" as
+  // one item and pick whichever came first.
+  const matchStock = (_desc: string, lineIndex: number) =>
+    pickIssueRow(stockRowsForLine(skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default);
 
   const lines = items.map((raw, index) => {
     const issued = parseIssuedFromStockLine(raw);
@@ -190,7 +190,9 @@ export function RequisitionStockCheck({
                     <span className="ml-1 text-muted-foreground">· item {matched.name}{matched.sku ? ` (${matched.sku})` : ""}</span>
                   )}
                   {!matched ? (
-                    <span className="ml-1 text-amber-600">· no stock match</span>
+                    <span className="ml-1 text-amber-600">
+                      {skus[l.index] ? `· SKU ${skus[l.index]} not in inventory` : "· no SKU on this line — can't match stock"}
+                    </span>
                   ) : !inStock ? (
                     <span className="ml-1 text-amber-600">· out of stock</span>
                   ) : (

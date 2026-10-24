@@ -1,51 +1,26 @@
 /**
- * Which inventory rows a requisition / MRF line is, for ISSUING from stock.
+ * Which inventory rows a requisition line is, for ISSUING from stock — by SKU
+ * and nothing else.
  *
  * The owner, on a Fans & Blower requisition: *"In inventory tab Nihonbond #16 has
  * 30pcs in stock but when checking for in stock availability and issue it shows
  * out of stock."* The line was `15 pcs · NIHONBOND #16 (1.3mm) (For angle
- * corner)`, SKU CON000473. The badge beside it said "30 pc in stock" — it
- * matches by code, then exact name. The issue panel matched by name with EVERY
- * bracket deleted, so "NIHONBOND #16 (1.3mm)" and "NIHONBOND #16 (1.2mm)" were
- * the same "nihonbond #16", and it took the first: the 1.2mm, with none left.
- * Pressing Issue would have deducted the wrong item.
+ * corner)`, SKU CON000473. The issue panel matched by name with every bracket
+ * deleted, so NIHONBOND #16 (1.2mm) and (1.3mm) were the same "nihonbond #16",
+ * and it took the 1.2mm, with none left — Issue would have deducted the wrong
+ * item. Then: *"Match by SKU only, do not use anything else. We always upload
+ * products with SKU for further confusions."*
  *
- * So, the badge's rules (`onHandFor`), returning the rows rather than a total:
- *
- *   1. the line's item code (`PurchaseRequest.itemSkus`) — exact;
- *   2. the exact name, after peeling only a trailing remark / spec segment
- *      (`skuNameCandidates`) — "(1.3mm)" is part of the item, "(For angle
- *      corner)" is not;
- *   3. only then the old bracket-blind name — and only when every row it finds
- *      is ONE item (the same name, at several locations). Two different items
- *      that differ only inside brackets are never guessed between.
- *
- * Returns every location's row of the item; `pickIssueRow` chooses the location.
- * Pure.
+ * So the line's SKU — the one printed beside it: its recorded
+ * `PurchaseRequest.itemSkus`, or the catalogue code the SKU chip shows — picks
+ * the stock rows with exactly that SKU (one per location; `pickIssueRow` chooses
+ * the location). No SKU, or a SKU no stock item carries → no match, and the
+ * panel says so rather than guessing by name. Same rule as the "in stock" badge
+ * (`onHandFor`), so the two can't disagree. Pure.
  */
-import { normalizeItemName, skuNameCandidates } from "./item-sku";
-
 const normCode = (s: string | null | undefined): string => String(s ?? "").trim().toUpperCase();
-const bracketBlind = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 
-export function stockRowsForLine<T extends { name: string; sku?: string | null }>(
-  description: string | null | undefined,
-  code: string | null | undefined,
-  stock: readonly T[],
-): T[] {
+export function stockRowsForLine<T extends { sku?: string | null }>(code: string | null | undefined, stock: readonly T[]): T[] {
   const c = normCode(code);
-  if (c) {
-    const byCode = stock.filter((s) => normCode(s.sku) === c);
-    if (byCode.length) return byCode;
-  }
-  for (const name of skuNameCandidates(description)) {
-    const key = normalizeItemName(name);
-    const byName = stock.filter((s) => normalizeItemName(s.name) === key);
-    if (byName.length) return byName;
-  }
-  const loose = bracketBlind(String(description ?? ""));
-  if (!loose) return [];
-  const rows = stock.filter((s) => bracketBlind(s.name) === loose);
-  const distinct = new Set(rows.map((r) => normalizeItemName(r.name)));
-  return distinct.size === 1 ? rows : [];
+  return c ? stock.filter((s) => normCode(s.sku) === c) : [];
 }

@@ -28,13 +28,13 @@ describe("the quantity beside a request line", () => {
     expect(onHandFor("anything", " cat00182 ", index)).toMatchObject({ available: 2 });
   });
 
-  it("finds it by name when the line carries no code", () => {
-    // The requestor's "(HYUNDAI)" is peeled, exactly as the SKU chip peels it.
-    expect(onHandFor(MOTOR, null, index)).toMatchObject({ available: 2, unit: "pc" });
+  it("never matches by name — the owner: \"Match by SKU only, do not use anything else\"", () => {
+    expect(onHandFor(MOTOR, null, index)).toBeNull();
+    expect(onHandFor("INDUCTION MOTOR 5.5 HP , 3 PH 4KW", null, index)).toBeNull();
   });
 
   it("says 0 for an item that is on the list with none left", () => {
-    expect(onHandFor("PULLEY 3 1/2\"Ø x 2B BIG HUB", null, index)?.available).toBe(0);
+    expect(onHandFor("PULLEY 3 1/2\"Ø x 2B BIG HUB", "CON000549", index)?.available).toBe(0);
   });
 
   it("says nothing — not zero — for an item inventory has never heard of", () => {
@@ -58,7 +58,7 @@ describe("the same item in more than one place", () => {
   ]);
 
   it("adds the locations up, and says how many there were", () => {
-    expect(onHandFor("G.I. BOLT 3/8\"Ø x 1\"", null, index)).toMatchObject({ available: 52.5, unit: "pc", places: 2 });
+    expect(onHandFor("G.I. BOLT 3/8\"Ø x 1\"", "CON000111", index)).toMatchObject({ available: 52.5, unit: "pc", places: 2 });
   });
 });
 
@@ -74,7 +74,7 @@ describe("an availability that was never computed", () => {
   ]);
 
   it("is left out rather than counted as none", () => {
-    expect(onHandFor("ANGLE BAR 2.0 X 25 X 25", null, index)).toMatchObject({ available: 6, places: 1 });
+    expect(onHandFor("ANGLE BAR 2.0 X 25 X 25", "CON000900", index)).toMatchObject({ available: 6, places: 1 });
   });
 
   it("leaves an item with no counted record unanswered", () => {
@@ -82,22 +82,21 @@ describe("an availability that was never computed", () => {
   });
 });
 
-describe("the code wins over the name", () => {
+describe("the SKU, and only the SKU", () => {
   /**
-   * Two bins can carry the same words. The code is the line's recorded
-   * identity — written when the line was composed — so an exact code hit must
-   * not be overruled by a name that merely looks similar.
+   * Two bins can carry the same words — NIHONBOND #16 (1.2mm) and (1.3mm). The
+   * code decides; a name that merely looks similar never does.
    */
   const index = buildOnHandIndex([
     { name: "MOTOR PULLEY", sku: "AAA111", unit: "pc", available: 3 },
     { name: "MOTOR PULLEY SPARE", sku: "BBB222", unit: "pc", available: 99 },
   ]);
 
-  it("answers from the code when the line has one", () => {
+  it("answers from the code", () => {
     expect(onHandFor("MOTOR PULLEY", "BBB222", index)?.available).toBe(99);
   });
 
-  it("falls back to the name when the code matches nothing", () => {
-    expect(onHandFor("MOTOR PULLEY", "NOT-A-CODE", index)?.available).toBe(3);
+  it("a code that matches nothing is \"Not in inventory\", not the name's item", () => {
+    expect(onHandFor("MOTOR PULLEY", "NOT-A-CODE", index)).toBeNull();
   });
 });

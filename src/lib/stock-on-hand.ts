@@ -16,18 +16,19 @@
  * purchaser deciding whether to buy wants the free quantity, not a total that
  * includes units already promised to another job.
  *
- * ## Matching
+ * ## Matching — by SKU only
  *
- * By **item code first**, then by name. The code is the line's recorded
- * identity — `PurchaseRequest.itemSkus`, written when the line was composed and
- * its description was still clean — and an exact code beats any name similarity.
- * The name pass reuses `skuNameCandidates`, the same peeling the SKU chip uses,
- * so a line and its own code agree about which item they are.
+ * The owner: *"Match by SKU only, do not use anything else. We always upload
+ * products with SKU for further confusions."* The code is the one printed
+ * beside the line — its recorded `PurchaseRequest.itemSkus`, or the catalogue
+ * code the SKU chip shows — and the stock item with exactly that SKU is the
+ * answer. No name matching against stock: NIHONBOND #16 (1.2mm) and (1.3mm)
+ * read alike and are different items. A line with no SKU, or a SKU no stock
+ * item carries, gets "Not in inventory".
  *
  * Quantities **sum across locations**: the same bolt in Plant and Office stock is
  * one answer to "how many do we have", and the row has no room to say where.
  */
-import { normalizeItemName, skuNameCandidates } from "./item-sku";
 
 /**
  * Structural, like `SkuSource` — any narrowed inventory list a screen already
@@ -50,19 +51,17 @@ export interface OnHand {
   places: number;
 }
 
-/** Code → quantity and name → quantity. Build it with {@link buildOnHandIndex}. */
+/** SKU → quantity. Build it with {@link buildOnHandIndex}. */
 export interface OnHandIndex {
   byCode: ReadonlyMap<string, OnHand>;
-  byName: ReadonlyMap<string, OnHand>;
 }
 
-export const EMPTY_ON_HAND_INDEX: OnHandIndex = { byCode: new Map(), byName: new Map() };
+export const EMPTY_ON_HAND_INDEX: OnHandIndex = { byCode: new Map() };
 
 const normCode = (s: string | null | undefined): string => String(s ?? "").trim().toUpperCase();
 
 export function buildOnHandIndex(stock: readonly StockLevelSource[]): OnHandIndex {
   const byCode = new Map<string, OnHand>();
-  const byName = new Map<string, OnHand>();
   const add = (map: Map<string, OnHand>, key: string, qty: number, unit: string) => {
     if (!key) return;
     const prev = map.get(key);
@@ -83,9 +82,8 @@ export function buildOnHandIndex(stock: readonly StockLevelSource[]): OnHandInde
     const qty = Number(s.available);
     const unit = String(s.unit ?? "").trim();
     add(byCode, normCode(s.sku), qty, unit);
-    add(byName, normalizeItemName(s.name), qty, unit);
   }
-  return { byCode, byName };
+  return { byCode };
 }
 
 /**
@@ -97,15 +95,11 @@ export function buildOnHandIndex(stock: readonly StockLevelSource[]): OnHandInde
  * item, which is a different fact and an honest one to show as such.
  */
 export function onHandFor(
-  description: string | null | undefined,
+  _description: string | null | undefined,
   code: string | null | undefined,
   index: OnHandIndex,
 ): OnHand | null {
-  const byCode = index.byCode.get(normCode(code));
-  if (byCode) return byCode;
-  for (const name of skuNameCandidates(description)) {
-    const hit = index.byName.get(normalizeItemName(name));
-    if (hit) return hit;
-  }
-  return null;
+  // SKU only — see "Matching" above. The description is not consulted.
+  const c = normCode(code);
+  return c ? index.byCode.get(c) ?? null : null;
 }
