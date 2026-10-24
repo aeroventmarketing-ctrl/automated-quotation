@@ -32,6 +32,8 @@ export interface QuotationPdfData {
   createdAt: string;
   validUntil: string | null;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
+  /** A zero-rated order the client paid on before the 2026-10-24 change keeps the old price basis. */
+  zeroRatedGross?: boolean;
   projectName?: string | null;
   customer: { company: string; contactName?: string | null; address?: string | null };
   preparedBy: string;
@@ -164,7 +166,7 @@ function TotalLine({ label, value, leftSpan }: { label: string; value: number; l
 }
 
 export function QuotationPdf({ data }: { data: QuotationPdfData }) {
-  const grossBasis = vatDisplayBasisIsGross(data.vatMode);
+  const grossBasis = vatDisplayBasisIsGross(data.vatMode, { zeroRatedGross: data.zeroRatedGross });
   const exclusive = !grossBasis; // net-basis presentation (÷1.12)
   const zeroRated = data.vatMode === "ZERO_RATED";
   const f = grossBasis ? 1 : 1 / (1 + data.vatRate);
@@ -237,7 +239,7 @@ export function QuotationPdf({ data }: { data: QuotationPdfData }) {
           {/* Totals — mark-up folded into prices; discount shown as its own line. */}
           {exclusive ? (
             <>
-              <TotalLine leftSpan={leftSpan} label="NET AMOUNT (VAT exclusive price) =>" value={displayedNet} />
+              <TotalLine leftSpan={leftSpan} label={zeroRated ? "NET AMOUNT (VAT zero-rated) =>" : "NET AMOUNT (VAT exclusive price) =>"} value={displayedNet} />
               {hasDiscount && (
                 <>
                   <TotalLine leftSpan={leftSpan} label={discountLabel} value={discountAmt} />

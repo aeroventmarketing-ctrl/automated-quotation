@@ -4,7 +4,7 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { config, COMPANY } from "@/lib/config";
 import { buildQuotationXlsx, type XlsxLine, type XlsxData } from "@/lib/excel/quotation-xlsx";
 import { getUserSignature } from "@/lib/signature";
-import { readPricing, isFlatVatLine } from "@/lib/quote";
+import { readPricing, zeroRatedKeepsGross, isFlatVatLine } from "@/lib/quote";
 import { normalizePowerUnit, convertPower, roundPower } from "@/lib/units";
 
 export const runtime = "nodejs";
@@ -118,6 +118,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         : "INCLUSIVE",
     discountPct: Number(q.discountPct ?? 0),
     pricing: readPricing(q.classification, Number(q.discountPct ?? 0)),
+    zeroRatedGross: zeroRatedKeepsGross(q.classification),
     vatRate: config.vatRate,
     capacityUnit: (typeof units.capacity === "string" && units.capacity) || "cfm",
     pressureUnit: (typeof units.pressure === "string" && units.pressure) || "in-w.g.",

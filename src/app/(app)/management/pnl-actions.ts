@@ -7,7 +7,7 @@ import { slimClassificationByOrder, withSlimClassification, CONFIRMED_SALE } fro
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { poMemberIds } from "@/lib/purchase-batch";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { round2, readPricing, applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeChargesOutputVat, type PricingAdjust } from "@/lib/quote";
+import { round2, readPricing, applyPricing, pricingForVatMode, vatDisplayBasisIsGross, vatModeChargesOutputVat, zeroRatedKeepsGross, type PricingAdjust } from "@/lib/quote";
 import { config } from "@/lib/config";
 import { saleFromClassification } from "@/lib/sale";
 import { coerceChainLog } from "@/lib/purchase-chain-row";
@@ -155,24 +155,25 @@ function addSplit(into: DeptSplit, from: DeptSplit) {
  * Mark-up/discount that were entered on a VAT-inclusive quote include VAT, so
  * strip it — the VAT part flows through Output VAT, not the profit lines.
  */
-function markupDiscountNet(grossSum: number, vatMode: string, pricing: PricingAdjust): { markupNet: number; discountNet: number } {
-  const displayedNet = vatDisplayBasisIsGross(vatMode) ? grossSum : grossSum / (1 + VAT_RATE);
+function markupDiscountNet(grossSum: number, vatMode: string, pricing: PricingAdjust, zeroRatedGross = false): { markupNet: number; discountNet: number } {
+  const displayedNet = vatDisplayBasisIsGross(vatMode, { zeroRatedGross }) ? grossSum : grossSum / (1 + VAT_RATE);
   // A flat mark-up/discount is VAT-inclusive in EXCLUSIVE_PLUS too (matches INCLUSIVE).
   const { markupAmt, discountAmt } = applyPricing(displayedNet, pricingForVatMode(pricing, vatMode, VAT_RATE));
   // Only INCLUSIVE has VAT baked into the mark-up/discount to strip; ZERO_RATED's
-  // figure carries no VAT even though it shares the gross display basis.
+  // figure carries no VAT on either basis.
   const toNet = (x: number) => (vatMode === "INCLUSIVE" ? x / (1 + VAT_RATE) : x);
   return { markupNet: round2(toNet(markupAmt)), discountNet: round2(toNet(discountAmt)) };
 }
 
 /**
  * Department revenue booked for one quotation line. The stored unit price is
- * VAT-inclusive, so normally it's stripped of VAT (`lineNetOf`). A ZERO_RATED
- * sale carries no VAT — the full price is revenue (there's no output VAT to
- * split it against), so book the gross line as-is.
+ * VAT-inclusive, so it's stripped of VAT (`lineNetOf`) — zero-rated included
+ * since 2026-10-24 (*"VAT Zero Rated … has no VAT (same as VAT Exclusive)"*).
+ * A zero-rated order paid on before that change was billed at the full price,
+ * and books it as-is (`zeroRatedGross`, from `zeroRatedKeepsGross`).
  */
-function saleLineNet(unitPrice: number, qty: number, vatMode: string): number {
-  if (vatMode === "ZERO_RATED") return round2((Number(unitPrice) || 0) * (Number(qty) || 0));
+function saleLineNet(unitPrice: number, qty: number, vatMode: string, zeroRatedGross = false): number {
+  if (vatMode === "ZERO_RATED" && zeroRatedGross) return round2((Number(unitPrice) || 0) * (Number(qty) || 0));
   return lineNetOf(unitPrice, qty, 0);
 }
 
@@ -327,7 +328,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
         ? it.specsSnapshot
         : {}) as Record<string, unknown>;
       grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
-      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode);
+      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode, zeroRatedKeepsGross(q.classification));
       if (net === 0) continue;
       // Output VAT is charged on the full selling price regardless of the split.
       if (chargesVat) outputVat = round2(outputVat + round2(net * VAT_RATE));
@@ -363,7 +364,7 @@ export async function getDepartmentPnl(from: string, to: string): Promise<PnlRep
       }
     }
     // Quote-level mark-up → Office income; discount → Office expense (both net).
-    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)));
+    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, readPricing(q.classification, Number(q.discountPct)), zeroRatedKeepsGross(q.classification));
     if (markupNet) {
       sales.office = round2(sales.office + markupNet);
       markupIncome = round2(markupIncome + markupNet);
@@ -560,6 +561,8 @@ export interface PnlPricingAudit {
   quotationId: string;
   quoteNumber: string;
   customer: string;
+  /** Zero-rated and billed on the old basis (paid on before 2026-10-24). */
+  zeroRatedGross?: boolean;
   vatMode: string; // INCLUSIVE | EXCLUSIVE | EXCLUSIVE_PLUS
   grossBase: number; // Σ line gross (VAT-inclusive)
   orderNet: number; // grossBase ÷ 1.12
@@ -705,7 +708,7 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     for (const it of linesByOrder.get(q.id) ?? []) {
       const specs = (it.specsSnapshot && typeof it.specsSnapshot === "object" ? it.specsSnapshot : {}) as Record<string, unknown>;
       grossSum += (Number(it.unitPrice) || 0) * (Number(it.qty) || 0);
-      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode);
+      const net = saleLineNet(Number(it.unitPrice), it.qty, q.vatMode, zeroRatedKeepsGross(q.classification));
       if (net === 0) continue;
       let { dept, routing } = lineRouting(specs);
       // A flagged Office/resale product is booked entirely to Office.
@@ -760,14 +763,14 @@ export async function getPnlDetail(from: string, to: string): Promise<PnlDetail>
     const customer = q.inquiry?.customer?.company ?? "—";
     // Quote-level mark-up → Office income; discount → Office expense (both net).
     const pricing = readPricing(q.classification, Number(q.discountPct));
-    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, pricing);
+    const { markupNet, discountNet } = markupDiscountNet(grossSum, q.vatMode, pricing, zeroRatedKeepsGross(q.classification));
     markupIncome = round2(markupIncome + markupNet);
     clientDiscounts = round2(clientDiscounts + discountNet);
     if (markupNet > 0) markupByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: markupNet });
     if (discountNet > 0) discountByOrder.push({ quotationId: q.id, quoteNumber: q.quoteNumber, customer, amount: discountNet });
     if (pricing.markupValue > 0 || pricing.discountValue > 0) {
       pricingAudit.push({
-        quotationId: q.id, quoteNumber: q.quoteNumber, customer, vatMode: q.vatMode,
+        quotationId: q.id, quoteNumber: q.quoteNumber, customer, vatMode: q.vatMode, zeroRatedGross: zeroRatedKeepsGross(q.classification),
         grossBase: round2(grossSum), orderNet: round2(grossSum / (1 + VAT_RATE)),
         markupMode: pricing.markupMode, markupValue: pricing.markupValue,
         discountMode: pricing.discountMode, discountValue: pricing.discountValue,

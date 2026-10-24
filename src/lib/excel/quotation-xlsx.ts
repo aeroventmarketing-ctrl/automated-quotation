@@ -38,6 +38,8 @@ export interface XlsxData {
   projectName?: string | null;
   customerName: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
+  /** A zero-rated order the client paid on before the 2026-10-24 change keeps the old price basis. */
+  zeroRatedGross?: boolean;
   discountPct: number; // e.g. 3 for 3% (legacy; superseded by `pricing`)
   pricing?: PricingAdjust; // header mark-up + discount (percent or amount)
   vatRate: number;
@@ -243,7 +245,7 @@ export async function buildQuotationXlsx(data: XlsxData): Promise<Buffer> {
   ["L", "M", "N"].forEach((c) => (ws.getCell(`${c}${H3}`).border = allBorders));
 
   // --- Data rows ------------------------------------------------------------
-  const f = vatDisplayBasisIsGross(data.vatMode) ? 1 : 1 / (1 + data.vatRate);
+  const f = vatDisplayBasisIsGross(data.vatMode, { zeroRatedGross: data.zeroRatedGross }) ? 1 : 1 / (1 + data.vatRate);
   // Mark-up is INTERNAL: it never appears as a line on the client's copy.
   // Instead we fold it into every displayed price via `mFactor`, so the column
   // still sums to the (marked-up) net and the client sees no mark-up row.

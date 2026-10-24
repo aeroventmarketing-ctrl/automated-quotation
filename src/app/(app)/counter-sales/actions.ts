@@ -25,6 +25,7 @@ import {
   unlinkedCounterLineMessage,
 } from "@/lib/counter-sale";
 import type { SaleDoc, SalePayment } from "@/lib/sale";
+import { newEwtOnExclusive } from "@/lib/sale";
 
 async function requireViewer() {
   const { user, allowed } = await getCounterSaleViewer();
@@ -422,10 +423,13 @@ export async function removeCounterSaleDoc(id: string, slotKey: string, path: st
  */
 export async function saveCounterSalePayments(id: string, payments: SalePayment[]): Promise<void> {
   await requireViewer();
-  const sale = await prisma.counterSale.findUnique({ where: { id }, select: { status: true } });
+  const sale = await prisma.counterSale.findUnique({ where: { id }, select: { status: true, vatMode: true, payments: true } });
   if (!sale) throw new Error("Sale not found.");
   if (sale.status === "VOID") throw new Error("This sale is void.");
   const clean = coerceCounterPayments(payments);
+  // No EWT withheld on a VAT Exclusive sale (`newEwtOnExclusive`).
+  const refusal = newEwtOnExclusive(sale.vatMode, clean, coerceCounterPayments(sale.payments));
+  if (refusal) throw new Error(refusal);
   await prisma.counterSale.update({ where: { id }, data: { payments: clean as unknown as Prisma.InputJsonValue } });
   revalidatePath(`/counter-sales/${id}`);
 }

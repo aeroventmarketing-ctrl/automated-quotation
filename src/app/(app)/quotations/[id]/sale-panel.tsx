@@ -24,6 +24,7 @@ import {
   afterPaymentDocTypes,
   collectedTotal,
   ewtWithheld,
+  paymentKindsFor,
   isSaleConfirmed,
   isAiReadableSaleDocKey,
 } from "@/lib/sale";
@@ -31,7 +32,6 @@ import { SaleDocReader } from "./sale-doc-reader";
 import { uploadDocument } from "@/lib/client-upload";
 
 const ARRANGEMENTS: SaleArrangement[] = ["downpayment_full", "downpayment_progress", "terms"];
-const PAYMENT_KINDS: PaymentKind[] = ["down", "full", "progress", "ewt"];
 const newId = () =>
   typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -449,7 +449,9 @@ export function SalePanel({
             <div key={p.id} className="space-y-1 rounded-md border p-2">
               <div className="grid grid-cols-2 items-center gap-2 md:grid-cols-12">
               <Select className="h-8 md:col-span-3" value={p.kind} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { kind: e.target.value as PaymentKind })}>
-                {PAYMENT_KINDS.map((k) => (<option key={k} value={k}>{PAYMENT_KIND_LABEL[k]}</option>))}
+                {/* No "EWT withheld" on VAT Exclusive (`paymentKindsFor`); a line saved
+                    as EWT before that rule keeps its option so it still displays. */}
+                {[...new Set([...paymentKindsFor(vatInclusive ? "INCLUSIVE" : "EXCLUSIVE"), p.kind])].map((k) => (<option key={k} value={k}>{PAYMENT_KIND_LABEL[k]}</option>))}
               </Select>
               <Input className="h-8 text-right md:col-span-3" type="number" step="0.01" placeholder="Amount ₱" value={p.amount || ""} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { amount: Number(e.target.value) || 0 })} />
               <Input className="h-8 md:col-span-3" type="date" value={p.date?.slice(0, 10) || today()} disabled={!canEdit} onChange={(e) => updatePayment(p.id, { date: e.target.value })} />

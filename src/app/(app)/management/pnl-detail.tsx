@@ -50,9 +50,10 @@ function expectedNets(a: PnlPricingAudit): { markupNet: number; discountNet: num
   // For +12%, a flat (amount) mark-up/discount is VAT-inclusive → scale by 1.12.
   const mV = a.vatMode === "EXCLUSIVE_PLUS" && a.markupMode === "amount" ? a.markupValue / F : a.markupValue;
   const dV = a.vatMode === "EXCLUSIVE_PLUS" && a.discountMode === "amount" ? a.discountValue / F : a.discountValue;
-  // INCLUSIVE and ZERO_RATED display on the gross (entered-price) basis; the
-  // exclusive modes strip VAT. Only INCLUSIVE has VAT to strip back out (toNet).
-  const displayedNet = a.vatMode === "INCLUSIVE" || a.vatMode === "ZERO_RATED" ? a.grossBase : a.grossBase / F;
+  // INCLUSIVE (and a zero-rated order billed on the old basis) display on the
+  // gross (entered-price) basis; the other modes, zero-rated included, strip VAT.
+  // Only INCLUSIVE has VAT to strip back out (toNet).
+  const displayedNet = a.vatMode === "INCLUSIVE" || (a.vatMode === "ZERO_RATED" && a.zeroRatedGross) ? a.grossBase : a.grossBase / F;
   const afterMarkup = a.markupMode === "percent" ? (1 - mV / 100 > 0 ? displayedNet / (1 - mV / 100) : displayedNet) : displayedNet + mV;
   const markupAmt = afterMarkup - displayedNet;
   const discountAmt = a.discountMode === "percent" ? afterMarkup * (dV / 100) : dV;

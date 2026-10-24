@@ -176,18 +176,48 @@ export function applyPricing(displayedNet: number, p: PricingAdjust) {
  *  - INCLUSIVE      → the entered price already includes 12% VAT.
  *  - EXCLUSIVE      → the entered price is stripped of VAT (shown ÷1.12), no VAT charged.
  *  - EXCLUSIVE_PLUS → net price with 12% VAT added on top.
- *  - ZERO_RATED     → like INCLUSIVE in figure (the entered price IS the total) but the
- *                     sale is VAT zero-rated (0% output VAT; usually 1% EWT withheld).
+ *  - ZERO_RATED     → no VAT, like EXCLUSIVE: the entered (VAT-inclusive) price is
+ *                     shown ÷1.12. The difference from EXCLUSIVE is EWT: a zero-rated
+ *                     sale CAN have EWT (BIR 2307) withheld; a VAT Exclusive one cannot.
+ *
+ * The owner, 2026-10-24: *"VAT Zero Rated means it has no VAT (same as VAT
+ * Exclusive) but VAT Zero Rated can deduct EWT while VAT Exclusive cannot."*
+ * Until then ZERO_RATED charged the entered price as the total — so the client
+ * paid the VAT-inclusive figure. A zero-rated order a client had ALREADY PAID on
+ * by then keeps that old basis (`zeroRatedKeepsGross`); every other zero-rated
+ * quote and order uses the new one.
  */
 export type VatMode = "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
 
 /**
- * Whether the displayed base is the entered (gross) price — true for INCLUSIVE and
- * ZERO_RATED (the entered figure is already the final amount); the exclusive modes
- * strip VAT to show the net.
+ * Payments dated BEFORE this day were made at the old zero-rated price (the
+ * entered, VAT-inclusive figure). The owner chose "unpaid ones only" for the
+ * change, so an order with such a payment keeps that price.
  */
-export function vatDisplayBasisIsGross(vatMode: string): boolean {
-  return vatMode === "INCLUSIVE" || vatMode === "ZERO_RATED";
+export const ZERO_RATED_NET_FROM = "2026-10-25";
+
+/**
+ * Whether a ZERO_RATED quotation keeps the old basis (entered price = total):
+ * true when its sale has a payment dated before `ZERO_RATED_NET_FROM`. Reads the
+ * raw `classification.sale.payments`, so any caller holding the classification
+ * (full or slim) gets the same answer.
+ */
+export function zeroRatedKeepsGross(classification: unknown): boolean {
+  const sale = (classification as { sale?: { payments?: unknown } } | null | undefined)?.sale;
+  const payments = Array.isArray(sale?.payments) ? (sale!.payments as { date?: unknown; amount?: unknown }[]) : [];
+  return payments.some((p) => typeof p?.date === "string" && p.date.slice(0, 10) < ZERO_RATED_NET_FROM && Number(p.amount) > 0);
+}
+
+/**
+ * Whether the displayed base is the entered (gross) price — INCLUSIVE, and a
+ * ZERO_RATED order that keeps the old basis (`zeroRatedGross`, from
+ * `zeroRatedKeepsGross`). Every other mode, zero-rated included, strips VAT to
+ * show the net.
+ */
+export function vatDisplayBasisIsGross(vatMode: string, opts?: { zeroRatedGross?: boolean }): boolean {
+  if (vatMode === "INCLUSIVE") return true;
+  if (vatMode === "ZERO_RATED") return opts?.zeroRatedGross === true;
+  return false;
 }
 /** Whether 12% VAT is added on top of the net (only EXCLUSIVE_PLUS). */
 export function vatModeAddsVat(vatMode: string): boolean {
@@ -243,7 +273,7 @@ export function payableTotal(
   // Flat (VAT-inclusive) lines carry no VAT: keep them at full value in the net.
   const flat = Math.min(readVatExemptTotal(q.classification), gross);
   const net = round2((gross - flat) / (1 + vatRate) + flat);
-  const displayedNet = vatDisplayBasisIsGross(q.vatMode) ? gross : net;
+  const displayedNet = vatDisplayBasisIsGross(q.vatMode, { zeroRatedGross: zeroRatedKeepsGross(q.classification) }) ? gross : net;
   const pricing = pricingForVatMode(readPricing(q.classification, Number(q.discountPct)), q.vatMode, vatRate);
   const { finalNet } = applyPricing(displayedNet, pricing);
   // EXCLUSIVE_PLUS adds VAT on top — but only on the VATable share (flat lines

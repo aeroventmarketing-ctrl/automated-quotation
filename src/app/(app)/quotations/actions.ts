@@ -12,7 +12,7 @@ import { nextQuoteNumber, computeTotals, round2, isFlatVatLine } from "@/lib/quo
 import { config } from "@/lib/config";
 import { sendThankYou } from "@/lib/thank-you";
 import { RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByPickerOrder } from "@/lib/ensure-templates";
-import { isSaleConfirmed, saleFromClassification, type SaleRecord, type SalePayment } from "@/lib/sale";
+import { isSaleConfirmed, saleFromClassification, newEwtOnExclusive, type SaleRecord, type SalePayment } from "@/lib/sale";
 import { applyPaymentSlipRules } from "@/lib/payment-slip";
 import { getInquiryDocs } from "@/lib/inquiry-docs-store";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
@@ -870,10 +870,17 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
       preparedById: true,
       classification: true,
       quoteNumber: true,
+      vatMode: true,
       inquiry: { select: { customerId: true, customer: { select: { company: true } } } },
     },
   });
   if (!quote) throw new Error("Quotation not found");
+  // No EWT withheld on a VAT Exclusive sale — only VAT-inclusive, +12% and zero-rated.
+  {
+    const prevPayments = saleFromClassification(quote.classification)?.payments ?? [];
+    const refusal = newEwtOnExclusive(quote.vatMode, data.payments, prevPayments);
+    if (refusal) throw new Error(refusal);
+  }
   // The preparer, the current sales in-charge (after a transfer), or an admin.
   const ownsQuote = quote.preparedById === user.id || (await isCurrentAccountOwner(quote.inquiry.customerId, user.id));
   if (!ownsQuote && !isAdmin(user))

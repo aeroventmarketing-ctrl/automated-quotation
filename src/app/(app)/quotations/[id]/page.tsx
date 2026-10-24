@@ -13,7 +13,7 @@ import { BatchDocumentList } from "./batch-document-list";
 import { SaleDocumentList } from "../../orders/[id]/sale-document-list";
 import { quoteApproverNames } from "@/lib/approver-directory";
 import { saleFromClassification, isSaleConfirmed, saleDocReadsFromClassification } from "@/lib/sale";
-import { readPricing } from "@/lib/quote";
+import { readPricing, zeroRatedKeepsGross } from "@/lib/quote";
 import { getAccountData, currentOwner } from "@/lib/account";
 import { DuplicateToClient } from "./duplicate-to-client";
 import { coerceReadCounts } from "@/lib/ai/read-allowance";
@@ -164,6 +164,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
             : quotation.vatMode === "ZERO_RATED"
             ? "ZERO_RATED"
             : "INCLUSIVE",
+        zeroRatedGross: zeroRatedKeepsGross(quotation.classification),
         discountPct: Number(quotation.discountPct ?? 0),
         pricing: readPricing(quotation.classification, Number(quotation.discountPct ?? 0)),
         headerUnits: {

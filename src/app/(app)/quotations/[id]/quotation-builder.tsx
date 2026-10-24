@@ -294,6 +294,8 @@ interface Quote {
   revision: number;
   currency: string;
   vatMode: "INCLUSIVE" | "EXCLUSIVE" | "EXCLUSIVE_PLUS" | "ZERO_RATED";
+  /** Zero-rated and paid on before the 2026-10-24 change — keeps the old price basis (`zeroRatedKeepsGross`). */
+  zeroRatedGross?: boolean;
   discountPct: number;
   pricing: PricingAdjust;
   headerUnits: { capacity: string; pressure: string; motor: string };
@@ -2860,7 +2862,7 @@ export function QuotationBuilder({
     exemptGross = round2(exemptGross);
     const gross = round2(vatableGross + exemptGross); // VAT-inclusive
     const net = round2(vatableGross / (1 + vatRate) + exemptGross);
-    const grossBasis = vatDisplayBasisIsGross(effectiveVatMode);
+    const grossBasis = vatDisplayBasisIsGross(effectiveVatMode, { zeroRatedGross: quotation.zeroRatedGross });
     const exclusive = !grossBasis;
     const zeroRated = effectiveVatMode === "ZERO_RATED";
     const displayedNet = grossBasis ? gross : net;
@@ -2871,7 +2873,7 @@ export function QuotationBuilder({
     const vatAmt = addVat ? finalNet * vatableShare * vatRate : 0;
     const grandTotal = finalNet + vatAmt;
     return { net, vat: round2(gross - net), gross, exclusive, zeroRated, displayedNet, markupAmt, afterMarkup, discountAmt, finalNet, addVat, vatAmt, grandTotal };
-  }, [lines, vatRate, effectiveVatMode, pricing]);
+  }, [lines, vatRate, effectiveVatMode, pricing, quotation.zeroRatedGross]);
 
   // --- Auto-save ---------------------------------------------------------
   // The savable payload, mirrored from the manual "Save changes" mapping so the

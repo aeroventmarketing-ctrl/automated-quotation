@@ -11,6 +11,37 @@ export type SaleArrangement = "downpayment_full" | "downpayment_progress" | "ter
 // settles the deal value: cash received + EWT withheld = deal value.
 export type PaymentKind = "down" | "full" | "progress" | "ewt";
 
+/**
+ * May EWT (BIR 2307) be withheld on a sale of this VAT mode? Every mode but VAT
+ * Exclusive. The owner: *"VAT Zero Rated - No VAT but can deduct EWT. VAT
+ * Exclusive - NO VAT and cannot deduct EWT."*
+ */
+export function ewtAllowed(vatMode: string | null | undefined): boolean {
+  return vatMode !== "EXCLUSIVE";
+}
+
+/** The payment kinds a sale of this VAT mode offers — no "EWT withheld" on VAT Exclusive. */
+export function paymentKindsFor(vatMode: string | null | undefined): PaymentKind[] {
+  return ewtAllowed(vatMode) ? ["down", "full", "progress", "ewt"] : ["down", "full", "progress"];
+}
+
+/**
+ * The refusal for a save that ADDS an EWT line to a VAT Exclusive sale, or null.
+ * One already on the record (saved before the rule) is left alone — refusing it
+ * would block every later edit of that sale — and is flagged on screen instead.
+ */
+export function newEwtOnExclusive(
+  vatMode: string | null | undefined,
+  next: { id: string; kind: string }[],
+  prev: { id: string; kind: string }[],
+): string | null {
+  if (ewtAllowed(vatMode)) return null;
+  const had = new Set(prev.filter((p) => p.kind === "ewt").map((p) => p.id));
+  return next.some((p) => p.kind === "ewt" && !had.has(p.id))
+    ? "A VAT Exclusive sale can't have EWT withheld — only VAT-inclusive, +12% and zero-rated sales can. Remove the EWT line."
+    : null;
+}
+
 export interface SaleDoc {
   path: string; // Supabase Storage path
   name: string; // original file name

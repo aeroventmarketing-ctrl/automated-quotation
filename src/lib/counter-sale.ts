@@ -101,16 +101,16 @@ export interface CounterDocSlot {
  * is attached (its number typed in the note), nothing is generated.
  *   INCLUSIVE  → Sales Invoice + Collection Receipt + Delivery Receipt (+ BIR 2307)
  *   ZERO_RATED → Sales Invoice + Collection Receipt + Delivery Receipt + EWT (BIR 2307)
- *   EXCLUSIVE  → Delivery Form + Acknowledgement Form (+ BIR 2307)
- * BIR 2307 is optional for INCLUSIVE / EXCLUSIVE (attached only when the client
- * carries one); for ZERO_RATED the EWT (BIR 2307) is expected, so it's not optional.
+ *   EXCLUSIVE  → Delivery Form + Acknowledgement Form — no BIR 2307: a VAT
+ *                Exclusive sale cannot have EWT withheld (`ewtAllowed`).
+ * BIR 2307 is optional for INCLUSIVE (attached only when the client carries
+ * one); for ZERO_RATED the EWT (BIR 2307) is expected, so it's not optional.
  */
 export function counterDocSlots(vatMode: CounterSaleVatMode): CounterDocSlot[] {
   if (vatMode === "EXCLUSIVE") {
     return [
       { key: "delivery_form", label: "Delivery Form" },
       { key: "acknowledgement_form", label: "Acknowledgement Form" },
-      { key: "bir_2307", label: "BIR 2307", optional: true },
     ];
   }
   const zeroRated = vatMode === "ZERO_RATED";
