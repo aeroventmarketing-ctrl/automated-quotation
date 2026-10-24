@@ -1,3 +1,30 @@
+## 2026-10-24 · Stock availability & issue: match the line's own item, not a bracket-blind name
+
+The owner, on a Fans & Blower requisition: *"In inventory tab Nihonbond #16 has 30pcs in stock but
+when checking for in stock availability and issue it shows out of stock."* The line: `15 pcs ·
+NIHONBOND #16 (1.3mm) (For angle corner)`, SKU CON000473 — badge "30 pc in stock"; the panel: "out of
+stock".
+
+**Cause.** `RequisitionStockCheck` (the Purchasing "Stock availability & issue" panel) matched stock by
+name with every bracket deleted, so NIHONBOND #16 **(1.2mm)** (0 left) and **(1.3mm)** (30) were both
+"nihonbond #16", and it took the first — the 1.2mm. It never used the line's SKU. Pressing Issue would
+have deducted the wrong item.
+
+**Fix.** `stockRowsForLine` (`src/lib/stock-line-match.ts`, tested) — the same rules as the "in stock"
+badge: the line's item code (`itemSkus`) first, then the exact name after peeling only a trailing
+remark ("(1.3mm)" is the item, "(For angle corner)" is not), and only then the bracket-blind name —
+and only when everything it finds is ONE item (the same name at several locations). Two items that
+differ only inside brackets are never guessed between. The panel gets each line's SKU and now also
+says how many are free ("· 30 pc available") and, when the matched item isn't word-for-word the line,
+which item an Issue would deduct.
+
+**Not changed (Phase 3, frozen):** the MRF screens `material-requests.tsx`, `mrf-triage-panel.tsx` and
+`mrf-stock-check.tsx` match stock with the same bracket-blind name; raised with the owner.
+
+Rendered on the role harness as the Warehouse, with both NIHONBOND sizes in Plant Warehouse: the panel
+reads "NIHONBOND #16 (1.3mm) · 15 pcs · Plant Warehouse · 30 pc available · Issue 15"; the gloves "out
+of stock". Issue 15 took the 1.3mm from 30 to 15 and left the 1.2mm at 0.
+
 ## 2026-10-21 · "N in stock" on combined POs, and on the Budgeted tab
 
 The owner, comparing a single request (MRF #0514, "VIBRATION ISOLATOR … · SKU CAT00250 · 0 pc in

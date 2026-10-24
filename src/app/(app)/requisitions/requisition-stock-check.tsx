@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueRequisitionLineFromStock, sendRequisitionLineToPurchasing } from "../orders/actions";
 import { parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix } from "@/lib/purchase-order";
 import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
+import { stockRowsForLine } from "@/lib/stock-line-match";
 
 interface Hit {
   id: string;
@@ -17,10 +18,9 @@ interface Hit {
   onHand: number;
   available: number;
 }
-interface StockOpt { id: string; name: string; location?: string | null; available?: number }
+interface StockOpt { id: string; name: string; sku?: string | null; unit?: string | null; location?: string | null; available?: number }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
-const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 /** Parse a requisition line "5 pc · ANGLE BAR 2.0 X 25 X 25 (remark)". */
 function parseLine(label: string): { qty: number; unit: string; desc: string } {
   const noRemark = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
@@ -44,6 +44,7 @@ export function RequisitionStockCheck({
   prId,
   dept,
   items,
+  skus = [],
   stockItems,
   canIssue,
 }: {
@@ -51,6 +52,8 @@ export function RequisitionStockCheck({
   /** Requesting department — office/motor can pick Plant or Office; others use Plant. */
   dept?: string;
   items: string[];
+  /** Each line's recorded item code (`PurchaseRequest.itemSkus`), matched first. */
+  skus?: (string | null)[];
   stockItems: StockOpt[];
   canIssue: boolean;
 }) {
@@ -68,16 +71,11 @@ export function RequisitionStockCheck({
 
   const policy = stockLocationPolicy(dept);
   const [lineLoc, setLineLoc] = useState<Record<number, string>>({});
-  const rowsByName = useMemo(() => {
-    const m = new Map<string, StockOpt[]>();
-    for (const s of stockItems) {
-      const k = normLabel(s.name);
-      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
-    }
-    return m;
-  }, [stockItems]);
+  // The line's own code first, then its exact name — see `stockRowsForLine`.
+  // Matching by a bracket-blind name used to treat "NIHONBOND #16 (1.3mm)" and
+  // "(1.2mm)" as one item and pick whichever came first.
   const matchStock = (desc: string, lineIndex: number) =>
-    pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept, lineLoc[lineIndex] ?? policy.default);
+    pickIssueRow(stockRowsForLine(desc, skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default);
 
   const lines = items.map((raw, index) => {
     const issued = parseIssuedFromStockLine(raw);
@@ -186,11 +184,18 @@ export function RequisitionStockCheck({
                 <span className="min-w-0 flex-1 truncate">
                   {l.desc} <span className="text-muted-foreground">· {l.qty || "?"} {l.unit}</span>
                   {matched?.location ? <span className="ml-1 text-muted-foreground">· {matched.location}</span> : null}
+                  {/* Which inventory item an Issue would deduct, when it isn't
+                      word-for-word the line — so a wrong match can be seen. */}
+                  {matched && matched.name.trim().toLowerCase() !== l.desc.trim().toLowerCase() && (
+                    <span className="ml-1 text-muted-foreground">· item {matched.name}{matched.sku ? ` (${matched.sku})` : ""}</span>
+                  )}
                   {!matched ? (
                     <span className="ml-1 text-amber-600">· no stock match</span>
                   ) : !inStock ? (
                     <span className="ml-1 text-amber-600">· out of stock</span>
-                  ) : null}
+                  ) : (
+                    <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">· {fmt(matched.available ?? 0)}{matched.unit ? ` ${matched.unit}` : ""} available</span>
+                  )}
                 </span>
                 {policy.mode === "choose" && (
                   <select
