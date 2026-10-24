@@ -65,8 +65,16 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
   // The lines that bypass the warehouse — see `adhocLines`.
   const adhoc = adhocLines(sale.items.map((i) => ({ stockItemId: i.stockItemId, description: i.description, qty: Number(i.qty) })));
   const vatMode = sale.vatMode as CounterSaleVatMode;
-  const slots = counterDocSlots(vatMode);
   const docs = coerceCounterDocs(sale.docs);
+  // A VAT Exclusive sale has no BIR 2307 slot any more (no EWT on VAT
+  // Exclusive) — but one uploaded before that rule still shows, to be seen or
+  // removed, rather than vanishing.
+  const slots = [
+    ...counterDocSlots(vatMode),
+    ...(vatMode === "EXCLUSIVE" && (docs.bir_2307?.length ?? 0) > 0
+      ? [{ key: "bir_2307", label: "BIR 2307 — not expected on a VAT Exclusive sale", optional: true }]
+      : []),
+  ];
   const payments = coerceCounterPayments(sale.payments);
   const nonCash = !isCashMethod(sale.paymentMethod);
   const uncleared = status === "COMPLETED" && !sale.paymentCleared;
@@ -203,6 +211,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
             amountPaid={Number(sale.amountPaid)}
             initialPayments={payments}
             canEdit={status !== "VOID"}
+            vatMode={sale.vatMode}
           />
           <CounterSaleDocs saleId={sale.id} slots={[COUNTER_FINAL_PAYMENT_SLOT]} docs={docs} canEdit={status !== "VOID"} admin={admin} />
 
@@ -212,7 +221,7 @@ export default async function CounterSaleDetailPage({ params }: { params: Promis
               ? "VAT-inclusive: Sales Invoice, Collection Receipt and Delivery Receipt (BIR 2307 optional)."
               : vatMode === "ZERO_RATED"
               ? "VAT zero-rated: Sales Invoice, Collection Receipt, Delivery Receipt, EWT (BIR 2307) and Certificate of VAT Exempt/Zero Rated."
-              : "VAT-exclusive: Delivery Form and Acknowledgement Form (BIR 2307 optional)."}
+              : "VAT-exclusive: Delivery Form and Acknowledgement Form (no EWT on a VAT Exclusive sale)."}
           </p>
           <CounterSaleDocs saleId={sale.id} slots={slots} docs={docs} canEdit={status !== "VOID"} admin={admin} />
           </div>

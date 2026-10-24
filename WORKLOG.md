@@ -1,3 +1,44 @@
+## 2026-10-24 · VAT zero-rated = no VAT (like VAT Exclusive) but may deduct EWT; VAT Exclusive may not
+
+The owner, on 2026 - AFBM00004019J (VAT Exclusive +12%) and 2026 - AFBM00003945J (zero-rated): *"Check
+for errors."* Both were arithmetically consistent with the code; the issue was the rule. *"VAT Zero
+Rated means it has no VAT (same as VAT Exclusive) but VAT Zero Rated can deduct EWT while VAT Exclusive
+cannot deduct EWT … 1. VAT Zero Rated - No VAT but can deduct EWT. 2. VAT Exclusive - NO VAT and cannot
+deduct EWT."* Then: existing ones — **unpaid only**; counter sales — **same rule**; EWT — **block it
+everywhere**.
+
+**Zero-rated pricing (quotations / orders).** ZERO_RATED used the entered (VAT-inclusive) price as the
+total, so the client paid the VAT portion. It now shows it ÷1.12 like EXCLUSIVE: 3945J (lines
+₱4,028,158.81, 10% discount) goes from ₱3,625,342.93 to ₱3,236,913.33. `vatDisplayBasisIsGross(vatMode,
+{ zeroRatedGross })` is the one switch, used by `payableTotal`, the quotation builder, the PDF, the
+Excel export and the P&L (`saleLineNet`, `markupDiscountNet`, the pricing audit). Receipts and
+commission follow `payableTotal`.
+
+**"Unpaid only"** — `zeroRatedKeepsGross(classification)`: a zero-rated quote whose sale has a payment
+dated before **2026-10-25** (`ZERO_RATED_NET_FROM`) was paid at the old price and keeps it. Read from
+the stored payments, so no migration and the answer never flips later. The PDF's net line now says
+"VAT zero-rated" on the new basis too (it said "VAT exclusive price").
+
+**Counter sales: no price change.** Their VAT Exclusive already charges the entered price with no VAT
+line, and zero-rated does the same — already "same as VAT Exclusive". Stripping VAT from zero-rated
+alone would have made them differ.
+
+**EWT (BIR 2307) not on VAT Exclusive.** `ewtAllowed` / `paymentKindsFor` / `newEwtOnExclusive`
+(`lib/sale.ts`, tested). The "EWT withheld" payment option is gone on a VAT Exclusive sale — the
+quotation's sale panel and a counter sale's payments — and `recordSale` / `saveCounterSalePayments`
+refuse a save that ADDS one (an EWT line saved before the rule stays, so the sale can still be edited).
+A VAT Exclusive counter sale no longer has a BIR 2307 slot (one already uploaded still shows, marked
+"not expected"). The order's Record-payment box and batch payments only ever record cash payments, so
+there was nothing to block there; quotation closing documents already excluded the 2307 for VAT
+Exclusive.
+
+**Label.** "Unit ₱ (incl. VAT)" stays: the price is always typed VAT-inclusive, and every no-VAT mode
+now strips it.
+
+Rendered on the role harness: two zero-rated orders, a ₱100,000 line, 10% discount — unpaid: builder
+"NET AMOUNT (VAT zero-rated) ₱89,285.71 · LESS 10% ₱8,928.57 · NET ₱80,357.14", Orders list
+₱80,357.14, PDF the same; paid on 2026-10-20: ₱100,000.00 → ₱90,000.00 everywhere.
+
 ## 2026-10-24 · Receiving (and releasing) into stock: pre-selected by SKU only
 
 The owner, after the SKU-only change to issuing: *"yes, switch receiving to SKU only too."*
