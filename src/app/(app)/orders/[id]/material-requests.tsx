@@ -19,6 +19,8 @@ import { ProductPicker } from "@/components/product-picker";
 import type { ScanProduct } from "@/lib/product-scan";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
+import { stockRowsForLine } from "@/lib/stock-line-match";
+import { pickIssueRow } from "@/lib/stock-location";
 
 interface ReqRow {
   id: string;
@@ -79,12 +81,14 @@ const normalizeUnit = (u: string | undefined): string => {
   return UNIT_OPTIONS.find((o) => o.toLowerCase() === t.toLowerCase()) ?? t.toLowerCase();
 };
 
-/** Normalise an item label for matching (drop parenthetical notes + case/space). */
-const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-/** Best stock item for an MRF line description (exact normalised name match). */
-function matchMrfStock(description: string, stockItems: StockOpt[]): StockOpt | undefined {
-  const n = normLabel(description);
-  return stockItems.find((s) => normLabel(s.name) === n);
+/**
+ * The stock item an MRF line issues from — by the SKU printed beside the line
+ * and nothing else (`stockRowsForLine`). The owner: *"Match by SKU only, do not
+ * use anything else."* A bracket-blind name used to make NIHONBOND #16 (1.2mm)
+ * and (1.3mm) one item. The department's location policy picks the row.
+ */
+function matchMrfStock(code: string | null, stockItems: StockOpt[], dept?: string): StockOpt | undefined {
+  return pickIssueRow(stockRowsForLine(code, stockItems), dept);
 }
 
 export function MaterialRequests({
@@ -184,13 +188,13 @@ export function MaterialRequests({
     }
   }
 
-  // One-click fulfilment: match each line to a stock item by name and issue the
+  // One-click fulfilment: match each line to a stock item by its SKU and issue the
   // requested quantity from stock. The server caps each line at what's actually
   // available (deducting stock, reflected in availability) and routes any
   // shortfall / out-of-stock / unmatched line to purchasing.
   async function autoIssue(r: ReqRow) {
     const dispositions = r.items.map((it) => {
-      const m = matchMrfStock(it.description, stockItems);
+      const m = matchMrfStock(skuFor(it.description, skuIndex), stockItems, r.dept);
       return m
         ? { action: "issue" as const, stockItemId: m.id, qty: Number(it.qty) || 0 }
         : { action: "purchase" as const };

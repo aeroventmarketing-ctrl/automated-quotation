@@ -20,13 +20,24 @@ the catalogue code its SKU chip shows. The **"in stock" badge** (`onHandFor`) fo
 how many are free ("· 30 pc available"), "· SKU X not in inventory" for a code no stock item carries,
 and "· no SKU on this line — can't match stock" for a line with none.
 
-**Not changed (Phase 3, frozen):** the MRF screens `material-requests.tsx`, `mrf-triage-panel.tsx` and
-`mrf-stock-check.tsx` match stock with the same bracket-blind name; raised with the owner.
+**The MRF screens too (Phase 3 — the owner approved: "yes").** `material-requests.tsx` (the one-click
+"Issue Available From Stock"), `mrf-triage-panel.tsx` ("Check availability & process" — the pre-selected
+item) and `mrf-stock-check.tsx` ("Check stock availability & issue") all matched stock by the same
+bracket-blind name. They now use `stockRowsForLine` on the SKU printed beside the MRF line (MRF lines
+carry no recorded code, so that is the SKU chip's code from the stock list), with the department's
+location policy choosing the row. The stock check says "· N available", "· SKU X not in inventory" or
+"· no SKU on this line — can't match stock". No step, role or gating changed. Not changed: the
+receive-into-stock panel (`stock-match-panel.tsx`), whose pre-selection can be changed by hand — raised
+with the owner.
 
 Rendered on the role harness as the Warehouse, with both NIHONBOND sizes in Plant Warehouse: the panel
 reads "NIHONBOND #16 (1.3mm) · 15 pcs · Plant Warehouse · 30 pc available · Issue 15"; the gloves "out
 of stock"; a hand-typed line with no SKU "no SKU on this line — can't match stock" and its badge "Not
-in inventory". Issue 15 took the 1.3mm from 30 to 15 and left the 1.2mm at 0.
+in inventory". Issue 15 took the 1.3mm from 30 to 15 and left the 1.2mm at 0. On an order's MRF #0601
+(NIHONBOND #16 (1.3mm) × 15, plus a line with no SKU): the stock check read "30 pc available · Issue 15"
+and "no SKU on this line"; triage pre-selected "NIHONBOND #16 (1.3mm) · SKU CON000473" and Purchase
+for the other; "Issue Available From Stock" took the 1.3mm 30 → 15, left the 1.2mm at 0 and sent the
+no-SKU line to purchasing.
 
 ## 2026-10-21 · "N in stock" on combined POs, and on the Budgeted tab
 
