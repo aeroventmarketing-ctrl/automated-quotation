@@ -476,7 +476,7 @@ export function PurchasingChain({
               // The warehouse can release from stock only once the Plant Manager has
               // approved the requisition; before that it's a read-only stock lookup.
               canIssueStock && !r.po && r.status === "APPROVED"
-                ? <RequisitionStockCheck prId={r.id} dept={r.dept ?? undefined} items={r.items} stockItems={stockItems} canIssue />
+                ? <RequisitionStockCheck prId={r.id} dept={r.dept ?? undefined} items={r.items} skus={r.items.map((it, i) => (r.itemSkus?.[i] ?? "").trim() || skuFor(poLineFromPRItem(stripToPurchasePrefix(it)).description, skuIndex))} stockItems={stockItems} canIssue />
                 : <StockAvailabilityLookup terms={r.items} />
             )}
             {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}

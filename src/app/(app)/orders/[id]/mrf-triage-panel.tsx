@@ -7,9 +7,9 @@ import type { StockOpt } from "./stock-match-panel";
 import { pickIssueRow } from "@/lib/stock-location";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
+import { stockRowsForLine } from "@/lib/stock-line-match";
 
 /** Normalise an item label for matching (drop parenthetical notes, fold case). */
-const normLabel = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
 
 export interface TriageLine {
   description: string;
@@ -44,21 +44,14 @@ export function MrfTriagePanel({
   /** Requesting department — routes the default stock row to Plant vs Office. */
   dept?: string;
 }) {
-  // Match each line to a stock item by name and find what's free to issue, so a
-  // line with nothing in stock offers only "Purchase" (no "Issue from stock").
-  // Group rows by name so the department's location policy chooses which one.
+  // Match each line to a stock item by the SKU beside it — and nothing else, the
+  // owner: *"Match by SKU only"* — and find what's free to issue, so a line with
+  // nothing in stock offers only "Purchase". The department's location policy
+  // chooses among that SKU's rows.
   /** Name → item code, for the SKU beside each line being triaged. */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems }), [stockItems]);
-  const rowsByName = useMemo(() => {
-    const m = new Map<string, StockOpt[]>();
-    for (const s of stockItems) {
-      const k = normLabel(s.name);
-      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
-    }
-    return m;
-  }, [stockItems]);
   const inStockFor = (desc: string) => {
-    const m = pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept);
+    const m = pickIssueRow(stockRowsForLine(skuFor(desc, skuIndex), stockItems), dept);
     return m && (m.available ?? 0) > 0 ? m : undefined;
   };
 

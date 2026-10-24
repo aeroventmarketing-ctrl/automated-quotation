@@ -1,3 +1,44 @@
+## 2026-10-24 · Stock availability & issue: match the line's own item, not a bracket-blind name
+
+The owner, on a Fans & Blower requisition: *"In inventory tab Nihonbond #16 has 30pcs in stock but
+when checking for in stock availability and issue it shows out of stock."* The line: `15 pcs ·
+NIHONBOND #16 (1.3mm) (For angle corner)`, SKU CON000473 — badge "30 pc in stock"; the panel: "out of
+stock".
+
+**Cause.** `RequisitionStockCheck` (the Purchasing "Stock availability & issue" panel) matched stock by
+name with every bracket deleted, so NIHONBOND #16 **(1.2mm)** (0 left) and **(1.3mm)** (30) were both
+"nihonbond #16", and it took the first — the 1.2mm. It never used the line's SKU. Pressing Issue would
+have deducted the wrong item.
+
+**Fix — by SKU only.** The owner, on the first version (SKU, then exact name): *"Match by SKU only, do
+not use anything else. We always upload products with SKU for further confusions."* So
+`stockRowsForLine(code, stock)` (`src/lib/stock-line-match.ts`, tested) returns the stock rows whose SKU
+is exactly the line's — one per location, `pickIssueRow` chooses — and nothing else. The line's SKU is
+the one printed beside it: its recorded `itemSkus`, or, for a line raised before codes were recorded,
+the catalogue code its SKU chip shows. The **"in stock" badge** (`onHandFor`) follows the same rule now
+— the name pass and the name index are gone — so badge and panel can't disagree. The panel also says
+how many are free ("· 30 pc available"), "· SKU X not in inventory" for a code no stock item carries,
+and "· no SKU on this line — can't match stock" for a line with none.
+
+**The MRF screens too (Phase 3 — the owner approved: "yes").** `material-requests.tsx` (the one-click
+"Issue Available From Stock"), `mrf-triage-panel.tsx` ("Check availability & process" — the pre-selected
+item) and `mrf-stock-check.tsx` ("Check stock availability & issue") all matched stock by the same
+bracket-blind name. They now use `stockRowsForLine` on the SKU printed beside the MRF line (MRF lines
+carry no recorded code, so that is the SKU chip's code from the stock list), with the department's
+location policy choosing the row. The stock check says "· N available", "· SKU X not in inventory" or
+"· no SKU on this line — can't match stock". No step, role or gating changed. Not changed: the
+receive-into-stock panel (`stock-match-panel.tsx`), whose pre-selection can be changed by hand — raised
+with the owner.
+
+Rendered on the role harness as the Warehouse, with both NIHONBOND sizes in Plant Warehouse: the panel
+reads "NIHONBOND #16 (1.3mm) · 15 pcs · Plant Warehouse · 30 pc available · Issue 15"; the gloves "out
+of stock"; a hand-typed line with no SKU "no SKU on this line — can't match stock" and its badge "Not
+in inventory". Issue 15 took the 1.3mm from 30 to 15 and left the 1.2mm at 0. On an order's MRF #0601
+(NIHONBOND #16 (1.3mm) × 15, plus a line with no SKU): the stock check read "30 pc available · Issue 15"
+and "no SKU on this line"; triage pre-selected "NIHONBOND #16 (1.3mm) · SKU CON000473" and Purchase
+for the other; "Issue Available From Stock" took the 1.3mm 30 → 15, left the 1.2mm at 0 and sent the
+no-SKU line to purchasing.
+
 ## 2026-10-21 · "N in stock" on combined POs, and on the Budgeted tab
 
 The owner, comparing a single request (MRF #0514, "VIBRATION ISOLATOR … · SKU CAT00250 · 0 pc in

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueMrfLineFromStock, sendMrfLineToPurchasing } from "../actions";
 import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
+import { stockRowsForLine } from "@/lib/stock-line-match";
+import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 
 interface Hit {
   id: string;
@@ -26,6 +28,8 @@ export interface MrfLine {
 interface StockOpt {
   id: string;
   name: string;
+  sku?: string | null;
+  unit?: string | null;
   /** Warehouse location — routes issuing (Plant Warehouse vs Office). */
   location?: string | null;
   /** Free to issue right now (on hand − active reservations). */
@@ -33,9 +37,8 @@ interface StockOpt {
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
-/** Normalise an item label for matching / searching (drop parenthetical notes). */
+/** Normalise an item label for the SEARCH box (drop parenthetical notes) — never for matching, which is by SKU. */
 const cleanTerm = (s: string) => s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
-const normLabel = (s: string) => cleanTerm(s).toLowerCase();
 
 /**
  * Warehouse availability checker + per-line issue on an MRF card. For each line
@@ -76,17 +79,13 @@ export function MrfStockCheck({
   // A choose department (Motor Controller) may pick Plant or Office per line;
   // default Office. Plant-only departments always use their Plant row.
   const [lineLoc, setLineLoc] = useState<Record<number, string>>({});
-  const rowsByName = useMemo(() => {
-    const m = new Map<string, StockOpt[]>();
-    for (const s of stockItems) {
-      const k = normLabel(s.name);
-      (m.get(k) ?? m.set(k, []).get(k)!).push(s);
-    }
-    return m;
-  }, [stockItems]);
-  // The stock row a line issues from, honouring the department's location policy.
+  // The SKU beside each line, from the same stock list.
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems }), [stockItems]);
+  const skuOf = (desc: string) => skuFor(desc, skuIndex);
+  // The stock row a line issues from: by its SKU and nothing else (the owner:
+  // *"Match by SKU only"*), honouring the department's location policy.
   const matchStock = (desc: string, lineIndex: number) =>
-    pickIssueRow(rowsByName.get(normLabel(desc)) ?? [], dept, lineLoc[lineIndex] ?? policy.default);
+    pickIssueRow(stockRowsForLine(skuOf(desc), stockItems), dept, lineLoc[lineIndex] ?? policy.default);
 
   const pending = lines.filter((l) => !l.disposition);
   const chips = Array.from(new Set(lines.map((l) => cleanTerm(l.description)).filter((t) => t.length >= 2)));
@@ -179,10 +178,14 @@ export function MrfStockCheck({
                   {l.description} <span className="text-muted-foreground">· {l.qty} {l.unit}</span>
                   {matched?.location ? <span className="ml-1 text-muted-foreground">· {matched.location}</span> : null}
                   {!matched ? (
-                    <span className="ml-1 text-amber-600">· no stock match</span>
+                    <span className="ml-1 text-amber-600">
+                      {skuOf(l.description) ? `· SKU ${skuOf(l.description)} not in inventory` : "· no SKU on this line — can't match stock"}
+                    </span>
                   ) : !inStock ? (
                     <span className="ml-1 text-amber-600">· out of stock</span>
-                  ) : null}
+                  ) : (
+                    <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">· {fmt(matched.available ?? 0)}{matched.unit ? ` ${matched.unit}` : ""} available</span>
+                  )}
                 </span>
                 {policy.mode === "choose" && (
                   <select
