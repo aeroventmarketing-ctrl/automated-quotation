@@ -19,6 +19,7 @@ import { coerceReconciliation, reconcileTotals, vatFactor, isReconciled, canReco
 import { coerceCheckDocs, checkAttachableAt, checkReadableAt, checkRemovableAt, hasUnlimitedCheckReads, canApproveCheckDiscrepancy, type CheckDoc } from "@/lib/voucher-check";
 import { coerceCashPayment, type CashPayment } from "@/lib/cash-payment";
 import { canSetPurchaseDue } from "@/lib/job-order-due";
+import type { SupplierPayment } from "@/lib/supplier-payments";
 import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
@@ -231,6 +232,8 @@ export interface PurchaseChainRow {
   autoRaised?: boolean;
   /** A bought-in request (the Purchaser's or an automatic one) — see `isBoughtInRequest`. */
   boughtInRequest?: boolean;
+  /** Payments made to the supplier against this PO — attached by the page (migration 0061). */
+  supplierPayments?: SupplierPayment[];
   // The Purchaser may reject a still-pending request (in the pending bucket:
   // PENDING_APPROVAL, or a dept MRF approved by the Plant Manager but not yet
   // purchase-approved). Rendered as a Reject button on the interactive chain.

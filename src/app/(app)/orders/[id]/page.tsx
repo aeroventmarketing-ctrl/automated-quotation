@@ -34,6 +34,8 @@ import {
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView, isAutoRaisedBoughtIn, isBoughtInRequest } from "@/lib/purchase-chain-row";
+import { supplierPaymentsFor } from "@/lib/supplier-payments-data";
+import type { SupplierPayment } from "@/lib/supplier-payments";
 import { getVoucherNoByPr } from "@/lib/purchase-voucher";
 import { coercePurchaseOrder, poLinesFromPRItems, withSpecDetail } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
@@ -899,6 +901,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       canApproveReconcile: false,
     };
   });
+  // Payments made to suppliers against these POs (read-only here; recorded in Purchasing).
+  {
+    const { byId } = await supplierPaymentsFor(purchaseRows.map((r) => r.id));
+    for (const r of purchaseRows as (typeof purchaseRows[number] & { supplierPayments?: SupplierPayment[] })[]) {
+      const p = byId.get(r.id);
+      if (p) r.supplierPayments = p;
+    }
+  }
 
   // A fully bought-in order (goods bought from a supplier, nothing fabricated)
   // skips production and follows the PO flow: the Purchaser requests the items

@@ -27,6 +27,8 @@ import { COMPANY } from "@/lib/config";
 import { type ReplenScanRow } from "./replenishment-list";
 import { PurchasingWorkspace } from "./purchasing-workspace";
 import { BoughtInToRequestPanel } from "./bought-in-to-request";
+import { supplierPaymentsFor } from "@/lib/supplier-payments-data";
+import type { SupplierPayment } from "@/lib/supplier-payments";
 import { boughtInOrdersToRequest, autoRaisedAwaitingCount, type BoughtInToRequest } from "@/lib/bought-in-pending-data";
 import { COMPLETED_PAGE, wantsAllCompleted, purchasingOrdersToLoad } from "@/lib/completed-page";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
@@ -615,6 +617,23 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     }
   }
 
+  // Payments made to suppliers (migration 0061) — one raw read for every row and
+  // combined PO on the page; nothing shows until the migration is applied.
+  if (!tableMissing) {
+    const ids = [
+      ...orderGroups.flatMap((g) => g.rows.map((r) => r.id)),
+      ...deptRows.map((r) => r.id), ...completedDeptRows.map((r) => r.id), ...replenRows.map((r) => r.id),
+      ...batches.map((b) => b.anchorId),
+    ];
+    const { byId } = await supplierPaymentsFor([...new Set(ids)]);
+    if (byId.size) {
+      const put = <T extends { id: string; supplierPayments?: SupplierPayment[] }>(r: T) => { const p = byId.get(r.id); if (p) r.supplierPayments = p; };
+      orderGroups.forEach((g) => g.rows.forEach(put));
+      deptRows.forEach(put); completedDeptRows.forEach(put); replenRows.forEach(put);
+      batches.forEach((b) => { const p = byId.get(b.anchorId); if (p) b.supplierPayments = p; });
+    }
+  }
+
   // Bought-in orders whose items the Purchaser hasn't requested yet, and (admin)
   // the automatic requests left over from before — see BoughtInToRequestPanel.
   let toRequest: BoughtInToRequest[] = [];
@@ -670,6 +689,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
               showAmounts={showAmounts}
               showSupplier={showSupplier}
               canVoucher={canVoucher}
+              canRecordSupplierPayments={admin || canAct("purchaser") || canAct("accounting") || canAct("payment_approver")}
               canCheckStock={admin || canAct("warehouse") || canAct("purchaser") || canAct("payment_approver")}
               canIssueStock={admin || canAct("warehouse")}
               depts={REQUISITION_DEPTS.map((d) => ({ key: d.key, label: d.label }))}

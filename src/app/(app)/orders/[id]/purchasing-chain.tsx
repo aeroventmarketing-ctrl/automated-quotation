@@ -13,6 +13,8 @@ import { AdminPurchaseOverride } from "../../purchasing/admin-purchase-override"
 import { VoucherCheckControl } from "../../purchasing/voucher-check-control";
 import type { CashPayment } from "@/lib/cash-payment";
 import { PurchaseDueControl } from "../../purchasing/purchase-due-control";
+import { SupplierPaymentsPanel } from "../../purchasing/supplier-payments-panel";
+import type { SupplierPayment } from "@/lib/supplier-payments";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
 import { AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-manage";
@@ -91,6 +93,8 @@ interface PRRow {
   /** Raised by the system when a bought-in order's payment was cleared. */
   autoRaised?: boolean;
   boughtInRequest?: boolean;
+  /** Payments made to the supplier against this PO (migration 0061). */
+  supplierPayments?: SupplierPayment[];
   poApproved?: boolean;
   canPurchaserReject?: boolean;
   canPreparePO?: boolean;
@@ -155,6 +159,7 @@ export function PurchasingChain({
   showStockCheck = false,
   canIssueStock = false,
   showOnHand = false,
+  supplierPaymentsEditable = false,
   adminManage = false,
   highlightId,
   todayYMD,
@@ -225,6 +230,8 @@ export function PurchasingChain({
    * Approved and Budgeted tabs, which is where the owner asked for it.
    */
   showOnHand?: boolean;
+  /** Purchasing's Budgeted tab, for the roles that record them: add / remove supplier payments. */
+  supplierPaymentsEditable?: boolean;
   /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
   adminManage?: boolean;
   /** A request id to scroll to / highlight (deep-link from a notification). */
@@ -698,6 +705,12 @@ export function PurchasingChain({
                     >
                       <Pencil className="h-3.5 w-3.5" /> Edit
                     </button>
+                  )}
+                  {/* Down payments and the rest, paid to the supplier against this PO. */}
+                  {showAmounts && (supplierPaymentsEditable || (r.supplierPayments?.length ?? 0) > 0) && (
+                    <div className="w-full">
+                      <SupplierPaymentsPanel prId={r.id} due={poTotals(r.po).net} payments={r.supplierPayments ?? []} canEdit={!readOnly && supplierPaymentsEditable} />
+                    </div>
                   )}
                 </div>
               ) : !readOnly && r.canManagePO && r.canPreparePO ? (

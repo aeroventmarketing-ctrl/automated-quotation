@@ -116,6 +116,7 @@ export function PurchasingWorkspace({
   showAmounts = true,
   showSupplier = true,
   canVoucher = false,
+  canRecordSupplierPayments = false,
   canCheckStock = false,
   canIssueStock = false,
   depts = [],
@@ -157,6 +158,8 @@ export function PurchasingWorkspace({
   showSupplier?: boolean;
   /** Whether the viewer may generate a payment voucher from selected requests. */
   canVoucher?: boolean;
+  /** Purchaser / Accounting / Payment Approver / admin — may record payments made to suppliers. */
+  canRecordSupplierPayments?: boolean;
   /** Warehouse / Purchaser / Payment Approver / admin — show the stock lookup on requisitions. */
   canCheckStock?: boolean;
   /** Warehouse / admin — may issue a requisition line from stock (removes it from the PO). */
@@ -473,6 +476,7 @@ export function PurchasingWorkspace({
           showAmounts={showAmounts}
           showSupplier={showSupplier}
           showOnHand={showOnHand}
+          supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
           highlightId={highlightId}
         />
       )}
@@ -544,6 +548,7 @@ export function PurchasingWorkspace({
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
                       showOnHand={showOnHand}
+          supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                       adminManage={admin}
                       highlightId={highlightId}
                     />
@@ -590,6 +595,7 @@ export function PurchasingWorkspace({
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
                   showOnHand={showOnHand}
+          supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                   adminManage={admin}
                   highlightId={highlightId}
                   {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
@@ -626,6 +632,7 @@ export function PurchasingWorkspace({
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
                   showOnHand={showOnHand}
+          supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                   adminManage={admin}
                   highlightId={highlightId}
                   {...(bulkDeleteTab ? { selectedIds: selected, onToggleSelect: toggleSelect, allowClosedSelection: true } : {})}
