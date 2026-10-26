@@ -1,3 +1,20 @@
+## 2026-10-26 · Cabinet Blower (DIDW) Forward Curved: cabinet factor ÷0.54, not ÷0.9
+
+The owner, after the computation above: *"Here is the division factors to be used in Cabinet Blower
+(DIDW) Forward Curved: /0.9 - Forward Curved, /0.57 - DIDW, 0.54 - Cabinet … correct computation should
+be 1 ÷ (0.9 × 0.57 × 0.54)."*
+
+`CFABCAB` was 1 / (0.9 × 0.57 × **0.9**) = 2.16591 — the cabinet step used the forward-curve ÷0.9 a
+second time. Now 1 / (0.9 × 0.57 × **0.54**) = **3.60985** (the owner's 3.6102 is the same figure
+rounded), matching the backward-curved cabinet `CEBCAB` = 1 / (0.57 × 0.54). Changed in all three
+copies: the quotation builder's `TAG_FACTORS`, `lib/fan-body-factors.ts` (P&L body COGS — kept in step
+by rule), and the HVAC selection tool's cabinet factor (CFABCAB ÷0.54 on the DIDWCFAB price).
+
+The owner's line now prices: body 22,738 × 3.60985 = 82,080.72; + motor 14,386.32 = 96,467.04 net;
+× 1.12 = **108,043.08**. Saved quotations keep their stored price until the line is edited (any change
+to it re-prices). The P&L's body cost for these fans rises by the same factor, past orders included.
+Test: `fan-body-factors.test.ts`.
+
 ## 2026-10-26 · Quotation builder: "Body + Motor" shows the body as priced
 
 The owner, on a Cabinet Blower (DIDW) · Forward Curved · Belt · Black Iron line (Body ₱ 22,738, 1.5 HP

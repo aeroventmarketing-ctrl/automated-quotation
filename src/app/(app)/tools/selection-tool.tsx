@@ -207,9 +207,9 @@ export function SelectionTool({
                     ? 1 / 0.9
                     : 1;
               // Cabinet variants reuse the base catalogue but add a factor:
-              // CABSISW ÷0.54, CEBCAB ÷0.54 (on DIDWCEB), CFABCAB ÷0.9 (on DIDWCFAB).
+              // CABSISW ÷0.54, CEBCAB ÷0.54 (on DIDWCEB), CFABCAB ÷0.54 (on DIDWCFAB).
               const cabFactor =
-                tag === "CABSISW" || tag === "CEBCAB" ? 1 / 0.54 : tag === "CFABCAB" ? 1 / 0.9 : 1;
+                tag === "CABSISW" || tag === "CEBCAB" || tag === "CFABCAB" ? 1 / 0.54 : 1;
               const body = (priceMap[sel.modelId] ?? 0) * tagFactor * cabFactor;
               const motor = lookupMotor(sel.motorHp, 3, sel.motorPole ?? 4);
               // Catalogue price first, so this estimate matches what a quote would charge.
