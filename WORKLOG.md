@@ -1,3 +1,56 @@
+## 2026-10-26 · Cabinet Blower (DIDW) Forward Curved: cabinet factor ÷0.54, not ÷0.9
+
+The owner, after the computation above: *"Here is the division factors to be used in Cabinet Blower
+(DIDW) Forward Curved: /0.9 - Forward Curved, /0.57 - DIDW, 0.54 - Cabinet … correct computation should
+be 1 ÷ (0.9 × 0.57 × 0.54)."*
+
+`CFABCAB` was 1 / (0.9 × 0.57 × **0.9**) = 2.16591 — the cabinet step used the forward-curve ÷0.9 a
+second time. Now 1 / (0.9 × 0.57 × **0.54**) = **3.60985** (the owner's 3.6102 is the same figure
+rounded), matching the backward-curved cabinet `CEBCAB` = 1 / (0.57 × 0.54). Changed in all three
+copies: the quotation builder's `TAG_FACTORS`, `lib/fan-body-factors.ts` (P&L body COGS — kept in step
+by rule), and the HVAC selection tool's cabinet factor (CFABCAB ÷0.54 on the DIDWCFAB price).
+
+The owner's line now prices: body 22,738 × 3.60985 = 82,080.72; + motor 14,386.32 = 96,467.04 net;
+× 1.12 = **108,043.08**. Saved quotations keep their stored price until the line is edited (any change
+to it re-prices). The P&L's body cost for these fans rises by the same factor, past orders included.
+Test: `fan-body-factors.test.ts`.
+
+## 2026-10-26 · Quotation builder: "Body + Motor" shows the body as priced
+
+The owner, on a Cabinet Blower (DIDW) · Forward Curved · Belt · Black Iron line (Body ₱ 22,738, 1.5 HP
+3-ph 4-pole, 400 V, Unit ₱ 71,270.92): *"Please check and show how this is computed."*
+
+The price was right; the readout beside it was not. The computation:
+
+- Body: catalogue 22,738 × CFABCAB type factor 1 / (0.9 × 0.57 × 0.9) = 2.16591 → **49,248.43**, × 1
+  (Black Iron Sheet), no paint upgrade, not customized.
+- Motor 1A1HK3F3T (1.5 HP, 3-ph, 4-pole): **14,386.32** from the Products motor catalogue.
+- Net unit = 49,248.43 + 14,386.32 = **63,634.75** (no +10% dynamic balancing — that is 3-ph above 10 HP).
+- Unit incl. VAT = 63,634.75 × 1.12 = **71,270.92**.
+
+"Body + Motor" read **37,124.32** because it added the *catalogue* body (22,738) instead of the priced
+body (49,248.43), so it matched nothing on the line. It now uses the same `computeUnitPrice(bodyPriceOf…)`
+as the price itself (63,634.75 here, with "(incl. +10%)" when dynamic balancing applies), so Body +
+Motor × 1.12 = the Amount. Display only; no price changes.
+
+## 2026-10-26 · My Dashboard: a PO paid in cash no longer asks for its check photo
+
+The owner, on My Dashboard (WINGS COMMERCIAL PO-AFBM20260000985 and PO-AFBM20260000980, both
+"Attach the check photo"): *"This PO number has a duplicated PO. One is paid in cash and one is waiting
+for the check to upload."*
+
+The *Attach the check photo* task (`my-dashboard.ts`, 2c) never looked at the **Paid in cash** tick
+(`PurchaseRequest.cashPayment`), so a PO settled in cash — already "Cleared · Cash" on Check
+monitoring — kept asking for a check that will never exist. It now skips a PO ticked as paid in cash;
+on a combined PO, a tick on any member counts. Notification only — no step, status or gate changes.
+
+The duplicate itself is data, not code: whether the other WINGS PO is a genuine second purchase or a
+copy to cancel is the owner's call (asked).
+
+Rendered on the role harness: with HARNESS-DUE and one member of combined PO-770 ticked as paid in
+cash, the admin's task list dropped exactly those two; HARNESS-ORDER, HARNESS-LIVE, PO-762 and the rest
+still asked.
+
 ## 2026-10-26 · Inventory: stock movement history and price movement history
 
 The owner, on the Inventory tab: *"1. Monitor the price movement of each items in inventory, show the

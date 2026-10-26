@@ -57,7 +57,7 @@ const TAG_FACTORS: Record<string, number> = {
   CEB: 1, CIEB: 1, SIEB: 1, EWF: 1, EWFDD: 1, FAWF: 1, FAWFDD: 1, PRV: 1, PRVDD: 1,
   TAF: 1, TAFDD: 1, VAF: 1, VAFDD: 1, JF: 2, HPB: 1 / 0.4, CMH: 1, CMA: 1, CMB: 1, CPF: 1,
   CFAB: 1 / 0.9, CABSISW: 1 / 0.54, DIDWCEB: 1 / 0.57, DIDWCFAB: 1 / (0.9 * 0.57),
-  CEBCAB: 1 / (0.57 * 0.54), CFABCAB: 1 / (0.9 * 0.57 * 0.9),
+  CEBCAB: 1 / (0.57 * 0.54), CFABCAB: 1 / (0.9 * 0.57 * 0.54),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 

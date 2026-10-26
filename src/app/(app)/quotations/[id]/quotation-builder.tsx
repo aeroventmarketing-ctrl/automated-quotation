@@ -942,7 +942,7 @@ function selectionBlockedReason(specs: {
  *  CEB ×1 (base) · CFAB ÷0.9 · CABSISW ÷0.54 · DIDWCEB ÷0.57 ·
  *  DIDWCFAB ÷0.9 ÷0.57 (forward × double-width) ·
  *  CEBCAB ÷0.57 ÷0.54 (DIDWCEB cabinet) ·
- *  CFABCAB ÷0.9 ÷0.57 ÷0.9 (DIDWCFAB cabinet).
+ *  CFABCAB ÷0.9 ÷0.57 ÷0.54 (DIDWCFAB cabinet: forward ÷0.9, DIDW ÷0.57, cabinet ÷0.54).
  */
 const TAG_FACTORS: Record<string, number> = {
   CEB: 1,
@@ -978,7 +978,7 @@ const TAG_FACTORS: Record<string, number> = {
   DIDWCEB: 1 / 0.57,
   DIDWCFAB: 1 / (0.9 * 0.57),
   CEBCAB: 1 / (0.57 * 0.54),
-  CFABCAB: 1 / (0.9 * 0.57 * 0.9),
+  CFABCAB: 1 / (0.9 * 0.57 * 0.54),
 };
 const tagFactor = (tag: string): number => TAG_FACTORS[tag] ?? 1;
 /**
@@ -6064,7 +6064,10 @@ export function QuotationBuilder({
                       ))}
                     {isBlower && hp && ph && motor && (
                       <span className="ml-auto">
-                        Body + Motor: <b className="text-foreground">{formatCurrency(round2((l.specs.bodyPrice ?? 0) + netMotor(motor, exp)), quotation.currency)}</b>
+                        {/* The body as priced (catalogue × type factor × material, paint…),
+                            not the catalogue figure typed above — so this plus VAT is the Amount. */}
+                        Body + Motor: <b className="text-foreground">{formatCurrency(computeUnitPrice(bodyPriceOf(l.specs), netMotor(motor, exp), hp, ph), quotation.currency)}</b>
+                        {db && <> (incl. +10%)</>}
                       </span>
                     )}
                     <span className={`text-foreground${isBlower && hp && ph && motor ? "" : " ml-auto"}`}>

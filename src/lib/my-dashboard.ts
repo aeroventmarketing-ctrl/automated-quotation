@@ -29,6 +29,7 @@ import { coercePurchaseReturns, nextReturnStage, returnStageDef, isReturnComplet
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { coerceCheckDocs, checkMissing, checkAttachableAt, formatCheckNo } from "@/lib/voucher-check";
+import { coerceCashPayment } from "@/lib/cash-payment";
 import { buildCheckWatch, notifiesAdmin } from "@/lib/check-monitor";
 import { getSuppliers } from "@/lib/suppliers";
 import { cashStepsFrom, CASH_STATUS_LABEL, type CashRequestStatus } from "@/lib/cash-request";
@@ -599,12 +600,17 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
         // exactly as the Purchasing workspace picks it. Without this the same
         // missing check would be reported once per member request.
         const seenBatch = new Set<string>();
+        // A PO ticked "Paid in cash" on Check monitoring owes no check — the
+        // register already shows it Cleared · Cash. The tick sits on whichever
+        // member was ticked, so a combined PO counts as paid if any member is.
+        const cashBatches = new Set(prs.filter((p) => coerceCashPayment(p.cashPayment)).map((p) => poBatchId(p.po) ?? p.id));
         for (const pr of prs) {
           const bid = poBatchId(pr.po);
           if (bid) {
             if (seenBatch.has(bid)) continue;
             seenBatch.add(bid);
           }
+          if (cashBatches.has(bid ?? pr.id)) continue;
           const po = coercePurchaseOrder(pr.po);
           if (!po) continue;
           if (!termsCompanies.has(po.supplier.company.trim().toLowerCase())) continue;
