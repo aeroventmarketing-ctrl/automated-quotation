@@ -9,6 +9,7 @@
  */
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
+import { revalidateQuoteCatalogue } from "@/lib/quote-catalogue";
 import { Family } from "@prisma/client";
 import { getAccountsRegistry, saveAccountsRegistry } from "@/lib/account";
 
@@ -376,10 +377,12 @@ export async function importCustomers(csv: string, opts?: { toMarketingList?: bo
 
 export async function runImport(type: ImportType, csv: string, opts?: { toMarketingList?: boolean }): Promise<ImportResult> {
   switch (type) {
+    // Both write the catalogue the quotation page caches — drop it whatever
+    // the result, since a partial import still wrote the rows that passed.
     case "catalogue":
-      return importCatalogue(csv);
+      try { return await importCatalogue(csv); } finally { revalidateQuoteCatalogue(); }
     case "pricelist":
-      return importPricelist(csv);
+      try { return await importPricelist(csv); } finally { revalidateQuoteCatalogue(); }
     case "ratings":
       return importRatings(csv);
     case "customers":

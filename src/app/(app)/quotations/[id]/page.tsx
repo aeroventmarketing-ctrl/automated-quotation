@@ -8,6 +8,7 @@ import { ensureBuiltinTemplates, RETAINED_TEMPLATE_LAYOUT_KEYS, sortTemplatesByN
 import { getPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock } from "@/lib/axial-lock";
 import { getMotorPrices } from "@/lib/motor-prices";
+import { getQuoteCatalog } from "@/lib/quote-catalogue";
 import { QuotationBuilder, type RevisionSnapshot } from "./quotation-builder";
 import { BatchDocumentList } from "./batch-document-list";
 import { SaleDocumentList } from "../../orders/[id]/sale-document-list";
@@ -27,7 +28,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   const { id } = await params;
   // Make sure the built-in "KDK" template is available in the picker.
   await ensureBuiltinTemplates();
-  const [quotation, templates, user, catItems, motorPrices, propellerSpLock, axialSpLock] = await Promise.all([
+  const [quotation, templates, user, catalog, motorPrices, propellerSpLock, axialSpLock] = await Promise.all([
     prisma.quotation.findUnique({
       where: { id },
       include: {
@@ -43,16 +44,8 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
       orderBy: { name: "asc" },
     }),
     getCurrentUser(),
-    prisma.catalogueItem.findMany({
-      where: { active: true },
-      select: {
-        id: true,
-        modelCode: true,
-        description: true,
-        specs: true,
-        priceList: { where: { variantKey: "default" }, take: 1, select: { basePrice: true } },
-      },
-    }),
+    // Cached across requests — see lib/quote-catalogue.
+    getQuoteCatalog(),
     getMotorPrices(),
     getPropellerSpLock(),
     getAxialSpLock(),
@@ -81,24 +74,6 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
   // A transferred quotation belongs to the current sales in-charge, so they get
   // the same edit rights as the original preparer.
   const isPreparerOrOwner = !!user && (user.id === quotation.preparedById || currentOwner(account)?.userId === user.id);
-
-  const catalog = Object.fromEntries(
-    catItems.map((i) => [
-      i.id,
-      ((s) => ({
-        modelCode: i.modelCode,
-        description: i.description ?? "",
-        basePrice: i.priceList[0] ? Number(i.priceList[0].basePrice) : 0,
-        bladeDia: num(s?.bladeDia_in),
-        // Air-curtain attributes (used to pick a model by height + door width).
-        type: typeof s?.type === "string" ? (s.type as string) : null,
-        lengthMm: num(s?.length_mm),
-        heightM: num(s?.effectiveHeight_m),
-        powerW: num(s?.power_w),
-        airVolumeCmh: num(s?.airVolume_cmh),
-      }))(i.specs as Record<string, unknown>),
-    ]),
-  );
 
   return (
     <div className="space-y-4">

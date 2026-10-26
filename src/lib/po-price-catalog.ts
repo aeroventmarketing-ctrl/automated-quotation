@@ -12,6 +12,7 @@
  * and the audit that reports on it. Two copies is how they drift.
  */
 import { prisma } from "@/lib/db";
+import { getStockCosts } from "@/lib/stock-catalogue";
 import { getProducts } from "@/lib/product-catalog";
 import { catalogPriceFor, catalogReferencePriceFor, REF_PRICE_KEY, type CatalogPrices } from "@/lib/po-catalog";
 
@@ -20,9 +21,7 @@ export type { CatalogPrices };
 export async function buildPoPriceCatalog(): Promise<CatalogPrices> {
   const [products, stockItems] = await Promise.all([
     getProducts().catch(() => []),
-    prisma.stockItem
-      .findMany({ where: { active: true }, select: { name: true, unitCost: true } })
-      .catch(() => [] as { name: string; unitCost: unknown }[]),
+    getStockCosts().catch(() => [] as { name: string; unitCost: unknown }[]),
   ]);
 
   const catalog: CatalogPrices = {};

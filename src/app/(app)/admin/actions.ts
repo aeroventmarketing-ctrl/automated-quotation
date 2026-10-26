@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateQuoteCatalogue } from "@/lib/quote-catalogue";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -126,6 +127,7 @@ export async function upsertCatalogueItem(input: z.infer<typeof catalogueSchema>
   }
 
   revalidatePath("/admin/catalogue");
+  revalidateQuoteCatalogue();
 }
 
 export interface MotorSeedResult {
@@ -227,6 +229,7 @@ export async function seedMotorCatalogue(): Promise<MotorSeedResult> {
   }
 
   revalidatePath("/admin/catalogue");
+  revalidateQuoteCatalogue();
   return res;
 }
 
@@ -234,6 +237,7 @@ export async function deleteCatalogueItem(id: string) {
   await assertAdmin();
   await prisma.catalogueItem.delete({ where: { id } });
   revalidatePath("/admin/catalogue");
+  revalidateQuoteCatalogue();
 }
 
 /**
@@ -262,6 +266,7 @@ export async function clearCatalogue(password?: string) {
   });
   const { count } = await prisma.catalogueItem.deleteMany({});
   revalidatePath("/admin/catalogue");
+  revalidateQuoteCatalogue();
   revalidatePath("/admin/import");
   return count;
 }

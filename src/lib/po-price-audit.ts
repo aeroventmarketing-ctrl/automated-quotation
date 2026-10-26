@@ -36,6 +36,7 @@
  */
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getStockCosts } from "@/lib/stock-catalogue";
 import { getProducts } from "@/lib/product-catalog";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { catalogPriceFor, matchKey, REF_PRICE_KEY } from "@/lib/po-catalog";
@@ -119,9 +120,7 @@ const TRIVIAL_SHARE = 0.02; // and no more than 2% of the line
 export async function auditPoPrices(): Promise<PriceAudit> {
   const [products, stockItems, requests] = await Promise.all([
     getProducts().catch(() => []),
-    prisma.stockItem
-      .findMany({ where: { active: true }, select: { name: true, unitCost: true } })
-      .catch(() => [] as { name: string; unitCost: unknown }[]),
+    getStockCosts().catch(() => [] as { name: string; unitCost: unknown }[]),
     prisma.purchaseRequest
       // `po` is a nullable Json column, so the absence of a PO is Prisma's
       // DbNull, not JS null — filtering on `null` does not type-check here.
