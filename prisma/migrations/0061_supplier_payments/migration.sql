@@ -1,0 +1,22 @@
+-- Payments made TO A SUPPLIER against a purchase order — down payments and the
+-- rest, each with its date and proof.
+--
+-- The owner: "In purchasing budgeted tab add an option to add lists of payments
+-- and dates of payments made. Add a link to upload proof of payment and eye view
+-- for easy viewing. Some PO requires DP to suppliers, we want to monitor those
+-- payments made."
+--
+-- Its own column for the same reason as "cashPayment" (0058): `coercePurchaseOrder`
+-- rebuilds the `po` JSON field by field and would drop it.
+--
+-- Shape: [{ "id", "amount", "date": "YYYY-MM-DD", "note"?, "proof"?: { "path",
+-- "name", "uploadedAt" }, "byName", "at" }]. Null / absent = none recorded.
+-- On a combined PO the list lives on the anchor request (as the check does).
+--
+-- The app reads and writes this column with raw SQL and keeps it OUT of the
+-- Prisma model, so every existing PurchaseRequest query keeps working before this
+-- migration is applied (the build does not run `migrate deploy`).
+--
+-- Adds a column, creates no table, so no RLS block is needed — PurchaseRequest
+-- already has row level security from 0038_enable_rls.
+ALTER TABLE "PurchaseRequest" ADD COLUMN IF NOT EXISTS "supplierPayments" JSONB;

@@ -1,3 +1,37 @@
+## 2026-10-26 · Purchasing: payments to the supplier (down payments) with proof
+
+The owner, on PO-AFBM20260000954 (JOEL LATERO SHOP, ₱40,000.00) in the Budgeted tab: *"add an option to
+add lists of payments and dates of payments made. Add a link to upload proof of payment and eye view
+for easy viewing. Some PO requires DP to suppliers, we want to monitor those payments made."* (Phase 4
+is frozen; this addition was asked for by the owner. It is a record only — no step, status, role or
+gate changes.)
+
+**On every PO in the Budgeted tab** — single requests and combined POs — a **Payments to supplier**
+panel: each payment's date, amount, note and who recorded it, with its proof (file name · 👁 view ·
+download, through `/api/purchase-uploads`). The header totals it against what the supplier is owed —
+the PO net (total less EWT): "Paid ₱12,000.00 · 5.1% · Balance ₱221,564.67", "Fully paid", or
+"Overpaid ₱…". **Add payment**: date (today by default), amount, note, Upload proof. Remove per line.
+Who: the Purchaser, Accounting, the Payment Approver or an admin (`supplier-payment-actions.ts`,
+checked server-side). On other tabs, and on the order page's Phase 4 card, the list shows read-only
+once a payment exists; roles that can't see amounts don't see it at all.
+
+**Storage — migration 0061, to apply by hand.** `PurchaseRequest.supplierPayments` (JSONB), on the
+anchor request of a combined PO. Its own column for the reason `cashPayment` is (`coercePurchaseOrder`
+would drop it from the `po` JSON). The column is read and written with **raw SQL and kept out of the
+Prisma model**, so no existing PurchaseRequest query can break before the migration is applied: until
+then the panels show with nothing recorded, and saving says "apply migration 0061_supplier_payments
+in Supabase". Appends are one atomic `jsonb ||` statement.
+
+`src/lib/supplier-payments.ts` (coerce + totals, tested), `supplier-payments-data.ts` (the raw read),
+`purchasing/supplier-payments-panel.tsx`.
+
+Rendered on the role harness: before the migration, Budgeted showed 14 panels and saving returned the
+migration hint; after it, Accounting saved "₱2,000.00 · 50% down payment" on combined PO-770 → "Paid
+₱2,000.00 · 0.9% · Balance ₱231,564.67"; with a proof-bearing payment added, the Purchaser and Payment
+Approver saw the file with its eye link, the Warehouse saw no panel, and Remove took a line out and
+the totals with it; Approved tab — no Add buttons. (The harness has no file storage, so the upload
+itself wasn't exercised; it uses the same upload route as the check photos.)
+
 ## 2026-10-24 · VAT zero-rated = no VAT (like VAT Exclusive) but may deduct EWT; VAT Exclusive may not
 
 The owner, on 2026 - AFBM00004019J (VAT Exclusive +12%) and 2026 - AFBM00003945J (zero-rated): *"Check

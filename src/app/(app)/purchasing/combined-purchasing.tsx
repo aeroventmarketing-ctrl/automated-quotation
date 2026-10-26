@@ -24,6 +24,8 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { VoucherCheckControl } from "./voucher-check-control";
 import { PurchaseDueControl } from "./purchase-due-control";
+import { SupplierPaymentsPanel } from "./supplier-payments-panel";
+import type { SupplierPayment } from "@/lib/supplier-payments";
 import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
@@ -58,6 +60,8 @@ export interface BatchAction {
 }
 export interface BatchCard {
   anchorId: string;
+  /** Payments made to the supplier against this PO (on the anchor; migration 0061). */
+  supplierPayments?: SupplierPayment[];
   orderIdForPrint: string;
   poNumber: string;
   supplierCompany: string;
@@ -134,6 +138,7 @@ export function CombinedPurchasing({
   showAmounts = true,
   showSupplier = true,
   showOnHand = false,
+  supplierPaymentsEditable = false,
   highlightId,
 }: {
   combinable: CombinableItem[];
@@ -159,6 +164,8 @@ export function CombinedPurchasing({
    * never did.
    */
   showOnHand?: boolean;
+  /** Purchasing's Budgeted tab, for the roles that record them: add / remove supplier payments. */
+  supplierPaymentsEditable?: boolean;
   /** A combined-PO anchor id to scroll to / highlight (deep-link from a notification). */
   highlightId?: string;
 }) {
@@ -211,7 +218,7 @@ export function CombinedPurchasing({
       {/* Existing combined POs */}
       {batches.map((b) => (
         <div key={b.anchorId} id={`req-${b.anchorId}`} className={`scroll-mt-24 rounded-lg ${highlightId === b.anchorId ? "ring-2 ring-primary ring-offset-2" : ""}`}>
-          <BatchCardView batch={b} showOnHand={showOnHand} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+          <BatchCardView batch={b} showOnHand={showOnHand} supplierPaymentsEditable={supplierPaymentsEditable} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
         </div>
       ))}
 
@@ -299,7 +306,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true, showOnHand = false }: { batch: BatchCard; showOnHand?: boolean; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true, showOnHand = false, supplierPaymentsEditable = false }: { batch: BatchCard; showOnHand?: boolean; supplierPaymentsEditable?: boolean; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
   /** Name → item code, for the SKU beside each PO line ON SCREEN. The supplier's
    *  copy is built from `line.description` alone and never sees it. */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
@@ -553,6 +560,10 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           />
         </div>
       </div>
+      {/* Down payments and the rest, paid to the supplier — kept on the anchor. */}
+      {showAmounts && (supplierPaymentsEditable || (batch.supplierPayments?.length ?? 0) > 0) && (
+        <SupplierPaymentsPanel prId={batch.anchorId} due={totals.net} payments={batch.supplierPayments ?? []} canEdit={supplierPaymentsEditable} />
+      )}
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
     </div>
   );
