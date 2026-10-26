@@ -21,6 +21,8 @@ import {
   type TransferPayload,
 } from "@/lib/stock-action";
 import { planReservedCorrection, CORRECTION_REF } from "@/lib/reserved-correction";
+import { logPriceChange } from "@/lib/inventory-history-data";
+import { approvalSigners } from "@/lib/price-history";
 
 /**
  * Result of a stock-action server action. We RETURN the reason on failure rather
@@ -304,7 +306,14 @@ async function doRejectStockAction(id: string, reason?: string): Promise<void> {
 }
 
 /** Apply the pending change to the real stock (called once both parties approve). */
-async function applyAction(tx: Prisma.TransactionClient, a: { kind: StockActionKind; stockItemId: string; payload: unknown }, byName: string): Promise<void> {
+async function applyAction(
+  tx: Prisma.TransactionClient,
+  a: {
+    kind: StockActionKind; stockItemId: string; payload: unknown;
+    id?: string; proposedByName?: string; warehouseByName?: string | null; purchaserByName?: string | null; approverByName?: string | null;
+  },
+  byName: string,
+): Promise<void> {
   const item = await tx.stockItem.findUnique({ where: { id: a.stockItemId } });
   if (!item) throw new Error("Stock item no longer exists.");
 
@@ -317,6 +326,19 @@ async function applyAction(tx: Prisma.TransactionClient, a: { kind: StockActionK
         ...(d.name ? { name: d.name } : {}),
         ...(d.unit ? { unit: d.unit } : {}),
       },
+    });
+    // Price movement: who asked, who signed. `byName` is whoever's signature
+    // applied it — the last approver, or the price owner applying their own.
+    const proposer = a.proposedByName ?? byName;
+    const approvedBy = approvalSigners(proposer, [a.warehouseByName, a.purchaserByName, a.approverByName, byName]);
+    await logPriceChange(tx, {
+      item: { id: item.id, name: d.name || item.name, sku: item.sku },
+      before: { unitCost: Number(item.unitCost), sellPrice: Number(item.sellPrice) },
+      after: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+      source: approvedBy ? "approval" : "direct",
+      byName: proposer,
+      approvedByName: approvedBy,
+      stockActionId: a.id ?? null,
     });
 
     // On hand, typed straight in. Still a MOVEMENT — "Set to", with who and

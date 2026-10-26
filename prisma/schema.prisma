@@ -700,6 +700,33 @@ model StockMovement {
 }
 
 /**
+ * Price movement of a stock item — every change to its unit cost or selling
+ * price, with who made it, how (approved edit / direct set / import / merge /
+ * new item) and who approved it. Written by `logPriceChange`
+ * (lib/price-history-data). Relation-free with a name / SKU snapshot, like
+ * DeptStockTransfer, so the history outlives a removed item. Migration 0062.
+ */
+model StockPriceChange {
+  id             String   @id @default(cuid())
+  stockItemId    String
+  itemName       String
+  sku            String?
+  oldUnitCost    Decimal? @db.Decimal(14, 2) // null on a new item
+  newUnitCost    Decimal  @db.Decimal(14, 2)
+  oldSellPrice   Decimal? @db.Decimal(14, 2)
+  newSellPrice   Decimal  @db.Decimal(14, 2)
+  source         String // "approval" | "direct" | "import" | "create" | "merge"
+  byName         String // who made (or proposed) the change
+  approvedByName String? // who signed an approved edit, in order
+  stockActionId  String? // the approved Edit request it came from
+  note           String?
+  createdAt      DateTime @default(now())
+
+  @@index([stockItemId])
+  @@index([createdAt])
+}
+
+/**
  * Inter-department stock transfer for the departmental P&L. When a production
  * department pulls in-house duct hardware (angle corner / TDC cleat / S-clip /
  * C-clip) from Fans & Blowers stock via the MRF, it books as a SALE for Fans and

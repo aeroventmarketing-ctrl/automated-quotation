@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShoppingCart, History } from "lucide-react";
+import { ShoppingCart, History, ScrollText } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -191,8 +191,13 @@ export default async function InventoryPage() {
           <h1 className="text-2xl font-bold">Inventory</h1>
           <p className="text-sm text-muted-foreground">{isSales ? "Stock on hand, availability and selling price — read-only." : "Warehouse stock on hand, with receive / issue / adjust and a movement ledger."}</p>
         </div>
-        {(canViewApprovalHistory || showHeaderTools) && (
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+            {/* Stock movements for everyone here; price movements for those who
+                see prices on this page — the history page applies the same flags. */}
+            <Link href="/inventory/history" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent">
+              <ScrollText className="h-4 w-4" />
+              {showPrices ? "Stock & price history" : "Stock history"}
+            </Link>
             {/* Where a request goes once its last signature lands — the pending
                 card on the row only exists while it is still waiting. */}
             {canViewApprovalHistory && (
@@ -210,8 +215,7 @@ export default async function InventoryPage() {
               Reorder{lowCount + outCount > 0 ? ` (${lowCount + outCount})` : ""}
             </Link>
             </>)}
-          </div>
-        )}
+        </div>
       </div>
 
       {tableMissing ? (
