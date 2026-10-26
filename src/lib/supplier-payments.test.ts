@@ -29,3 +29,11 @@ describe("payments to a supplier", () => {
     expect(supplierPaymentTotals(coerceSupplierPayments([dp, rest, { ...rest, id: "c" }]), 40000)).toMatchObject({ balance: 0, over: 20000 });
   });
 });
+
+describe("a corrected payment", () => {
+  it("keeps who recorded it and says who edited it", () => {
+    const [p] = coerceSupplierPayments([{ ...dp, amount: 18500, editedByName: "Rey Gil", editedAt: "2026-10-26T05:00:00Z" }]);
+    expect(p).toMatchObject({ amount: 18500, byName: "Michelle Cotura", editedByName: "Rey Gil", editedAt: "2026-10-26T05:00:00Z" });
+    expect(coerceSupplierPayments([dp])[0].editedByName).toBeUndefined();
+  });
+});

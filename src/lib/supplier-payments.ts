@@ -27,6 +27,9 @@ export interface SupplierPayment {
   /** Who recorded it, and when (ISO) — not the same as when it was paid. */
   byName: string;
   at: string;
+  /** Who last corrected it, and when (ISO). */
+  editedByName?: string;
+  editedAt?: string;
 }
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
@@ -54,6 +57,7 @@ export function coerceSupplierPayments(value: unknown): SupplierPayment[] {
       proof,
       byName: typeof o.byName === "string" ? o.byName : "",
       at: typeof o.at === "string" ? o.at : "",
+      ...(typeof o.editedByName === "string" && o.editedByName ? { editedByName: o.editedByName, editedAt: typeof o.editedAt === "string" ? o.editedAt : "" } : {}),
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date) || a.at.localeCompare(b.at));

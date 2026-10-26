@@ -562,7 +562,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       </div>
       {/* Down payments and the rest, paid to the supplier — kept on the anchor. */}
       {showAmounts && (supplierPaymentsEditable || (batch.supplierPayments?.length ?? 0) > 0) && (
-        <SupplierPaymentsPanel prId={batch.anchorId} due={totals.net} payments={batch.supplierPayments ?? []} canEdit={supplierPaymentsEditable} />
+        <SupplierPaymentsPanel prId={batch.anchorId} due={totals.net} payments={batch.supplierPayments ?? []} canEdit={supplierPaymentsEditable} canDelete={supplierPaymentsEditable && admin} />
       )}
       {err && <p className="mt-1 text-xs text-destructive">{err}</p>}
     </div>

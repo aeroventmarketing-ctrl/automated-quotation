@@ -2,14 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Wallet, Plus, Paperclip, Trash2 } from "lucide-react";
+import { Wallet, Plus, Paperclip, Trash2, Pencil } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { UploadLink } from "@/components/upload-link";
 import { uploadDocument } from "@/lib/client-upload";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { supplierPaymentTotals, type SupplierPayment, type SupplierPaymentProof } from "@/lib/supplier-payments";
-import { addSupplierPayment, removeSupplierPayment } from "./supplier-payment-actions";
+import { addSupplierPayment, updateSupplierPayment, removeSupplierPayment } from "./supplier-payment-actions";
 
 const todayYMD = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 
@@ -21,19 +21,24 @@ const todayYMD = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila
  *
  * Each payment: date, amount, note, and its proof (name · 👁 view · download).
  * Totals against what the supplier is owed (`due` — the PO net, total less EWT).
- * `canEdit` adds the form and the remove buttons; without it the list is read-only.
+ * `canEdit` adds the form and an Edit (pencil) on every row; `canDelete` — admin
+ * only, the owner: *"Only admin has the ability to delete"* — adds the bin.
+ * Without `canEdit` the list is read-only.
  */
 export function SupplierPaymentsPanel({
   prId,
   due,
   payments,
   canEdit,
+  canDelete = false,
 }: {
   /** The request that carries the list — a combined PO's anchor. */
   prId: string;
   due: number;
   payments: SupplierPayment[];
   canEdit: boolean;
+  /** Admin: may delete a payment. */
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -42,6 +47,8 @@ export function SupplierPaymentsPanel({
   const [note, setNote] = useState("");
   const [proof, setProof] = useState<SupplierPaymentProof | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** The payment being corrected (null while adding a new one). */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const t = supplierPaymentTotals(payments, due);
@@ -62,17 +69,28 @@ export function SupplierPaymentsPanel({
     }
   }
 
+  function startAdd() {
+    setEditingId(null); setAmount(""); setNote(""); setProof(null); setDate(todayYMD()); setErr(null); setOpen(true);
+  }
+  function startEdit(p: SupplierPayment) {
+    setEditingId(p.id); setAmount(String(p.amount)); setDate(p.date); setNote(p.note ?? ""); setProof(p.proof ?? null); setErr(null); setOpen(true);
+  }
+  function close() {
+    setOpen(false); setEditingId(null); setErr(null);
+  }
+
   async function save() {
     setBusy("save"); setErr(null);
-    const res = await addSupplierPayment(prId, { amount: Number(amount), date, note, proof });
+    const body = { amount: Number(amount), date, note, proof };
+    const res = editingId ? await updateSupplierPayment(prId, editingId, body) : await addSupplierPayment(prId, body);
     setBusy(null);
     if (res.error) { setErr(res.error); return; }
-    setAmount(""); setNote(""); setProof(null); setDate(todayYMD()); setOpen(false);
+    setAmount(""); setNote(""); setProof(null); setDate(todayYMD()); close();
     router.refresh();
   }
 
   async function remove(p: SupplierPayment) {
-    if (!window.confirm(`Remove the ${formatCurrency(p.amount, "PHP")} payment of ${formatDate(p.date)}?`)) return;
+    if (!window.confirm(`Delete the ${formatCurrency(p.amount, "PHP")} payment of ${formatDate(p.date)}? This can't be undone.`)) return;
     setBusy(p.id); setErr(null);
     const res = await removeSupplierPayment(prId, p.id);
     setBusy(null);
@@ -93,7 +111,7 @@ export function SupplierPaymentsPanel({
             ? <span className="font-medium text-red-700 dark:text-red-400">Overpaid {formatCurrency(t.over, "PHP")}</span>
             : <span className={t.balance === 0 ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}>{t.balance === 0 ? "Fully paid" : <>Balance <b>{formatCurrency(t.balance, "PHP")}</b></>}</span>)}
           {canEdit && !open && (
-            <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+            <button type="button" onClick={startAdd} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
               <Plus className="h-3.5 w-3.5" /> Add payment
             </button>
           )}
@@ -110,17 +128,25 @@ export function SupplierPaymentsPanel({
                 <td className="py-1 pr-2">
                   {p.note && <span>{p.note} </span>}
                   <span className="text-[10px] text-muted-foreground">· {p.byName}</span>
+                  {p.editedByName && <span className="text-[10px] text-muted-foreground"> · edited by {p.editedByName}{p.editedAt ? `, ${formatDate(p.editedAt)}` : ""}</span>}
                 </td>
                 <td className="py-1 pr-1 text-right">
                   {p.proof
                     ? <UploadLink doc={p.proof} base="/api/purchase-uploads" size="xs" />
                     : <span className="text-[10px] text-amber-700 dark:text-amber-400">no proof</span>}
                 </td>
-                {canEdit && (
-                  <td className="w-5 py-1 text-right">
-                    <button type="button" onClick={() => remove(p)} disabled={busy != null} className="text-muted-foreground hover:text-destructive disabled:opacity-50" title="Remove this payment" aria-label="Remove this payment">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                {(canEdit || canDelete) && (
+                  <td className="whitespace-nowrap py-1 text-right">
+                    {canEdit && (
+                      <button type="button" onClick={() => startEdit(p)} disabled={busy != null} className={`mr-1.5 text-muted-foreground hover:text-primary disabled:opacity-50 ${editingId === p.id ? "text-primary" : ""}`} title="Edit this payment" aria-label="Edit this payment">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button type="button" onClick={() => remove(p)} disabled={busy != null} className="text-muted-foreground hover:text-destructive disabled:opacity-50" title="Delete this payment (admin)" aria-label="Delete this payment">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>
@@ -134,6 +160,7 @@ export function SupplierPaymentsPanel({
 
       {canEdit && open && (
         <div className="mt-2 flex flex-wrap items-end gap-2 border-t pt-2">
+          <div className="w-full text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{editingId ? "Edit payment" : "New payment"}</div>
           <label className="space-y-0.5">
             <span className="block text-[10px] text-muted-foreground">Date paid</span>
             <Input type="date" className="h-8 w-36" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -162,9 +189,9 @@ export function SupplierPaymentsPanel({
             )}
           </div>
           <Button type="button" size="sm" className="h-8 text-xs" disabled={busy != null || !(Number(amount) > 0) || !date} onClick={save}>
-            {busy === "save" ? "Saving…" : "Save payment"}
+            {busy === "save" ? "Saving…" : editingId ? "Save changes" : "Save payment"}
           </Button>
-          <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" disabled={busy != null} onClick={() => { setOpen(false); setErr(null); }}>
+          <Button type="button" size="sm" variant="ghost" className="h-8 text-xs" disabled={busy != null} onClick={close}>
             Cancel
           </Button>
         </div>
