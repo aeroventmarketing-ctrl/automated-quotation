@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight, BellRing } from "lucide-react";
+import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight, BellRing, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { stockAvailable, stockStatus, stockValue } from "@/lib/stock-figures";
 import { Button } from "@/components/ui/button";
@@ -270,6 +270,9 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
         <TableCell>
           <div className="flex items-center gap-2">
             <span className="font-medium">{item.name}</span>
+            <Link href={`/inventory/history?item=${item.id}`} title="History — stock movements and price changes" aria-label={`History of ${item.name}`} className="text-muted-foreground hover:text-primary">
+              <History className="h-3.5 w-3.5" />
+            </Link>
             {showSell && item.sellPrice <= 0 && (
               <Badge variant="warning" className="font-normal">No sell price</Badge>
             )}

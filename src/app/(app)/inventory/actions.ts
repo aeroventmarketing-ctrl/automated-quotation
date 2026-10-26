@@ -14,6 +14,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
+import { logPriceChange } from "@/lib/inventory-history-data";
 
 async function requireInventoryManager() {
   const user = await getCurrentUser();
@@ -384,6 +385,19 @@ export async function importStockItems(
           if (mayPrice && has(iCost)) data.unitCost = num(cell(iCost));
           if (mayPrice && has(iSell)) data.sellPrice = num(cell(iSell));
           if (Object.keys(data).length > 0) await tx.stockItem.update({ where: { id: existing.id }, data });
+          if (data.unitCost !== undefined || data.sellPrice !== undefined) {
+            const before = { unitCost: Number(existing.unitCost), sellPrice: Number(existing.sellPrice) };
+            await logPriceChange(tx, {
+              item: { id: existing.id, name, sku: wantSku || existing.sku },
+              before,
+              after: {
+                unitCost: data.unitCost !== undefined ? Number(data.unitCost) : before.unitCost,
+                sellPrice: data.sellPrice !== undefined ? Number(data.sellPrice) : before.sellPrice,
+              },
+              source: "import",
+              byName: user.name,
+            });
+          }
           // Quantity: only when a non-empty quantity is given; record the change
           // in the ledger. A blank quantity leaves on-hand untouched (so a
           // price-only re-upload never zeroes stock).
@@ -420,6 +434,13 @@ export async function importStockItems(
               data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: quantity, balanceAfter: quantity, reason: "Opening balance (import)", byName: user.name },
             });
           }
+          await logPriceChange(tx, {
+            item: { id: item.id, name: item.name, sku: item.sku },
+            before: null,
+            after: { unitCost: Number(item.unitCost), sellPrice: Number(item.sellPrice) },
+            source: "import",
+            byName: user.name,
+          });
           created++;
         }
       });
@@ -484,6 +505,15 @@ export async function mergeDuplicateStockItems(): Promise<{ groups: number; remo
         if (Number(keep.unitCost) <= 0 && bestCost > 0) patch.unitCost = bestCost;
         if (Object.keys(patch).length > 0) await tx.stockItem.update({ where: { id: keep.id }, data: patch });
         await tx.stockItem.updateMany({ where: { id: { in: rest.map((d) => d.id) } }, data: { active: false } });
+        const before = { unitCost: Number(keep.unitCost), sellPrice: Number(keep.sellPrice) };
+        await logPriceChange(tx, {
+          item: { id: keep.id, name: keep.name, sku: keep.sku },
+          before,
+          after: { unitCost: patch.unitCost !== undefined ? bestCost : before.unitCost, sellPrice: patch.sellPrice !== undefined ? bestSell : before.sellPrice },
+          source: "merge",
+          byName: user.name,
+          note: `Price taken from a duplicate (${rest.length} merged)`,
+        });
       });
       groups++;
       removed += rest.length;
@@ -534,6 +564,15 @@ export async function mergeStockItemsInto(input: z.infer<typeof mergeIntoSchema>
     if (!primary.sku) { const withSku = others.find((o) => o.sku); if (withSku?.sku) patch.sku = withSku.sku; }
     await tx.stockItem.update({ where: { id: primaryId }, data: patch });
     await tx.stockItem.updateMany({ where: { id: { in: otherIdList } }, data: { active: false, quantity: 0 } });
+    const before = { unitCost: Number(primary.unitCost), sellPrice: Number(primary.sellPrice) };
+    await logPriceChange(tx, {
+      item: { id: primary.id, name: primary.name, sku: primary.sku ?? (typeof patch.sku === "string" ? patch.sku : null) },
+      before,
+      after: { unitCost: patch.unitCost !== undefined ? bestCost : before.unitCost, sellPrice: patch.sellPrice !== undefined ? bestSell : before.sellPrice },
+      source: "merge",
+      byName: user!.name,
+      note: `Price taken from a duplicate (${others.length} merged)`,
+    });
   });
   await logActivity(user, {
     action: "inventory.merge", category: "inventory",
@@ -676,6 +715,13 @@ export async function createStockItem(input: z.infer<typeof createSchema>): Prom
         data: { stockItemId: item.id, kind: "ADJUSTMENT", delta: d.quantity, balanceAfter: d.quantity, reason: "Opening balance", byName: user.name },
       });
     }
+    await logPriceChange(tx, {
+      item: { id: item.id, name: item.name, sku: item.sku },
+      before: null,
+      after: { unitCost: Number(item.unitCost), sellPrice: Number(item.sellPrice) },
+      source: "create",
+      byName: user.name,
+    });
   });
   revalidateStockCatalogue();
   revalidatePath("/inventory");
@@ -697,7 +743,7 @@ const metaSchema = z.object({
 
 /** Edit an item's Item Code, location, unit cost, selling price, category and reorder level (no movement). */
 export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Promise<void> {
-  await requireInventoryManager();
+  const user = await requireInventoryManager();
   const d = metaSchema.parse(input);
   const mayPrice = await canSetCataloguePrice();
   const wantSku = normalizeSku(d.sku);
@@ -719,7 +765,8 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
     });
     if (bClash) throw new Error(`Barcode "${wantBarcode}" is already used by another stock item at this location.`);
   }
-  await prisma.stockItem.update({
+  const prior = await prisma.stockItem.findUnique({ where: { id: d.stockItemId }, select: { unitCost: true, sellPrice: true } });
+  const saved = await prisma.stockItem.update({
     where: { id: d.stockItemId },
     data: {
       ...(wantSku ? { sku: wantSku } : {}),
@@ -733,6 +780,15 @@ export async function updateStockItemMeta(input: z.infer<typeof metaSchema>): Pr
       ...(mayPrice ? { unitCost: d.unitCost, sellPrice: d.sellPrice } : {}),
     },
   });
+  if (mayPrice && prior) {
+    await logPriceChange(prisma, {
+      item: { id: saved.id, name: saved.name, sku: saved.sku },
+      before: { unitCost: Number(prior.unitCost), sellPrice: Number(prior.sellPrice) },
+      after: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+      source: "direct",
+      byName: user.name,
+    });
+  }
   revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/inventory/reorder");
@@ -750,11 +806,22 @@ const priceSchema = z.object({
  * purchaser can fill in missing selling prices without warehouse rights.
  */
 export async function updateStockItemPrices(input: z.infer<typeof priceSchema>): Promise<void> {
-  await requirePriceManager();
+  const user = await requirePriceManager();
   const d = priceSchema.parse(input);
-  await prisma.stockItem.update({
-    where: { id: d.stockItemId },
-    data: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+  await prisma.$transaction(async (tx) => {
+    const prior = await tx.stockItem.findUnique({ where: { id: d.stockItemId } });
+    if (!prior) throw new Error("Stock item not found");
+    await tx.stockItem.update({
+      where: { id: d.stockItemId },
+      data: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+    });
+    await logPriceChange(tx, {
+      item: { id: prior.id, name: prior.name, sku: prior.sku },
+      before: { unitCost: Number(prior.unitCost), sellPrice: Number(prior.sellPrice) },
+      after: { unitCost: d.unitCost, sellPrice: d.sellPrice },
+      source: "direct",
+      byName: user.name,
+    });
   });
   revalidateStockCatalogue();
   revalidatePath("/inventory");

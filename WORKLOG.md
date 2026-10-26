@@ -1,3 +1,52 @@
+## 2026-10-26 · Inventory: stock movement history and price movement history
+
+The owner, on the Inventory tab: *"1. Monitor the price movement of each items in inventory, show the
+date of price movement, show who edited or changed the price and when 2. Add stock movement history,
+where and when the item go, when it was added and deducted, who edited and other important details for
+monitoring."* Answers to the clarifying questions: track unit cost and sell price; visibility as prices
+are today; per item plus a full ledger page; seed price history from approved Edit requests.
+
+**Where:** a 🕘 icon beside every item name on Inventory opens `/inventory/history?item=…`; the header's
+**Stock & price history** button ("Stock history" for roles without prices) opens the whole ledger.
+Filters: item / SKU, date range, type (Added / Deducted / Transfer / Adjustment / Reservation), by whom.
+**Export Excel** (`/api/inventory-history/export`) carries the same filters, up to 5,000 rows.
+
+**Stock movements** read the ledger every stock change has always written (`StockMovement`), so the
+history goes back to day one. Each row: date & time, type, **where it went / came from**, ± qty, on hand
+after, reference, who, and the person's own note. The ledger's reason text is read back into a type
+and destination (`lib/stock-history.ts`, tested): purchase received (its **PO number matched in** from
+the purchase request received by the same person at the same moment), reorder received, MRF issue /
+release (the **MRF number resolved to its order**, linked), order released from stock (linked),
+requisition issue, counter sale (linked) and its returns, transfers out / in / cancelled, opening
+balance, import, on-hand set, and manual adjustments. Reservations show too — reserved and released,
+who and for which order — since they hold stock though on hand doesn't move. Per item: added /
+deducted totals for what's shown.
+
+**Price movements** — new table `StockPriceChange` (**migration 0062, apply by hand**; it has the RLS
+block). Every price write logs old → new unit cost and sell price, % change, how, who changed it and
+who approved it: approved Edit requests (proposer + the signers, in order), the Admin / Payment
+Approver's direct set, Excel import, new item, merge of duplicates. `logPriceChange` checks the table
+exists first (`to_regclass`), so before the migration a price edit still saves (verified) — it just
+isn't logged. Changes before the log started are **rebuilt from approved Edit requests**
+(`priceHistoryFromApprovals`, tested): only the ones that moved a price, each against the edit before
+it; the earliest reads "first on record". Prices set outside that chain before today can't be recovered.
+
+**Who sees what** — the Inventory page's own flags, no new rule: stock history for everyone who can
+open Inventory; price history only with `showPrices`, and the sell price only with `showSellPrice` too
+(the Purchaser and Accounting see unit cost changes only; a sell-price-only change is hidden from them).
+Warehouse and Sales get the stock tab only; the price export refuses them (403).
+
+No workflow change: the frozen Phase 3/4 actions are untouched — references are resolved when the
+history is read.
+
+Rendered on the role harness: Nihonbond #16 showed purchase received "From supplier ·
+PO-AFBM20260000777", "Released on MRF · Duct · MRF #0042 · 2026 - AFBM00003963J" (linked), counter
+sale, transfer to Office with its note, reserved / released, opening balance; price tab showed two
+rebuilt approvals (₱100 → ₱120, signed by Allan Ramos, Rey Gil). Before 0062: the Payment Approver's
+₱120 → ₱130 saved with no error. After 0062: ₱130 → ₱140 / ₱195 → ₱210 "Set directly · Rey Gil", then a
+Warehouse-raised edit approved by the Purchaser and Payment Approver logged "Approved edit · Willy Ho ·
+Allan Ramos, Rey Gil". 390px: no horizontal page scroll.
+
 ## 2026-10-26 · Payments to supplier: edit a row; only an admin deletes
 
 The owner, on PO-AFBM20260000945 (JOEL LATERO SHOP, "₱18,500.00 · 50% Down payment · Rey Gil · no
