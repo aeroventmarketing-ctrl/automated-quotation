@@ -1,3 +1,21 @@
+## 2026-10-26 · Quotation builder: "Body + Motor" shows the body as priced
+
+The owner, on a Cabinet Blower (DIDW) · Forward Curved · Belt · Black Iron line (Body ₱ 22,738, 1.5 HP
+3-ph 4-pole, 400 V, Unit ₱ 71,270.92): *"Please check and show how this is computed."*
+
+The price was right; the readout beside it was not. The computation:
+
+- Body: catalogue 22,738 × CFABCAB type factor 1 / (0.9 × 0.57 × 0.9) = 2.16591 → **49,248.43**, × 1
+  (Black Iron Sheet), no paint upgrade, not customized.
+- Motor 1A1HK3F3T (1.5 HP, 3-ph, 4-pole): **14,386.32** from the Products motor catalogue.
+- Net unit = 49,248.43 + 14,386.32 = **63,634.75** (no +10% dynamic balancing — that is 3-ph above 10 HP).
+- Unit incl. VAT = 63,634.75 × 1.12 = **71,270.92**.
+
+"Body + Motor" read **37,124.32** because it added the *catalogue* body (22,738) instead of the priced
+body (49,248.43), so it matched nothing on the line. It now uses the same `computeUnitPrice(bodyPriceOf…)`
+as the price itself (63,634.75 here, with "(incl. +10%)" when dynamic balancing applies), so Body +
+Motor × 1.12 = the Amount. Display only; no price changes.
+
 ## 2026-10-26 · My Dashboard: a PO paid in cash no longer asks for its check photo
 
 The owner, on My Dashboard (WINGS COMMERCIAL PO-AFBM20260000985 and PO-AFBM20260000980, both

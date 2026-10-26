@@ -6064,7 +6064,10 @@ export function QuotationBuilder({
                       ))}
                     {isBlower && hp && ph && motor && (
                       <span className="ml-auto">
-                        Body + Motor: <b className="text-foreground">{formatCurrency(round2((l.specs.bodyPrice ?? 0) + netMotor(motor, exp)), quotation.currency)}</b>
+                        {/* The body as priced (catalogue × type factor × material, paint…),
+                            not the catalogue figure typed above — so this plus VAT is the Amount. */}
+                        Body + Motor: <b className="text-foreground">{formatCurrency(computeUnitPrice(bodyPriceOf(l.specs), netMotor(motor, exp), hp, ph), quotation.currency)}</b>
+                        {db && <> (incl. +10%)</>}
                       </span>
                     )}
                     <span className={`text-foreground${isBlower && hp && ph && motor ? "" : " ml-auto"}`}>
