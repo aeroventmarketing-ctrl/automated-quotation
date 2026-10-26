@@ -1,3 +1,21 @@
+## 2026-10-26 · My Dashboard: a PO paid in cash no longer asks for its check photo
+
+The owner, on My Dashboard (WINGS COMMERCIAL PO-AFBM20260000985 and PO-AFBM20260000980, both
+"Attach the check photo"): *"This PO number has a duplicated PO. One is paid in cash and one is waiting
+for the check to upload."*
+
+The *Attach the check photo* task (`my-dashboard.ts`, 2c) never looked at the **Paid in cash** tick
+(`PurchaseRequest.cashPayment`), so a PO settled in cash — already "Cleared · Cash" on Check
+monitoring — kept asking for a check that will never exist. It now skips a PO ticked as paid in cash;
+on a combined PO, a tick on any member counts. Notification only — no step, status or gate changes.
+
+The duplicate itself is data, not code: whether the other WINGS PO is a genuine second purchase or a
+copy to cancel is the owner's call (asked).
+
+Rendered on the role harness: with HARNESS-DUE and one member of combined PO-770 ticked as paid in
+cash, the admin's task list dropped exactly those two; HARNESS-ORDER, HARNESS-LIVE, PO-762 and the rest
+still asked.
+
 ## 2026-10-26 · Inventory: stock movement history and price movement history
 
 The owner, on the Inventory tab: *"1. Monitor the price movement of each items in inventory, show the
