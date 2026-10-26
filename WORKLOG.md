@@ -1,3 +1,22 @@
+## 2026-10-26 · Payments to supplier: edit a row; only an admin deletes
+
+The owner, on PO-AFBM20260000945 (JOEL LATERO SHOP, "₱18,500.00 · 50% Down payment · Rey Gil · no
+proof"): *"add an option to edit or update the payment to supplier row. Only admin has the ability to
+delete."*
+
+- **Edit** (pencil on every row) — the Purchaser, Accounting, the Payment Approver or an admin, on the
+  Budgeted tab: the same form as Add, filled in — date, amount, note, and the proof (add one later,
+  replace or remove it). `updateSupplierPayment` patches that entry in one atomic statement, keeps its
+  id and who first recorded it, and stamps `editedByName` / `editedAt`; the row reads "· edited by
+  <name>, <date>".
+- **Delete** (bin) — admin only, on screen and in `removeSupplierPayment` ("Only an admin can delete a
+  supplier payment — use Edit to correct it.").
+
+Rendered on the role harness: Accounting saw the pencil and no bin; edited ₱18,500 → ₱17,500 and the
+note → "Paid ₱17,500.00 · 7.5% · Balance ₱216,064.67", "50% Down payment (corrected again) · Rey Gil ·
+edited by Michelle Cotura, Oct 26, 2026"; the stored entry kept its id and recorder. Admin saw both
+the pencil and the bin.
+
 ## 2026-10-26 · Purchasing: payments to the supplier (down payments) with proof
 
 The owner, on PO-AFBM20260000954 (JOEL LATERO SHOP, ₱40,000.00) in the Budgeted tab: *"add an option to

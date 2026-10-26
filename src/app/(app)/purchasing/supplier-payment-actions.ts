@@ -8,9 +8,9 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { coerceSupplierPayments, type SupplierPayment, type SupplierPaymentProof } from "@/lib/supplier-payments";
 
 /**
- * Record / remove a payment made to a supplier against a PO — see
+ * Record / correct a payment made to a supplier against a PO — see
  * `lib/supplier-payments`. The Purchaser, Accounting, the Payment Approver or an
- * admin. A record only: no step, status or gate moves.
+ * admin; deleting one is admin-only. A record only: no step, status or gate moves.
  *
  * Raw SQL, because the column is deliberately not in the Prisma model (see
  * migration 0061). Before that migration is applied the write fails, and the
@@ -65,9 +65,54 @@ export async function addSupplierPayment(
   return { ok: true };
 }
 
-export async function removeSupplierPayment(prId: string, paymentId: string): Promise<{ ok?: true; error?: string }> {
+/**
+ * Correct a recorded payment — its date, amount, note or proof. The owner: *"add
+ * an option to edit or update the payment to supplier row"*. Same roles as
+ * adding. The entry keeps its id, who first recorded it and when; the edit is
+ * stamped (`editedByName` / `editedAt`). One atomic statement.
+ */
+export async function updateSupplierPayment(
+  prId: string,
+  paymentId: string,
+  input: { amount: number; date: string; note?: string; proof?: SupplierPaymentProof | null },
+): Promise<{ ok?: true; error?: string }> {
   const who = await allowed();
   if ("error" in who) return { error: who.error };
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!(amount > 0)) return { error: "Enter the amount paid." };
+  const date = String(input.date ?? "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Enter the date it was paid." };
+  const proof = input.proof && typeof input.proof.path === "string" && input.proof.path.startsWith(`purchases/${prId}/`)
+    ? { path: input.proof.path, name: input.proof.name || "proof", uploadedAt: input.proof.uploadedAt || new Date().toISOString() }
+    : null;
+  const patch = {
+    amount, date, note: input.note?.trim().slice(0, 500) ?? "", proof,
+    editedByName: who.name, editedAt: new Date().toISOString(),
+  };
+  try {
+    const rows = await prisma.$queryRaw<{ found: boolean }[]>`
+      update "PurchaseRequest"
+         set "supplierPayments" = (
+           select jsonb_agg(case when e->>'id' = ${paymentId} then e || ${JSON.stringify(patch)}::jsonb else e end)
+             from jsonb_array_elements(coalesce("supplierPayments", '[]'::jsonb)) e
+         )
+       where "id" = ${prId}
+         and exists (select 1 from jsonb_array_elements(coalesce("supplierPayments", '[]'::jsonb)) x where x->>'id' = ${paymentId})
+      returning true as found
+    `;
+    if (rows.length === 0) return { error: "That payment is no longer on this PO — refresh the page." };
+  } catch {
+    return { error: MIGRATION_HINT };
+  }
+  await revalidateFor(prId);
+  return { ok: true };
+}
+
+/** Delete a recorded payment — admin only (the owner: *"Only admin has the ability to delete"*). */
+export async function removeSupplierPayment(prId: string, paymentId: string): Promise<{ ok?: true; error?: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: "Unauthorized." };
+  if (!isAdmin(user)) return { error: "Only an admin can delete a supplier payment — use Edit to correct it." };
   try {
     const n = await prisma.$executeRaw`
       update "PurchaseRequest"

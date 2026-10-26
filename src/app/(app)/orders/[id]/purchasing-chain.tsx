@@ -709,7 +709,7 @@ export function PurchasingChain({
                   {/* Down payments and the rest, paid to the supplier against this PO. */}
                   {showAmounts && (supplierPaymentsEditable || (r.supplierPayments?.length ?? 0) > 0) && (
                     <div className="w-full">
-                      <SupplierPaymentsPanel prId={r.id} due={poTotals(r.po).net} payments={r.supplierPayments ?? []} canEdit={!readOnly && supplierPaymentsEditable} />
+                      <SupplierPaymentsPanel prId={r.id} due={poTotals(r.po).net} payments={r.supplierPayments ?? []} canEdit={!readOnly && supplierPaymentsEditable} canDelete={!readOnly && supplierPaymentsEditable && admin} />
                     </div>
                   )}
                 </div>
