@@ -8,6 +8,7 @@
 import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getStockCatalogue, type StockCatalogueItem } from "@/lib/stock-catalogue";
 
 export type StockKind = "RECEIPT" | "ISSUE" | "ADJUSTMENT";
 
@@ -40,9 +41,10 @@ export interface StockOptWithAvail {
  * fresh.
  */
 export const listStockItemsWithAvailability = cache(async function listStockItemsWithAvailability(): Promise<StockOptWithAvail[]> {
-  const items = await prisma.stockItem
-    .findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, sku: true, name: true, unit: true, quantity: true, location: true } })
-    .catch(() => [] as { id: string; sku: string | null; name: string; unit: string; quantity: unknown; location: string | null }[]);
+  // Names / codes / locations from the cross-request cache, quantities live —
+  // `getStockCatalogue`. This read ran 26,557 times × 1,079 full rows in the
+  // owner's 26 Oct stats (Purchasing, Requisitions, the MRF sheet).
+  const items = await getStockCatalogue().catch(() => [] as StockCatalogueItem[]);
   if (items.length === 0) return [];
   const resv = await prisma.stockReservation
     .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: items.map((i) => i.id) } }, _sum: { qty: true } })
@@ -54,7 +56,7 @@ export const listStockItemsWithAvailability = cache(async function listStockItem
     name: i.name,
     unit: i.unit,
     location: i.location,
-    available: Math.round((Number(i.quantity) - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
+    available: Math.round((i.quantity - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
   }));
 });
 

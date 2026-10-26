@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { listStockItemsWithAvailability } from "@/lib/inventory";
+import { getStockCosts } from "@/lib/stock-catalogue";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { canViewOrderAmounts, canViewSupplier } from "@/lib/price-visibility";
@@ -189,9 +190,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // price (products' "Lowest price"), else the stock item's unit cost
   // (inventory's "Unit cost"). Autofills a PO line's unit price when the chosen
   // supplier has no saved price of its own.
-  const stockCosts = await prisma.stockItem
-    .findMany({ where: { active: true }, select: { name: true, sku: true, unitCost: true } })
-    .catch(() => [] as { name: string; sku: string | null; unitCost: unknown }[]);
+  // Cached across requests under the stock tag — see `getStockCosts`.
+  const stockCosts = await getStockCosts().catch(() => [] as { name: string; sku: string | null; unitCost: unknown }[]);
   const costByName = new Map<string, number>();
   for (const si of stockCosts) {
     const n = si.name.trim().toLowerCase();

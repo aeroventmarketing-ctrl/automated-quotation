@@ -1,3 +1,40 @@
+## 2026-10-26 · Egress: the fan catalogue and the stock costs are read once, not on every render
+
+The owner's Supabase chart: 15–21 GB/day, 99.6% Shared Pooler, Sundays near zero (people, not a job).
+Their `pg_stat_statements`, top 25 by rows (no `stats_reset` given, so the window is unknown and
+counts may include traffic from before September's fixes):
+
+```
+32,115 × 598   CatalogueItem id, modelCode, description, specs   ← quotation page, every render
+32,151 × 596   PriceListEntry for the same
+32,868 × 282   CatalogueItem LIKE 'MTR-%' + its prices          ← getMotorPrices, every render
+26,557 × 1,079 StockItem id, sku, name, unit, quantity, location ← listStockItemsWithAvailability
+21,877 × 1,079 StockItem id, name, sku, unitCost                ← Purchasing / PO price catalogue
+```
+
+Catalogue rows average ~500 bytes on the wire (specs ~300 B, description ~130 B, measured from the
+catalogue CSVs), so the quotation page alone was ~10 GB of the window.
+
+**Cached across requests:**
+- `getQuoteCatalog()` (`lib/quote-catalogue.ts`) — the shaped map the builder is handed, numbers and
+  strings only. Tag `catalogue:fans`, dropped by every catalogue write (`upsertCatalogueItem`,
+  `seedMotorCatalogue`, `deleteCatalogueItem`, `clearCatalogue`, CSV catalogue / price-list import);
+  300 s floor for edits made in the SQL editor.
+- `getMotorPrices()` — its read now sits behind the same tag.
+- `listStockItemsWithAvailability()` — now built on `getStockCatalogue()` (names cached, quantities
+  live), so the full-width read became the narrow `{id, quantity}` one.
+- `getStockCosts()` (`lib/stock-catalogue.ts`) — name / SKU / unit cost under the stock tag; every
+  unit-cost write already calls `revalidateStockCatalogue`. Used by the Purchasing page,
+  `buildPoPriceCatalog` and `auditPoPrices`. A read-path swap only — same rows, same values.
+
+Measured on the harness with statement logging, five warm loads each: the quotation page read the
+catalogue **0** times and motor prices **0** times (was one each per load); Purchasing did **0** full
+stock reads and **0** unit-cost reads, leaving the narrow live quantity read. An admin edit of a
+catalogue price (22,738 → 23,000) showed on the quotation page on the next load.
+
+Not done yet, pending a clean measurement window: the purchase-request reads (several 1,300–1,900-row
+reads per Purchasing render) and the slimmed order reads behind the approver alarm and dashboards.
+
 ## 2026-10-26 · Cabinet Blower (DIDW) Forward Curved: cabinet factor ÷0.54, not ÷0.9
 
 The owner, after the computation above: *"Here is the division factors to be used in Cabinet Blower

@@ -11,20 +11,19 @@
  * a page that needs it in two places pays for it once.
  */
 import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
+import { QUOTE_CATALOGUE_TAG } from "@/lib/quote-catalogue";
 import { MOTOR_CODE_PREFIX, type MotorPriceMap } from "@/lib/motor-catalogue";
 
 /**
- * Model code → price, for every active motor in the catalogue.
- *
- * **Fails soft, and that is deliberate.** An empty map is not an outage: every
- * caller falls back to the code tables it used before this existed, so a
- * database hiccup prices a fan the old way rather than pricing it at zero. A
- * quotation that is quietly wrong is far worse than one that is quietly
- * old-fashioned.
+ * The read itself, cached across requests under the catalogue's tag — it ran on
+ * every quotation render (32,868 calls in the owner's 26 Oct stats). Every
+ * catalogue write drops it (`revalidateQuoteCatalogue`); the value is a plain
+ * code → number map, so it survives the data cache unchanged.
  */
-export const getMotorPrices = cache(async function getMotorPrices(): Promise<MotorPriceMap> {
-  try {
+const readMotorPrices = unstable_cache(
+  async (): Promise<MotorPriceMap> => {
     const items = await prisma.catalogueItem.findMany({
       // Selected by CODE, not by `family: "MOTOR"` — see MOTOR_CODE_PREFIX. The
       // enum value arrives with a migration, and a query naming it throws until
@@ -45,6 +44,23 @@ export const getMotorPrices = cache(async function getMotorPrices(): Promise<Mot
       if (Number.isFinite(n) && n > 0) map[it.modelCode] = n;
     }
     return map;
+  },
+  ["motor-prices-v1"],
+  { tags: [QUOTE_CATALOGUE_TAG], revalidate: 300 },
+);
+
+/**
+ * Model code → price, for every active motor in the catalogue.
+ *
+ * **Fails soft, and that is deliberate.** An empty map is not an outage: every
+ * caller falls back to the code tables it used before this existed, so a
+ * database hiccup prices a fan the old way rather than pricing it at zero. A
+ * quotation that is quietly wrong is far worse than one that is quietly
+ * old-fashioned.
+ */
+export const getMotorPrices = cache(async function getMotorPrices(): Promise<MotorPriceMap> {
+  try {
+    return await readMotorPrices();
   } catch (e) {
     console.error("motor prices unavailable — falling back to the code tables", e);
     return {};

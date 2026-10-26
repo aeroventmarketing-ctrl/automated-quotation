@@ -116,3 +116,29 @@ export const getStockCatalogue = cache(async function getStockCatalogue(): Promi
   out.sort((a, b) => a.name.localeCompare(b.name));
   return out;
 });
+
+/** A stock item's unit cost, as the PO price catalogue reads it. */
+export interface StockCostRow {
+  name: string;
+  sku: string | null;
+  unitCost: number;
+}
+
+/**
+ * Name, SKU and unit cost of every active item — cached under the same tag.
+ *
+ * The Purchasing page and the PO price catalogue / audit each read this whole
+ * table on every render: 21,877 calls × 1,079 rows in the owner's 26 Oct stats.
+ * Unit cost changes only through the writes that already call
+ * `revalidateStockCatalogue` (create, edit, set price, import, merge, an
+ * approved Edit, a transfer that creates the destination item), so it is safe
+ * behind the tag. `unitCost` is converted from `Decimal` here, inside the cache.
+ */
+export const getStockCosts = unstable_cache(
+  async (): Promise<StockCostRow[]> =>
+    (
+      await prisma.stockItem.findMany({ where: { active: true }, select: { name: true, sku: true, unitCost: true } })
+    ).map((r) => ({ name: r.name, sku: r.sku, unitCost: Number(r.unitCost) })),
+  ["stock-costs-v1"],
+  { tags: [STOCK_CATALOGUE_TAG], revalidate: 120 },
+);
