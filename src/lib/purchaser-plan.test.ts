@@ -19,6 +19,7 @@ import {
   purchaseDueTone,
   dueCountdown,
   sortPlanBy,
+  planPoNumbers,
   groupPlan,
   receivedOn,
   closedInfo,
@@ -122,7 +123,7 @@ describe("Type", () => {
 
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", mrfNo,
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", poNumbers: [], mrfNo,
     mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
 
@@ -193,7 +194,7 @@ describe("the Purchase due date colour — the owner's four bands", () => {
 describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", orderHref: "#", mrfHref: "#", orderedDate: "2026-10-08",
-    accountHolder: "May-Ann Asong", mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
+    accountHolder: "May-Ann Asong", poNumbers: [], mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [], ...over,
   });
   const rows = [
@@ -356,7 +357,7 @@ describe("the main plan and the tile count by the same rule", () => {
 describe("the box's order — most recently closed first", () => {
   const c = (mrfNo: string, at: string | null): ClosedPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
-    accountHolder: "x", mrfNo, outcome: "MRF cancelled", byName: null, at, note: null,
+    accountHolder: "x", poNumbers: [], mrfNo, outcome: "MRF cancelled", byName: null, at, note: null,
   });
   it("newest first, undated last", () => {
     const out = sortClosedRows([c("0001", "2026-10-01T00:00:00Z"), c("0002", null), c("0003", "2026-10-09T00:00:00Z")]);
@@ -369,7 +370,7 @@ describe("sorting by Purchase due date puts what's still due first", () => {
   // is not due any more, however old its date.
   const r = (mrfNo: string, purchaseDue: string | null, receivedOn: string | null = null): PurchaserPlanRow => ({
     key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
-    accountHolder: "x", mrfNo, mrfStatus: "Approved", purchaseDue, receivedOn, type: null, typeByName: null, typeAt: null,
+    accountHolder: "x", poNumbers: [], mrfNo, mrfStatus: "Approved", purchaseDue, receivedOn, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
   const rows = [
@@ -420,5 +421,46 @@ describe("the client due date comes from the order", () => {
     const r = planClientDue(null, legacy, legacyEdits);
     expect(r).toMatchObject({ clientDue: "2026-09-14", clientDueByName: "JayR Basal", clientDueFromOrder: false });
     expect(r.edits).toHaveLength(1);
+  });
+});
+
+describe("PO number — every PO to the supplier raised from the MRF", () => {
+  const src = (prId: string, poNumber: string | null, poAt: string | null, status = "PLANT_APPROVED") => ({ prId, poNumber, poAt, status });
+
+  it("oldest first, each number once — a combined PO's members share one", () => {
+    expect(planPoNumbers([
+      src("b", "PO-AFBM20260000991", "2026-10-20T00:00:00Z"),
+      src("a", "PO-AFBM20260000985", "2026-10-12T00:00:00Z"),
+      src("c", "PO-AFBM20260000985", "2026-10-12T00:00:00Z"),
+    ])).toEqual([
+      { number: "PO-AFBM20260000985", prId: "a" },
+      { number: "PO-AFBM20260000991", prId: "b" },
+    ]);
+  });
+  it("no PO yet → nothing; a rejected or cancelled request's PO is void on the plan", () => {
+    expect(planPoNumbers([src("a", null, null)])).toEqual([]);
+    expect(planPoNumbers([src("a", "PO-1", "2026-10-01T00:00:00Z", "CANCELLED"), src("b", "PO-2", "2026-10-02T00:00:00Z", "REJECTED")])).toEqual([]);
+  });
+  it("…but the Rejected / Cancelled box still shows it", () => {
+    expect(planPoNumbers([src("a", "PO-1", "2026-10-01T00:00:00Z", "CANCELLED")], { includeClosed: true })).toEqual([{ number: "PO-1", prId: "a" }]);
+  });
+
+  const r = (mrfNo: string, numbers: string[]): PurchaserPlanRow => ({
+    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
+    accountHolder: "x", poNumbers: numbers.map((number, i) => ({ number, prId: `${mrfNo}-${i}` })), mrfNo, mrfStatus: "Approved",
+    purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
+    clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
+  });
+  const rows = [r("1", ["PO-AFBM20260000991"]), r("2", []), r("3", ["PO-AFBM20260000985", "PO-AFBM20260000999"]), r("4", ["PO-AFBM20260000985", "PO-AFBM20260000999"])];
+  it("sorts by its first PO; no PO yet goes last either way", () => {
+    expect(sortPlanBy(rows, "poNumber", "asc").map((x) => x.mrfNo)).toEqual(["3", "4", "1", "2"]);
+    expect(sortPlanBy(rows, "poNumber", "desc").map((x) => x.mrfNo)).toEqual(["1", "3", "4", "2"]);
+  });
+  it("groups by the POs it is on, 'No PO yet' last", () => {
+    expect(groupPlan(rows, "poNumber", "poNumber", "asc").map((g) => [g.label, g.rows.map((x) => x.mrfNo)])).toEqual([
+      ["PO-AFBM20260000985 / PO-AFBM20260000999", ["3", "4"]],
+      ["PO-AFBM20260000991", ["1"]],
+      ["No PO yet", ["2"]],
+    ]);
   });
 });

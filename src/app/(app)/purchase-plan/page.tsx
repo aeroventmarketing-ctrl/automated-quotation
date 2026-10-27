@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
+import { canViewSupplier } from "@/lib/price-visibility";
 import { loadPurchaserPlan } from "@/lib/purchaser-plan-data";
 import { PurchaserPlanTable } from "./plan-table";
 import { ClosedPlanBox } from "./closed-box";
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 export default async function PurchasePlanPage() {
   const [viewer, roles] = await Promise.all([getCurrentUser(), getWorkflowRoles()]);
   const { canView, canEditType } = purchaserPlanAccess(viewer, roles);
+  // The PO document names the supplier and carries the prices, so its link goes
+  // to the same people who see supplier names elsewhere; Sales see the number only.
+  const canOpenPo = canViewSupplier(viewer, roles);
 
   if (!viewer || !canView) {
     return (
@@ -50,8 +54,8 @@ export default async function PurchasePlanPage() {
         <p className="text-sm text-destructive">The plan couldn&apos;t be loaded just now. Refresh to try again.</p>
       ) : (
         <>
-          <PurchaserPlanTable rows={data.rows} canEditType={canEditType} tableMissing={data.tableMissing} todayYMD={todayYMD} />
-          <ClosedPlanBox rows={data.closed} />
+          <PurchaserPlanTable rows={data.rows} canEditType={canEditType} tableMissing={data.tableMissing} todayYMD={todayYMD} canOpenPo={canOpenPo} />
+          <ClosedPlanBox rows={data.closed} canOpenPo={canOpenPo} />
         </>
       )}
     </div>

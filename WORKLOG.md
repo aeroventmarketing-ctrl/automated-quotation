@@ -1,3 +1,27 @@
+## 2026-10-27 · Purchase Plan: PO number column
+
+The owner: *"In Purchase Plan, add a column named PO Number in between Account Holder and MRF number.
+PO Number column will show the Purchase Order Number to supplier related to MRF number."* Answers to
+the clarifying questions: all POs stacked; "No PO yet" in grey; the number opens the PO, plain text for
+Sales; searchable, on the Rejected / Cancelled box too, and in Group by / Sort by.
+
+- **The cell** (`PoNumbers` in `plan-table.tsx`): every PO raised from the MRF's purchase requests,
+  oldest first, one per line, each number once (a combined PO's members share one). A rejected or
+  cancelled request's PO is void and left off the plan's rows; the Rejected / Cancelled box shows it.
+  Nothing yet → grey "No PO yet". `planPoNumbers` in `lib/purchaser-plan.ts`, tested.
+- **Link:** opens `/purchasing/po/{id}/view` in a new tab for viewers with `canViewSupplier` — the PO
+  names the supplier and carries the prices. Sales (who may open the plan) see the number as text.
+- **Search** matches PO numbers; **Sort by / Group by "PO number"** (sort by the first PO; group by
+  the POs it is on; "No PO yet" last either way). The column header sorts too.
+- **Read:** one narrow raw query picks `po->>'poNumber'` and `po->>'createdAt'` out of the JSON for
+  requests with an MRF, rather than shipping the whole PO for one field.
+
+Rendered on the role harness (seeded: MRF #0101 on two POs, #0102 approved without a PO, #0103's
+request cancelled after its PO): admin and Purchaser saw "PO-AFBM20260000985 / PO-AFBM20260000991"
+stacked and linked, "No PO yet" on #0042 / #0102, and PO-AFBM20260000900 in the Rejected / Cancelled
+box; Sales saw the same numbers unlinked. Search "0000991" found #0101; Group by PO number gave
+"PO-…985 / PO-…991 (1)" then "No PO yet (2)".
+
 ## 2026-10-26 · Egress: the fan catalogue and the stock costs are read once, not on every render
 
 The owner's Supabase chart: 15–21 GB/day, 99.6% Shared Pooler, Sundays near zero (people, not a job).
