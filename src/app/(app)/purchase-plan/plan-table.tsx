@@ -19,6 +19,7 @@ import {
   doneSummary,
   type DueTone,
   type PlanEditField,
+  type PlanPo,
   type PlanGroupKey,
   type PlanSortKey,
   type SortDir,
@@ -55,6 +56,7 @@ const COLUMNS: { key: PlanSortKey; label: string }[] = [
   { key: "orderNo", label: "Order no." },
   { key: "orderedDate", label: "Ordered date" },
   { key: "accountHolder", label: "Account holder" },
+  { key: "poNumber", label: "PO number" },
   { key: "mrfNo", label: "MRF no." },
   { key: "mrfStatus", label: "MRF status" },
   { key: "purchaseDue", label: "Purchase due date" },
@@ -88,6 +90,28 @@ const isSortKey = (v: unknown): v is PlanSortKey => COLUMNS.some((c) => c.key ==
 const isGroupKey = (v: unknown): v is PlanGroupKey => PLAN_GROUP_OPTIONS.some((g) => g.key === v);
 
 /** Who last set a value, and when — the owner's "show who edited, date and time". */
+/**
+ * Every PO raised from the MRF, one per line. A number opens its PO document in
+ * a new tab for the roles that may see supplier and amounts; Sales get it as
+ * plain text, since the document carries both.
+ */
+export function PoNumbers({ pos, canOpen }: { pos: PlanPo[]; canOpen: boolean }) {
+  if (pos.length === 0) return <span className="text-xs text-muted-foreground">No PO yet</span>;
+  return (
+    <div className="space-y-0.5">
+      {pos.map((p) =>
+        canOpen ? (
+          <a key={p.number} href={`/purchasing/po/${p.prId}/view`} target="_blank" rel="noopener noreferrer" className="block font-mono text-xs font-semibold text-primary hover:underline" title={`Open ${p.number}`}>
+            {p.number}
+          </a>
+        ) : (
+          <span key={p.number} className="block font-mono text-xs">{p.number}</span>
+        ),
+      )}
+    </div>
+  );
+}
+
 function Stamp({ by, at }: { by: string | null; at: string | null }) {
   if (!by || !at) return null;
   return <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{by} · {fmtStamp(at)}</div>;
@@ -127,9 +151,12 @@ export function PurchaserPlanTable({
   canEditType,
   tableMissing,
   todayYMD,
+  canOpenPo,
 }: {
   rows: PurchaserPlanRow[];
   canEditType: boolean;
+  /** Open the PO document from its number — only for roles that may see supplier and amounts. */
+  canOpenPo: boolean;
   tableMissing: boolean;
   /** Today in Manila, from the server — so every viewer's colours agree. */
   todayYMD: string;
@@ -160,7 +187,7 @@ export function PurchaserPlanTable({
     const q = query.trim().toLowerCase();
     return q
       ? rows.filter((r) =>
-          [r.orderNo, r.accountHolder, r.mrfNo, r.mrfStatus, PLAN_TYPES.find((t) => t.key === r.type)?.label ?? ""]
+          [r.orderNo, r.accountHolder, ...r.poNumbers.map((p) => p.number), r.mrfNo, r.mrfStatus, PLAN_TYPES.find((t) => t.key === r.type)?.label ?? ""]
             .join("  ")
             .toLowerCase()
             .includes(q),
@@ -250,6 +277,7 @@ export function PurchaserPlanTable({
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.orderedDate) ?? <span className="text-muted-foreground">—</span>}</td>
         <td className="px-2.5 py-2">{r.accountHolder}</td>
+        <td className="whitespace-nowrap px-2.5 py-2"><PoNumbers pos={r.poNumbers} canOpen={canOpenPo} /></td>
         <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
           {/* A plain link, not <Link>: a full page load is what makes the browser scroll
               to the #mrf- anchor and light up the card with :target. */}
@@ -330,7 +358,7 @@ export function PurchaserPlanTable({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search order no., account holder, MRF, status…"
+              placeholder="Search order no., account holder, PO no., MRF, status…"
               className="h-9 w-full rounded-md border bg-background pl-8 pr-3 text-sm"
             />
           </div>
@@ -375,7 +403,7 @@ export function PurchaserPlanTable({
         </div>
 
         <div className="overflow-x-auto rounded-md border">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[1020px] text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
               <tr>{COLUMNS.map(header)}</tr>
             </thead>

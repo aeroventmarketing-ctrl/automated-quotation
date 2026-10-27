@@ -31,6 +31,8 @@ import {
   closedInfo,
   sortClosedRows,
   planClientDue,
+  planPoNumbers,
+  type PlanPoSource,
   type ClosedPlanRow,
   type PlanPr,
   type PlanEdit,
@@ -47,7 +49,7 @@ export interface PurchaserPlanData {
 
 export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
   let tableMissing = false;
-  const [quotes, slim, prs, entries] = await Promise.all([
+  const [quotes, slim, prs, entries, poRows] = await Promise.all([
     prisma.quotation.findMany({
       where: { classification: { path: ["sale", "po"], not: Prisma.DbNull } },
       orderBy: { createdAt: "desc" },
@@ -62,7 +64,21 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
       tableMissing = true;
       return [] as Awaited<ReturnType<typeof prisma.purchaserPlanEntry.findMany>>;
     }),
+    // The PO number of each request raised from an MRF — just the number and
+    // when it was prepared, picked out of the `po` JSON in SQL rather than
+    // shipping the whole PO (lines, supplier, remarks) for one field.
+    prisma.$queryRaw<{ id: string; mrfId: string; status: string; poNumber: string | null; poAt: string | null }[]>`
+      select "id", "mrfId", "status"::text as "status", "po"->>'poNumber' as "poNumber", "po"->>'createdAt' as "poAt"
+      from "PurchaseRequest"
+      where "mrfId" is not null and "po" ->> 'poNumber' is not null
+    `.catch(() => []),
   ]);
+  const posByMrf = new Map<string, PlanPoSource[]>();
+  for (const r of poRows) {
+    const arr = posByMrf.get(r.mrfId) ?? [];
+    arr.push({ prId: r.id, status: r.status, poNumber: r.poNumber, poAt: r.poAt });
+    posByMrf.set(r.mrfId, arr);
+  }
   // The edit trail, newest first. Only rows that have an entry can have edits,
   // so the read is scoped to those — usually a handful.
   const edited = entries.map((e) => e.mrfId);
@@ -114,6 +130,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
           mrfHref: `/orders/${q.id}#mrf-${m.id}`,
           orderedDate,
           accountHolder: q.preparedBy?.name ?? "—",
+          poNumbers: planPoNumbers(posByMrf.get(m.id) ?? [], { includeClosed: true }),
           mrfNo: m.formNo,
         });
         continue;
@@ -138,6 +155,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         mrfHref: `/orders/${q.id}#mrf-${m.id}`,
         orderedDate,
         accountHolder: q.preparedBy?.name ?? "—",
+        poNumbers: planPoNumbers(posByMrf.get(m.id) ?? []),
         mrfNo: m.formNo,
         mrfStatus: planMrfStatus(m.status, mine),
         purchaseDue: earliestPurchaseDue(mine),

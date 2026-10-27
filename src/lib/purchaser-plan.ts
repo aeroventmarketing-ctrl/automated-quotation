@@ -205,6 +205,38 @@ export function normaliseDueDate(v: unknown): string | null {
   return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : null;
 }
 
+// --- PO numbers ------------------------------------------------------------------
+
+/** A Purchase Order to the supplier raised from this MRF. `prId` opens it. */
+export interface PlanPo {
+  number: string;
+  prId: string;
+}
+
+export interface PlanPoSource {
+  prId: string;
+  status: string;
+  poNumber: string | null;
+  /** When the PO was prepared (ISO), for ordering. */
+  poAt: string | null;
+}
+
+/**
+ * The owner: *"add a column named PO Number … the Purchase Order Number to
+ * supplier related to MRF number"*. Every PO raised from the MRF, oldest first,
+ * each number once — the members of a combined PO all carry the same number.
+ * A rejected or cancelled request's PO is void, so it is left off the plan's
+ * rows (`includeClosed` keeps it for the Rejected / Cancelled box, where every
+ * request is one of those).
+ */
+export function planPoNumbers(sources: readonly PlanPoSource[], opts: { includeClosed?: boolean } = {}): PlanPo[] {
+  const live = sources.filter((s) => s.poNumber && (opts.includeClosed || !isOffChain(s.status)));
+  const sorted = [...live].sort((a, b) => (a.poAt ?? "").localeCompare(b.poAt ?? "") || a.poNumber!.localeCompare(b.poNumber!, undefined, { numeric: true }));
+  const out: PlanPo[] = [];
+  for (const s of sorted) if (!out.some((p) => p.number === s.poNumber)) out.push({ number: s.poNumber!, prId: s.prId });
+  return out;
+}
+
 // --- The row -------------------------------------------------------------------
 
 export interface PurchaserPlanRow {
@@ -218,6 +250,8 @@ export interface PurchaserPlanRow {
   mrfHref: string;
   orderedDate: string | null;
   accountHolder: string;
+  /** Every PO to the supplier raised from this MRF, oldest first — see `planPoNumbers`. */
+  poNumbers: PlanPo[];
   mrfNo: string;
   mrfStatus: string;
   purchaseDue: string | null;
@@ -411,7 +445,7 @@ export function dueCountdown(dueYMD: string, todayYMD: string): string {
  * descending by date, order number, account holder, status, type, purchase due
  * date and client due date."*
  */
-export type PlanSortKey = "orderedDate" | "orderNo" | "accountHolder" | "mrfStatus" | "type" | "purchaseDue" | "clientDue" | "mrfNo";
+export type PlanSortKey = "orderedDate" | "orderNo" | "accountHolder" | "poNumber" | "mrfStatus" | "type" | "purchaseDue" | "clientDue" | "mrfNo";
 export type PlanGroupKey = "none" | Exclude<PlanSortKey, "mrfNo">;
 export type SortDir = "asc" | "desc";
 
@@ -421,6 +455,7 @@ export const PLAN_SORT_OPTIONS: { key: PlanSortKey; label: string }[] = [
   { key: "orderedDate", label: "Ordered date" },
   { key: "orderNo", label: "Order no." },
   { key: "accountHolder", label: "Account holder" },
+  { key: "poNumber", label: "PO number" },
   { key: "mrfStatus", label: "MRF status" },
   { key: "type", label: "Type" },
 ];
@@ -432,6 +467,7 @@ export const PLAN_GROUP_OPTIONS: { key: PlanGroupKey; label: string }[] = [
   { key: "orderedDate", label: "Ordered date" },
   { key: "orderNo", label: "Order no." },
   { key: "accountHolder", label: "Account holder" },
+  { key: "poNumber", label: "PO number" },
   { key: "mrfStatus", label: "MRF status" },
   { key: "type", label: "Type" },
 ];
@@ -462,6 +498,7 @@ function sortValue(r: PurchaserPlanRow, key: PlanSortKey): string | number | nul
     case "clientDue": return r.clientDue;
     case "orderNo": return r.orderNo;
     case "accountHolder": return r.accountHolder && r.accountHolder !== "—" ? r.accountHolder : null;
+    case "poNumber": return r.poNumbers[0]?.number ?? null;
     case "mrfNo": return r.mrfNo;
   }
 }
@@ -528,6 +565,11 @@ function groupOf(r: PurchaserPlanRow, key: Exclude<PlanGroupKey, "none">): { key
     case "accountHolder": {
       const v = r.accountHolder && r.accountHolder !== "—" ? r.accountHolder : null;
       return v ? { key: v, label: v, rank: v } : { key: "~none", label: "No account holder", rank: null };
+    }
+    case "poNumber": {
+      // An MRF on two POs groups under both numbers together, as its cell reads.
+      const v = r.poNumbers.map((p) => p.number).join(" / ");
+      return v ? { key: v, label: v, rank: r.poNumbers[0].number } : { key: "~none", label: "No PO yet", rank: null };
     }
   }
 }
@@ -637,6 +679,8 @@ export interface ClosedPlanRow extends ClosedInfo {
   mrfHref: string;
   orderedDate: string | null;
   accountHolder: string;
+  /** Any PO that was raised before the purchase was rejected / cancelled. */
+  poNumbers: PlanPo[];
   mrfNo: string;
 }
 

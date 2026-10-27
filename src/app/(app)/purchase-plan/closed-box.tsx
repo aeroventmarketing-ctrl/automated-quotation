@@ -6,6 +6,7 @@ import { XCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { ClosedPlanRow } from "@/lib/purchaser-plan";
+import { PoNumbers } from "./plan-table";
 
 /** Ten rows, then a word — the same as every long list on My Dashboard. */
 const FIRST = 10;
@@ -23,7 +24,7 @@ const fmtStamp = (iso: string | null) =>
  * Rejected/Cancelled MRF."* Read-only: nothing here is being worked on. It says
  * what happened, who did it, when, and — for a rejected purchase — why.
  */
-export function ClosedPlanBox({ rows }: { rows: ClosedPlanRow[] }) {
+export function ClosedPlanBox({ rows, canOpenPo }: { rows: ClosedPlanRow[]; canOpenPo: boolean }) {
   const [open, setOpen] = useState(false);
   const shown = open ? rows : rows.slice(0, FIRST);
   const hidden = rows.length - FIRST;
@@ -45,10 +46,10 @@ export function ClosedPlanBox({ rows }: { rows: ClosedPlanRow[] }) {
         ) : (
           <>
             <div className="overflow-x-auto rounded-md border">
-              <table className="w-full min-w-[820px] text-sm">
+              <table className="w-full min-w-[940px] text-sm">
                 <thead className="bg-muted/50 text-xs text-muted-foreground">
                   <tr>
-                    {["Order no.", "Ordered date", "Account holder", "MRF no.", "What happened", "By", "When"].map((h) => (
+                    {["Order no.", "Ordered date", "Account holder", "PO number", "MRF no.", "What happened", "By", "When"].map((h) => (
                       <th key={h} className="px-2.5 py-2 text-left align-bottom font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -63,6 +64,7 @@ export function ClosedPlanBox({ rows }: { rows: ClosedPlanRow[] }) {
                       </td>
                       <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.orderedDate) ?? <span className="text-muted-foreground">—</span>}</td>
                       <td className="px-2.5 py-2">{r.accountHolder}</td>
+                      <td className="whitespace-nowrap px-2.5 py-2"><PoNumbers pos={r.poNumbers} canOpen={canOpenPo} /></td>
                       <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
                         {/* A plain link, not <Link>: a full page load is what makes the browser scroll
               to the #mrf- anchor and light up the card with :target. */}
