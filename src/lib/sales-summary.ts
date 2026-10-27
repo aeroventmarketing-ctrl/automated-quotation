@@ -52,7 +52,7 @@ export interface SalesSummary {
 const isYmd = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
 /** Pick the captured document number for a slot key — a cleared read wins. */
-function docNumberFor(reads: Record<string, SaleDocReadStamp>, docKey: string): string {
+export function docNumberFor(reads: Record<string, SaleDocReadStamp>, docKey: string): string {
   const stamps = Object.values(reads).filter((s) => s.docKey === docKey && s.documentNumber);
   if (stamps.length === 0) return "";
   const cleared = stamps.find((s) => isSaleDocCleared(s));
@@ -64,7 +64,7 @@ function docNumberFor(reads: Record<string, SaleDocReadStamp>, docKey: string): 
  * then the Collection Receipt, then the Delivery Receipt (a cleared read first).
  * Returns "" when no document carried a TIN.
  */
-function tinFromReads(reads: Record<string, SaleDocReadStamp>): string {
+export function tinFromReads(reads: Record<string, SaleDocReadStamp>): string {
   for (const docKey of ["sales_invoice", "or_cr_af", "delivery_receipt"]) {
     const stamps = Object.values(reads).filter((s) => s.docKey === docKey && s.customerTin);
     if (stamps.length === 0) continue;
@@ -79,7 +79,7 @@ function tinFromReads(reads: Record<string, SaleDocReadStamp>): string {
  * The EWT withheld as read off the Collection Receipt's settlement box (a
  * cleared read wins). Null when no read carried an EWT amount.
  */
-function ewtFromReads(reads: Record<string, SaleDocReadStamp>): number | null {
+export function ewtFromReads(reads: Record<string, SaleDocReadStamp>): number | null {
   const stamps = Object.values(reads).filter((s) => s.docKey === "or_cr_af" && s.ewtAmount != null && s.ewtAmount > 0);
   if (stamps.length === 0) return null;
   const cleared = stamps.find((s) => isSaleDocCleared(s));

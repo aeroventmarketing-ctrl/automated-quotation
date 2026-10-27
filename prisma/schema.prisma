@@ -700,6 +700,25 @@ model StockMovement {
 }
 
 /**
+ * Proof that an EWT was paid to BIR — one per row of the EWT Summary
+ * (lib/ewt-summary). `kind` "supplier" (1601-EQ, our withholding on a PO; `refKey`
+ * = the PO's batch id or request id) or "client" (1701Q, the client's withholding
+ * on an order; `refKey` = the quotation id). The row reads Paid once this exists.
+ * Relation-free on purpose. Migration 0063.
+ */
+model EwtRemittance {
+  id        String   @id @default(cuid())
+  kind      String
+  refKey    String
+  proof     Json // { path, name, uploadedAt, byName }
+  byName    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, refKey])
+}
+
+/**
  * Price movement of a stock item — every change to its unit cost or selling
  * price, with who made it, how (approved edit / direct set / import / merge /
  * new item) and who approved it. Written by `logPriceChange`
