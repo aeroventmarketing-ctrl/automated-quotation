@@ -1,3 +1,50 @@
+## 2026-10-27 · My Dashboard: EWT Summary — Supplier EWT (1601-EQ) and Client EWT (1701Q)
+
+The owner, with *SAMPLE TEMPLATE FOR EWT by Rey.xlsx*: an EWT summary tile beside Sales Summary on the
+admin, Payment Approver and Accounting dashboards; a Supplier EWT – 1601EQ table and a Client EWT –
+1701Q table; DATE · REGISTERED NAME · ADDRESS · TIN · S.I. # · TAXABLE · ÷1.12 · ×1% · STATUS (paid if
+POP attached) · POP (upload + eye view); generated monthly or quarterly. Answers to the clarifying
+questions:
+
+- **Supplier EWT amount** = the PO's own "LESS EWT" (percent or flat); POs without EWT are left out.
+- **Supplier DATE** = when the supplier was paid — the latest of a cleared check (else its date), the
+  Paid-in-cash day, recorded payments to the supplier; not paid yet → the PO date, labelled so.
+- **POP** = a **proof of payment to BIR**, uploaded on the row — *"to be considered paid, a proof of
+  payment to BIR should be uploaded"*; for clients, *"a proof of payment showing the EWT has been paid
+  to BIR"*. Per row, plus **Attach one proof to all N unpaid** (one BIR payment covers a period).
+- **Client rows** = confirmed sales where EWT was withheld (Collection Receipt read, else the order's
+  EWT payment lines — the Sales Summary's figure), dated by payment.
+- Column G is headed **NET OF VAT** (gross ÷ 1.12; the template's "INPUT TAX" relabelled). A sale that
+  charges no VAT (zero-rated) keeps its gross.
+- Tile opens `/reports/ewt-summary`; **Excel** per table in the template's layout (A1:E1 EWT SUMMARY,
+  A2:E2 generation line, headers row 4, G as `=F/1.12`, SUM total), **PDF** per table, and **Print**.
+
+**Pieces:** `lib/ewt-summary.ts` (access, periods, paid date, totals — tested),
+`lib/ewt-summary-data.ts` (a combined PO is one row; a PO whose every request is rejected/cancelled
+is void; supplier address/TIN from the supplier directory, SI # from the PO's reconciliation; client
+SI #/TIN from the closing-document reads, fetched only for the period's orders),
+`lib/excel/ewt-summary-xlsx.ts`, `lib/pdf/ewt-summary-pdf.tsx`, `/api/ewt-uploads` (storage
+`ewt/<kind>/…`, gated), actions `attachEwtProof` / `attachEwtProofToUnpaid` / `removeEwtProof`.
+Access everywhere — page, exports, upload, view, actions — is `canUseEwtSummary`: admin, Payment
+Approver, Accounting.
+
+**Storage — migration 0063, to apply by hand** (`EwtRemittance`, with the RLS block). Before it,
+every row reads Unpaid, a banner says to apply it, and saving a proof says so.
+
+The tile is a plain link: the report reads POs and sales only when opened, so the dashboard's
+refreshes don't pay for it.
+
+Rendered on the role harness (seeded: a check-cleared PO, a cash-paid flat-₱500 EWT PO, an unpaid 2%
+PO, a combined PO, a cancelled PO, a no-EWT PO, a zero-rated sale with ₱450 EWT): October listed the
+cleared check on Oct 3 (JSL, STA. CRUZ, TIN and SI 232522 from the directory and reconciliation,
+13,520.23 / 12,071.63 / 120.72), the combined PO once, the cancelled and no-EWT POs not at all, the
+unpaid PO on its PO date; the zero-rated sale 90,000 / 90,000 / 450. Before 0063 the banner showed;
+after it, a row upload turned JSL Paid, "Attach one proof to all 10 unpaid" made 11 paid, removing one
+made it Unpaid again (10 paid, ₱120.72 still to remit). Excel read back matches the template; the PDF
+renders. Purchaser, Sales and Warehouse were refused the page (and 403 on Excel and upload); the tile
+showed for Accounting, the Payment Approver and admin only. (Uploads stubbed — the harness has no
+storage key.)
+
 ## 2026-10-27 · Purchase Plan: PO number column
 
 The owner: *"In Purchase Plan, add a column named PO Number in between Account Holder and MRF number.

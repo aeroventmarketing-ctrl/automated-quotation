@@ -5,6 +5,7 @@ import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
+import { canUseEwtSummary } from "@/lib/ewt-summary";
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { hidesProductionClient } from "@/lib/client-visibility";
 import { prisma } from "@/lib/db";
@@ -16,7 +17,7 @@ import { getFinanceMonitor } from "@/lib/finance-monitor";
 import { UnreconciledPaymentsCard, CashVouchersCard, FinanceStatsRow } from "@/components/finance-monitor-cards";
 import { Badge } from "@/components/ui/badge";
 import { AutoRefresh } from "@/components/auto-refresh";
-import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText, ClipboardCheck } from "lucide-react";
+import { ClipboardList, ShoppingCart, Wallet, CalendarDays, Percent, FileText, ChevronRight, CheckCircle2, Boxes, RotateCcw, ReceiptText, ClipboardCheck, Landmark } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import type { TaskArea } from "@/lib/my-dashboard";
 import { getExpensesReport, getExpenseCheckRecon } from "../management/pnl-actions";
@@ -296,6 +297,23 @@ export default async function MyDashboardPage() {
               </CardContent>
             </Card>
           </a>
+          {/* The owner: an EWT summary tile "at the right side of Sales Summary"
+              for admin, the Payment Approver and Accounting — the same three this
+              row is shown to. A plain link: the report is built when opened, so the
+              dashboard's refreshes don't pay for it. */}
+          {canUseEwtSummary(user, assignments) && (
+            <a href="/reports/ewt-summary" target="_blank" rel="noopener noreferrer" className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+              <Card className="h-full transition-colors hover:border-primary/40 hover:bg-accent">
+                <CardContent className="flex items-center gap-3 py-4">
+                  <Landmark className="h-6 w-6 text-indigo-600" />
+                  <div>
+                    <div className="text-sm font-bold leading-tight">EWT Summary</div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">1601-EQ · 1701Q</div>
+                  </div>
+                </CardContent>
+              </Card>
+            </a>
+          )}
         </>
       )}
     </div>
