@@ -31,6 +31,8 @@ import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
+import { PoDateControl } from "./po-date-control";
+import { poDateYmd } from "@/lib/po-date";
 
 export interface CombinableItem {
   id: string;
@@ -64,6 +66,8 @@ export interface BatchCard {
   supplierPayments?: SupplierPayment[];
   orderIdForPrint: string;
   poNumber: string;
+  /** The date on the PO (YYYY-MM-DD or ISO). */
+  poDate?: string;
   supplierCompany: string;
   supplierAttention: string;
   supplierAddress: string;
@@ -370,6 +374,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           initialEwtMode={batch.ewtMode}
           initialEwtAmount={batch.ewtAmount}
           initialRemarks={batch.remarks}
+          initialDate={poDateYmd(batch.poDate)}
           suppliers={suppliers}
           paymentTerms={paymentTerms}
           poDefaultRemarks={poDefaultRemarks}
@@ -532,6 +537,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
               <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
             </a>
           )}
+          {/* The PO date — it decides the 2307's quarter and month. */}
+          <PoDateControl prId={batch.anchorId} date={batch.poDate} />
           {/* When the buying has to happen — one date for the whole combined PO. */}
           <PurchaseDueControl
             prId={batch.anchorId}
@@ -580,6 +587,7 @@ function CombineForm({
   initialEwtMode,
   initialEwtAmount,
   initialRemarks,
+  initialDate,
   suppliers,
   paymentTerms,
   poDefaultRemarks,
@@ -601,6 +609,8 @@ function CombineForm({
   initialEwtMode?: EwtMode;
   initialEwtAmount?: number;
   initialRemarks?: string;
+  /** Editing: the PO's saved date (YYYY-MM-DD). */
+  initialDate?: string;
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
@@ -617,7 +627,9 @@ function CombineForm({
   const [attention, setAttention] = useState(initialAttention ?? (preset ? [preset.contactPerson, preset.contactNumber].filter(Boolean).join(" - ") : ""));
   const [address, setAddress] = useState(initialAddress ?? preset?.address ?? "");
   const [supplierOpen, setSupplierOpen] = useState(false);
-  const [date, setDate] = useState(todayInput());
+  // An edit starts from the PO's own date — starting from today quietly moved
+  // the PO (and its 2307 quarter / month) to the day of any edit.
+  const [date, setDate] = useState(initialDate || todayInput());
   // Pre-fill line prices from the catalogue for the chosen supplier.
   const seededLines = withCatalogPrices(initialLines.length ? initialLines : [{ description: "", qty: "", unit: "", unitPrice: "" }], presetCompany, catalogPrices, false, catalogSkuKeys);
   const [lines, setLines] = useState<POLine[]>(seededLines);
