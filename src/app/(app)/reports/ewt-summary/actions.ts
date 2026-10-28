@@ -6,7 +6,8 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
-import { canUseEwtSummary, EWT_TABLE_TITLE, type EwtKind } from "@/lib/ewt-summary";
+import { EWT_TABLE_TITLE, type EwtKind } from "@/lib/ewt-summary";
+import { canUseEwtSummary } from "@/lib/ewt-access";
 
 export type EwtActionResult = { ok: true; count?: number } | { ok: false; error: string };
 

@@ -5,7 +5,7 @@ import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
-import { canUseEwtSummary } from "@/lib/ewt-summary";
+import { canUseEwtSummary } from "@/lib/ewt-access";
 import { SalesDashboardBody } from "../dashboard/sales-dashboard-body";
 import { hidesProductionClient } from "@/lib/client-visibility";
 import { prisma } from "@/lib/db";

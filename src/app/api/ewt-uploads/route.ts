@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { canUseEwtSummary } from "@/lib/ewt-summary";
+import { canUseEwtSummary } from "@/lib/ewt-access";
 import { uploadToStorage, signedUrl } from "@/lib/storage";
 
 export const runtime = "nodejs";

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { canUseEwtSummary, ewtPeriod } from "@/lib/ewt-summary";
+import { ewtPeriod } from "@/lib/ewt-summary";
+import { canUseEwtSummary } from "@/lib/ewt-access";
 import { loadEwtSummary } from "@/lib/ewt-summary-data";
 import { buildEwtXlsx } from "@/lib/excel/ewt-summary-xlsx";
 

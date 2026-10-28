@@ -18,17 +18,8 @@
  *
  * Everything here is pure; `ewt-summary-data.ts` does the reading.
  */
-import type { User } from "@prisma/client";
-import { isAdmin } from "@/lib/auth";
-import { userHasWorkflowRole, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-
-// --- Who ---------------------------------------------------------------------
-
-/** The owner: *"In admin, payment approver and accounting My Dashboard"*. View, upload and export alike. */
-export function canUseEwtSummary(user: User | null | undefined, roles: WorkflowRoleAssignments): boolean {
-  if (!user) return false;
-  return isAdmin(user) || userHasWorkflowRole(roles, user.id, "payment_approver") || userHasWorkflowRole(roles, user.id, "accounting");
-}
+// Who may use it lives in `ewt-access.ts`, so this file stays free of server
+// imports and the table (a client component) can share its totals.
 
 // --- When --------------------------------------------------------------------
 

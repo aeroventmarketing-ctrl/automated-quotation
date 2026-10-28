@@ -79,7 +79,7 @@ async function upload(kind: EwtKind, file: File): Promise<{ path: string; name: 
   return data;
 }
 
-function useRunner() {
+function useRunner(onDone?: () => void) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -89,7 +89,10 @@ function useRunner() {
     try {
       const r = await fn();
       if (!r.ok) setErr(r.error);
-      else router.refresh();
+      else {
+        onDone?.();
+        router.refresh();
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -141,10 +144,14 @@ export function PopCell({ kind, refKey, pop }: { kind: EwtKind; refKey: string; 
   );
 }
 
-/** One BIR payment for the whole period: the same proof on every unpaid row. */
-export function ApplyToUnpaid({ kind, refKeys }: { kind: EwtKind; refKeys: string[] }) {
+/**
+ * One BIR payment covering several rows: the same proof on each of them — every
+ * unpaid row of the period, or just the ones ticked. Rows that already carry a
+ * proof keep theirs (`attachEwtProofToUnpaid`).
+ */
+export function AttachToRows({ kind, refKeys, label, onDone }: { kind: EwtKind; refKeys: string[]; label: string; onDone?: () => void }) {
   const input = useRef<HTMLInputElement>(null);
-  const { busy, err, run } = useRunner();
+  const { busy, err, run } = useRunner(onDone);
   if (refKeys.length === 0) return null;
   return (
     <div className="print:hidden">
@@ -155,12 +162,13 @@ export function ApplyToUnpaid({ kind, refKeys }: { kind: EwtKind; refKeys: strin
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
+          e.target.value = "";
           if (f) run(async () => attachEwtProofToUnpaid(kind, refKeys, await upload(kind, f)));
         }}
       />
       <Button size="sm" variant="outline" disabled={busy} onClick={() => input.current?.click()}>
         {busy ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Upload className="mr-1.5 h-4 w-4" />}
-        Attach one proof to all {refKeys.length} unpaid
+        {label}
       </Button>
       {err && <div className="mt-1 text-xs text-destructive">{err}</div>}
     </div>

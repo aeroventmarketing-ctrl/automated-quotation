@@ -1,3 +1,24 @@
+## 2026-10-28 · EWT Summary: tick the rows a BIR payment covered
+
+The owner, on the Supplier EWT table (137 unpaid rows for October): *"add a tick box on the right side
+of each row. Purpose of tick box is to choose the rows that is already paid and will be uploaded with a
+proof of payment to BIR."*
+
+- A tick box at the right end of every **unpaid** row (a paid row already has its proof, so it has
+  none), and one in the header that ticks every unpaid row.
+- With rows ticked, the table's bar reads **"N ticked · EWT ₱…"** — the sum to check against the BIR
+  payment — with **Attach proof to N ticked** and **Clear**. One upload puts that proof on exactly the
+  ticked rows (`attachEwtProofToUnpaid`, which never overwrites a row that already has one); they turn
+  Paid and drop out of the selection. With nothing ticked the bar offers "Attach one proof to all N
+  unpaid" as before.
+- The table moved into a client component (`ewt-table.tsx`) to hold the selection; the access rule
+  moved to `lib/ewt-access.ts` so `lib/ewt-summary.ts` carries no server imports into the browser.
+
+Rendered on the role harness: ticking JSL and WINGS read "2 ticked · EWT ₱620.72"; the header box
+ticked all 11 (₱2,248.56); attaching to the two ticked rows stored exactly ewt-1 and ewt-2 and the table
+read "2 paid, 9 unpaid", their tick boxes gone; one more (ROSCO) showed Paid on screen in 1.4 s. No
+horizontal scroll at 1500 px.
+
 ## 2026-10-27 · My Dashboard: EWT Summary — Supplier EWT (1601-EQ) and Client EWT (1701Q)
 
 The owner, with *SAMPLE TEMPLATE FOR EWT by Rey.xlsx*: an EWT summary tile beside Sales Summary on the

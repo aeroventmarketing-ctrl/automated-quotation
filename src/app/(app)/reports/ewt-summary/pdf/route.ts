@@ -3,7 +3,8 @@ import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import React from "react";
 import { getCurrentUser } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
-import { canUseEwtSummary, ewtPeriod } from "@/lib/ewt-summary";
+import { ewtPeriod } from "@/lib/ewt-summary";
+import { canUseEwtSummary } from "@/lib/ewt-access";
 import { loadEwtSummary } from "@/lib/ewt-summary-data";
 import { EwtSummaryPdf } from "@/lib/pdf/ewt-summary-pdf";
 

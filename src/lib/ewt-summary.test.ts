@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import ExcelJS from "exceljs";
 import type { User } from "@prisma/client";
-import { canUseEwtSummary, ewtPeriod, inPeriod, netOfVat, supplierPaidDate, ewtTotals, ewtStatus, sortEwtRows, coerceEwtProof, type EwtRow } from "./ewt-summary";
+import { ewtPeriod, inPeriod, netOfVat, supplierPaidDate, ewtTotals, ewtStatus, sortEwtRows, coerceEwtProof, type EwtRow } from "./ewt-summary";
+import { canUseEwtSummary } from "./ewt-access";
 import { buildEwtXlsx } from "./excel/ewt-summary-xlsx";
 
 const user = (id: string, role = "OTHER") => ({ id, name: id, email: `${id}@t`, role }) as unknown as User;
