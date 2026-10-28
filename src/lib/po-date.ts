@@ -5,7 +5,7 @@
  * will reflect to the system?"* — then *"build for admin, payment approver role
  * and purchaser role."* The PO date drives the printed PO, the BIR 2307 (its
  * quarter, and which month column the amount lands in), the Check Monitoring
- * "PO date" column and the EWT Summary's date for a PO not yet paid. Editing the
+ * "PO date" column and the EWT Summary's supplier DATE. Editing the
  * PO itself is closed once it is approved / purchased; this changes the date and
  * nothing else, at any stage, with a reason, on every request of a combined PO.
  *

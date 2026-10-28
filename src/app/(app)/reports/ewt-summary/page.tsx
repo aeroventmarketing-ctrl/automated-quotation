@@ -86,7 +86,7 @@ function EwtTable({ kind, rows, periodLabel, query }: { kind: EwtKind; rows: Ewt
           <h2 className="text-base font-semibold">{EWT_TABLE_TITLE[kind]}</h2>
           <p className="text-xs text-muted-foreground">
             {periodLabel} · {t.count} row{t.count === 1 ? "" : "s"} · EWT {peso(t.ewt)} · {t.paid} paid, {t.unpaid} unpaid{t.unpaid ? ` (${peso(t.unpaidEwt)} still to remit)` : ""}
-            {kind === "supplier" ? " · dated when the supplier was paid" : " · dated by the client's payment"}
+            {kind === "supplier" ? " · dated by the PO date, as on the 2307" : " · dated by the client's payment"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

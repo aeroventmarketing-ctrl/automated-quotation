@@ -1,3 +1,23 @@
+## 2026-10-28 · EWT Summary: supplier rows dated by the PO date (as the 2307)
+
+The owner, asked whether the EWT Summary and the 2307 should use the same date: *"use the PO date"*.
+
+- The Supplier EWT · 1601-EQ DATE — and so which month / quarter a row falls in — is now the **PO
+  date**, the same date the 2307 takes its quarter and month column from. It was the date the supplier
+  was paid (cleared check, cash day, last payment), falling back to the PO date when unpaid. A PO with
+  no usable date falls back to the day the request was raised, labelled *"Request date (PO has no
+  date)"*. Changing a PO date (PO date · Change) moves its row with it.
+- The Client EWT · 1701Q side is unchanged (dated by the client's payment — there is no PO).
+- The report's header line reads *"dated by the PO date, as on the 2307"*. The supplier rows no longer
+  read checks, cash payments or supplier payments, so the report reads less.
+- A proof of payment to BIR stays on its row (keyed by the PO), wherever the row now falls.
+
+`supplierPaidDate` → `supplierEwtDate` in `lib/ewt-summary.ts` (tested).
+
+Rendered on the role harness: the JSL PO (check cleared Oct 3, PO dated Sep 28) moved from October to
+September, still Paid with its proof; every supplier row's date reads "PO date"; a PO with no date shows
+its request date, labelled.
+
 ## 2026-10-28 · PO date: change it at any stage (admin, Payment Approver, Purchaser); combined-PO edit keeps its date
 
 The owner: *"Is there a possibility that we can manually edit the PO date and will reflect to the

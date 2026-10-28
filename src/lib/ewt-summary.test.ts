@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import ExcelJS from "exceljs";
 import type { User } from "@prisma/client";
-import { canUseEwtSummary, ewtPeriod, inPeriod, netOfVat, supplierPaidDate, ewtTotals, ewtStatus, sortEwtRows, coerceEwtProof, type EwtRow } from "./ewt-summary";
+import { canUseEwtSummary, ewtPeriod, inPeriod, netOfVat, supplierEwtDate, ewtTotals, ewtStatus, sortEwtRows, coerceEwtProof, type EwtRow } from "./ewt-summary";
 import { buildEwtXlsx } from "./excel/ewt-summary-xlsx";
 
 const user = (id: string, role = "OTHER") => ({ id, name: id, email: `${id}@t`, role }) as unknown as User;
@@ -50,26 +50,18 @@ describe("the template's arithmetic", () => {
   });
 });
 
-describe("supplier EWT is dated when the supplier was paid", () => {
-  const base = { checks: [], cashOn: null, paymentDates: [], poDate: "2026-09-05", createdYMD: "2026-09-04" };
-  it("a cleared check beats its printed date", () => {
-    expect(supplierPaidDate({ ...base, checks: [{ clearedOn: "2026-10-03", clearingYMD: "2026-10-01" }] })).toEqual({ date: "2026-10-03", basis: "Check cleared" });
+describe("supplier EWT is dated by the PO date, as the 2307 is", () => {
+  it("the PO date, whatever the payment", () => {
+    expect(supplierEwtDate({ poDate: "2026-09-05", createdYMD: "2026-09-04" })).toEqual({ date: "2026-09-05", basis: "PO date" });
+    expect(supplierEwtDate({ poDate: "2026-09-05T03:00:00.000Z", createdYMD: "2026-09-04" }).date).toBe("2026-09-05");
   });
-  it("an uncleared check uses its date", () => {
-    expect(supplierPaidDate({ ...base, checks: [{ clearedOn: null, clearingYMD: "2026-10-15" }] })).toEqual({ date: "2026-10-15", basis: "Check date (not yet cleared)" });
-  });
-  it("cash, and payments in instalments — the last one", () => {
-    expect(supplierPaidDate({ ...base, cashOn: "2026-09-20" }).basis).toBe("Paid in cash");
-    expect(supplierPaidDate({ ...base, paymentDates: ["2026-09-10", "2026-10-02"] })).toEqual({ date: "2026-10-02", basis: "Payment to supplier" });
-  });
-  it("not paid yet → the PO date, said so", () => {
-    expect(supplierPaidDate(base)).toEqual({ date: "2026-09-05", basis: "PO date (not yet paid)" });
-    expect(supplierPaidDate({ ...base, poDate: null }).date).toBe("2026-09-04");
+  it("no PO date → the request date, said so", () => {
+    expect(supplierEwtDate({ poDate: null, createdYMD: "2026-09-04" })).toEqual({ date: "2026-09-04", basis: "Request date (PO has no date)" });
   });
 });
 
 const row = (over: Partial<EwtRow>): EwtRow => ({
-  kind: "supplier", refKey: "r", date: "2026-10-01", dateBasis: "Check cleared", registeredName: "JSL ELECTRIC CORPORATION",
+  kind: "supplier", refKey: "r", date: "2026-10-01", dateBasis: "PO date", registeredName: "JSL ELECTRIC CORPORATION",
   address: "STA. CRUZ, MANILA", tin: "006-605-356-00000", siNumber: "232522", reference: "PO-AFBM20260000985", href: null,
   gross: 13520.23, netOfVat: 12071.63, ewt: 120.72, pop: null, ...over,
 });

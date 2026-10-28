@@ -105,7 +105,7 @@ export interface EwtRow {
   refKey: string;
   /** YYYY-MM-DD. */
   date: string;
-  /** How the date was decided, e.g. "Check cleared", "PO date (not yet paid)". */
+  /** How the date was decided, e.g. "PO date", "Payment date". */
   dateBasis: string;
   registeredName: string;
   address: string;
@@ -128,29 +128,13 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 export const netOfVat = (gross: number, chargesVat = true): number => round2(chargesVat ? gross / 1.12 : gross);
 
 /**
- * When the supplier was paid, which is when the EWT on the PO was actually
- * withheld. The latest of: each check (its cleared date, else the date it is
- * due to clear), the Paid-in-cash day, each recorded payment to the supplier —
- * the PO is paid when its last instalment is. Not paid yet → the PO's own date.
+ * The supplier row's DATE: the PO date — the same date the 2307 takes its quarter
+ * and month from (the owner: *"use the PO date"*). A PO without a usable date
+ * falls back to the day the request was raised.
  */
-export function supplierPaidDate(src: {
-  checks: { clearedOn: string | null; clearingYMD: string | null }[];
-  cashOn: string | null;
-  paymentDates: string[];
-  poDate: string | null;
-  createdYMD: string;
-}): { date: string; basis: string } {
-  const cands: { date: string; basis: string }[] = [];
-  for (const c of src.checks) {
-    if (c.clearedOn) cands.push({ date: c.clearedOn, basis: "Check cleared" });
-    else if (c.clearingYMD) cands.push({ date: c.clearingYMD, basis: "Check date (not yet cleared)" });
-  }
-  if (src.cashOn) cands.push({ date: src.cashOn, basis: "Paid in cash" });
-  for (const d of src.paymentDates) cands.push({ date: d, basis: "Payment to supplier" });
-  const ok = cands.filter((c) => /^\d{4}-\d{2}-\d{2}$/.test(c.date));
-  if (ok.length) return ok.sort((a, b) => a.date.localeCompare(b.date)).at(-1)!;
-  const po = src.poDate && /^\d{4}-\d{2}-\d{2}/.test(src.poDate) ? src.poDate.slice(0, 10) : src.createdYMD;
-  return { date: po, basis: "PO date (not yet paid)" };
+export function supplierEwtDate(src: { poDate: string | null; createdYMD: string }): { date: string; basis: string } {
+  if (src.poDate && /^\d{4}-\d{2}-\d{2}/.test(src.poDate)) return { date: src.poDate.slice(0, 10), basis: "PO date" };
+  return { date: src.createdYMD, basis: "Request date (PO has no date)" };
 }
 
 export interface EwtTotals {
