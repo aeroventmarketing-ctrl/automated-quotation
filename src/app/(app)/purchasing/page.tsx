@@ -33,6 +33,8 @@ import type { SupplierPayment } from "@/lib/supplier-payments";
 import { boughtInOrdersToRequest, autoRaisedAwaitingCount, type BoughtInToRequest } from "@/lib/bought-in-pending-data";
 import { COMPLETED_PAGE, wantsAllCompleted, purchasingOrdersToLoad } from "@/lib/completed-page";
 import { type CombinableItem, type BatchCard, type SupplierSuggestion } from "./combined-purchasing";
+import { canChangePoDate } from "@/lib/po-date-access";
+import { latestPoDateChanges, PO_DATE_ACTION } from "@/lib/po-date";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +74,12 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   // Today in Philippine time — so "overdue" means the same thing for everyone
   // reading the screen, wherever they are.
   const todayYMD = new Intl.DateTimeFormat("en-CA", { timeZone: PH_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  // Each PO's last date change — a handful of activity entries, read once.
+  const poDateChanges = latestPoDateChanges(
+    await prisma.activityLog
+      .findMany({ where: { action: PO_DATE_ACTION }, select: { actorName: true, createdAt: true, meta: true } })
+      .catch(() => []),
+  );
   // Attaching the photo of the check issued for a PO — Accounting, the Payment
   // Approver, an admin. Same audience as the voucher itself.
   // Admin or Payment Approver — the pair whose reach outlives the Budgeted
@@ -467,6 +475,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         anchorId: anchor.id,
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",
+        poDate: po?.date ?? "",
         supplierCompany: po?.supplier.company ?? "",
         supplierAttention: po?.supplier.attention ?? "",
         supplierAddress: po?.supplier.address ?? "",
@@ -663,6 +672,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Order material requests</h2>
             <BoughtInToRequestPanel orders={toRequest} canRequest={admin || isPurchaser} autoRaisedAwaiting={autoRaisedAwaiting} admin={admin} />
             <PurchasingWorkspace
+              canChangePoDate={canChangePoDate(viewer, assignments)}
+              poDateChanges={poDateChanges}
               batches={batches}
               combinable={combinable}
               suggestions={suggestions}

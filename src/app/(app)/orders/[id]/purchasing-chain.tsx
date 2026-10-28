@@ -34,6 +34,7 @@ import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
 import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
 import { StockOnHand } from "@/components/stock-on-hand";
+import { PoDateControl } from "../../purchasing/po-date-control";
 
 interface ActionOpt {
   key: string;
@@ -669,6 +670,9 @@ export function PurchasingChain({
                       <Printer className="h-3.5 w-3.5" /> Print PO &amp; 2307
                     </a>
                     )}
+                    {/* The PO date — it decides the 2307's quarter and month. Changeable
+                        on the Purchasing page (PoDateProvider); read-only elsewhere. */}
+                    <PoDateControl prId={r.id} date={r.po.date} />
                     {/* When the buying has to happen — set here, where it is done. */}
                     <PurchaseDueControl
                       prId={r.id}

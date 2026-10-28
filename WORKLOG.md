@@ -1,3 +1,31 @@
+## 2026-10-28 · PO date: change it at any stage (admin, Payment Approver, Purchaser); combined-PO edit keeps its date
+
+The owner: *"Is there a possibility that we can manually edit the PO date and will reflect to the
+system?"* — then *"build for admin, payment approver role and purchaser role."* (Approved change to
+the frozen Phase 4 area.)
+
+- **PO date · Change** beside *Print PO & 2307* on every PO card in Purchasing (single and combined),
+  for admin, the Payment Approver and the Purchaser only (`canChangePoDate`, `lib/po-date-access.ts`).
+  It changes **only** `po.date`, at **any** stage (approved, purchased, received, paid), and needs a
+  **reason**. On a combined PO every member request gets the new date in one statement.
+- Each change is an ActivityLog entry (`purchase.po_date`: from, to, reason, the request ids); the card
+  shows the last one — *"Changed from Sep 1, 2026 by Allan Ramos, Oct 28, 2026 — reason"*.
+- Everything reading `po.date` follows: the printed PO, the **2307**'s quarter and month column, Check
+  Monitoring's PO date, and the EWT Summary's date for a PO not yet paid (paid rows use the paid date).
+- Outside Purchasing (the order page's Phase 4 chain) the date shows read-only.
+- **Bug fix:** editing a combined PO started its date at today, so saving the edit silently re-dated
+  the PO. The form now starts at the PO's saved date.
+
+**Pieces:** `lib/po-date.ts` (date validation, last change per request — tested),
+`lib/po-date-access.ts`, `purchasing/po-date-actions.ts` (`changePoDate`),
+`purchasing/po-date-control.tsx`.
+
+Verified on the role harness: the Purchaser re-dated combined PO-AFBM2026000762 to Oct 15, 2026 —
+Save stayed disabled until a reason was typed; all three member requests carried the new date, the
+activity entry was written and the card showed the change line. Accounting saw the dates with no
+Change button. The admin's edit form for combined PO-770 opened at 2026-09-01 (its saved date), not
+today.
+
 ## 2026-10-27 · My Dashboard: EWT Summary — Supplier EWT (1601-EQ) and Client EWT (1701Q)
 
 The owner, with *SAMPLE TEMPLATE FOR EWT by Rey.xlsx*: an EWT summary tile beside Sales Summary on the

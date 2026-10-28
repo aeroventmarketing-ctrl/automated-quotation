@@ -19,6 +19,8 @@ import type { CatalogPrices, CatalogSuppliers, CatalogSkuKeys } from "@/lib/po-c
 import type { ScanProduct } from "@/lib/product-scan";
 import { PurchasingChain } from "../orders/[id]/purchasing-chain";
 import { ShowAllCompleted } from "@/components/show-all-completed";
+import { PoDateProvider } from "./po-date-control";
+import type { PoDateChange } from "@/lib/po-date";
 import { CombinedPurchasing, type BatchCard, type CombinableItem, type SupplierSuggestion } from "./combined-purchasing";
 import { ReplenishmentScanBar, type ReplenScanRow } from "./replenishment-list";
 import { AdminAddDeptRequest, AdminAddReplenishment } from "./admin-pr-manage";
@@ -121,6 +123,8 @@ export function PurchasingWorkspace({
   canIssueStock = false,
   depts = [],
   highlightReq,
+  canChangePoDate = false,
+  poDateChanges = {},
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -168,6 +172,10 @@ export function PurchasingWorkspace({
   depts?: { key: string; label: string }[];
   /** A purchase-request id to open/scroll to/highlight (deep-link from a notification, `?req=`). */
   highlightReq?: string;
+  /** Admin / Payment Approver / Purchaser — may change a PO's date (lib/po-date). */
+  canChangePoDate?: boolean;
+  /** Each request's last PO-date change, for the line under the date. */
+  poDateChanges?: Record<string, PoDateChange>;
 }) {
   const router = useRouter();
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
@@ -388,6 +396,7 @@ export function PurchasingWorkspace({
   }
 
   return (
+    <PoDateProvider canChange={canChangePoDate} changes={poDateChanges}>
     <div className="space-y-3">
       <div className="flex flex-wrap gap-1.5">
         {TABS.map((t) => (
@@ -744,5 +753,6 @@ export function PurchasingWorkspace({
         </div>
       )}
     </div>
+    </PoDateProvider>
   );
 }
