@@ -7,9 +7,6 @@ import { prisma } from "@/lib/db";
 import { coercePurchaseOrder, poTotals } from "@/lib/purchase-order";
 import { poBatchId } from "@/lib/purchase-batch";
 import { coerceReconciliation } from "@/lib/purchase-reconcile";
-import { coerceCheckDocs, effectiveClearingYMD } from "@/lib/voucher-check";
-import { coerceCashPayment } from "@/lib/cash-payment";
-import { supplierPaymentsFor } from "@/lib/supplier-payments-data";
 import { getSuppliers } from "@/lib/suppliers";
 import { getAccountsRegistry } from "@/lib/account";
 import { saleFromClassification, isSaleConfirmed, ewtWithheld, saleDocReadsFromClassification } from "@/lib/sale";
@@ -22,7 +19,7 @@ import {
   inPeriod,
   netOfVat,
   sortEwtRows,
-  supplierPaidDate,
+  supplierEwtDate,
   type EwtKind,
   type EwtPeriod,
   type EwtProof,
@@ -49,13 +46,13 @@ async function proofsFor(kind: EwtKind, keys: string[]): Promise<{ byKey: Map<st
 
 /**
  * Supplier EWT — 1601-EQ. One row per PO that withholds EWT (a combined PO is one
- * PO, so one row), dated when the supplier was paid. A PO whose every request was
+ * PO, so one row), dated by the PO date — as the 2307 is. A PO whose every request was
  * rejected or cancelled is void and left out.
  */
 async function supplierRows(period: EwtPeriod): Promise<EwtRow[]> {
   const prs = await prisma.purchaseRequest.findMany({
     where: { po: { not: Prisma.DbNull } },
-    select: { id: true, status: true, po: true, reconciliation: true, voucherCheckDocs: true, cashPayment: true, createdAt: true },
+    select: { id: true, status: true, po: true, reconciliation: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
   // Group a combined PO's members; the first in createdAt-desc order is the
@@ -65,8 +62,7 @@ async function supplierRows(period: EwtPeriod): Promise<EwtRow[]> {
     const key = poBatchId(pr.po) ?? pr.id;
     (batches.get(key) ?? batches.set(key, []).get(key)!).push(pr);
   }
-  const allIds = prs.map((p) => p.id);
-  const [suppliers, payments] = await Promise.all([getSuppliers().catch(() => []), supplierPaymentsFor(allIds)]);
+  const suppliers = await getSuppliers().catch(() => []);
   const dir = new Map(suppliers.map((s) => [s.company.trim().toLowerCase(), s]));
 
   const rows: EwtRow[] = [];
@@ -78,19 +74,16 @@ async function supplierRows(period: EwtPeriod): Promise<EwtRow[]> {
     const t = poTotals(po);
     if (!(t.ewt > 0)) continue;
 
-    const checks = members.flatMap((m) => coerceCheckDocs(m.voucherCheckDocs)).map((d) => ({ clearedOn: d.cleared?.on ?? null, clearingYMD: effectiveClearingYMD(d) }));
-    const cashOn = members.map((m) => coerceCashPayment(m.cashPayment)?.on ?? null).find(Boolean) ?? null;
-    const paymentDates = members.flatMap((m) => (payments.byId.get(m.id) ?? []).map((p) => p.date));
-    const paid = supplierPaidDate({ checks, cashOn, paymentDates, poDate: po.date || null, createdYMD: manilaYMD(anchor.createdAt.toISOString()) });
-    if (!inPeriod(paid.date, period)) continue;
+    const dated = supplierEwtDate({ poDate: po.date || null, createdYMD: manilaYMD(anchor.createdAt.toISOString()) });
+    if (!inPeriod(dated.date, period)) continue;
 
     const d = dir.get(po.supplier.company.trim().toLowerCase());
     const invoiceNumber = members.map((m) => coerceReconciliation(m.reconciliation).invoiceNumber).find(Boolean) ?? "";
     rows.push({
       kind: "supplier",
       refKey,
-      date: paid.date,
-      dateBasis: paid.basis,
+      date: dated.date,
+      dateBasis: dated.basis,
       registeredName: po.supplier.company || "—",
       address: (d?.address || po.supplier.address || "").trim(),
       tin: (d?.tin ?? "").trim(),
