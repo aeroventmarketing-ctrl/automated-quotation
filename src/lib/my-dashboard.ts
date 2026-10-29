@@ -16,7 +16,7 @@ import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
 import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
-import { isPlanActive } from "@/lib/purchaser-plan";
+import { isPlanActive, isPlanPoActive } from "@/lib/purchaser-plan";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { isStockOnlyOrder, isBoughtInOnlyOrder, isDuctHardwareStockOnly } from "@/lib/department-pnl";
 import { getNotificationBaseline, passesNotificationBaseline } from "@/lib/notification-baseline";
@@ -243,6 +243,15 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       arr.push(p.status);
       planPrStatuses.set(p.mrfId, arr);
     }
+    // Plus the plan's PO rows — POs not raised from an MRF, in the Approved /
+    // Budgeted tabs (`isPlanPoActive`). Three small columns, same SQL cut as the plan.
+    const loose = await prisma.$queryRaw<{ kind: string; status: string; chainLog: unknown; poNumber: string | null }[]>`
+      select "kind", "status"::text as "status", "chainLog", "po"->>'poNumber' as "poNumber"
+      from "PurchaseRequest"
+      where "mrfId" is null and coalesce("po" ->> 'poNumber', '') <> ''
+        and "status"::text not in ('PENDING_APPROVAL', 'COMPLETED', 'REJECTED', 'CANCELLED')
+    `.catch(() => []);
+    planOpenMrfs += loose.filter((p) => isPlanPoActive({ ...p, status: p.status as PRStatus, mrfId: null })).length;
   }
   const seesMaterialsFeed = isAdmin(user) || has("warehouse") || has("purchaser") || has("plant_manager") || user.role === "SALES" || user.role === "ENGINEER";
   // Linked purchase-request status per MRF — so a "purchasing" MRF can say

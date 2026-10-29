@@ -79,6 +79,15 @@ const LATE_CLASS = "border-slate-300 bg-slate-100 text-slate-700 dark:border-sla
 const TONE_NAME: Record<DueTone, string> = { overdue: "Red", due3: "Amber", due7: "Yellow", ontime: "Green" };
 const TONES: DueTone[] = ["overdue", "due3", "due7", "ontime"];
 
+/** "12 open MRFs · 3 POs" — the two kinds of row, counted apart. */
+function planCount(rows: PurchaserPlanRow[]): string {
+  const pos = rows.filter((r) => r.source === "po").length;
+  const mrfs = rows.length - pos;
+  const parts = [`${mrfs} open MRF${mrfs === 1 ? "" : "s"}`];
+  if (pos) parts.push(`${pos} PO${pos === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
 /** Rows shown before "Show N more" — the same ten as the Rejected / Cancelled box. */
 const FIRST_ROWS = 10;
 
@@ -112,6 +121,9 @@ export function PoNumbers({ pos, canOpen }: { pos: PlanPo[]; canOpen: boolean })
   );
 }
 
+/** How a row is named to a screen reader: its MRF, or its PO when it has no MRF. */
+const rowName = (r: PurchaserPlanRow) => (r.source === "po" ? r.poNumbers[0]?.number ?? "PO" : `MRF #${r.mrfNo}`);
+
 function Stamp({ by, at }: { by: string | null; at: string | null }) {
   if (!by || !at) return null;
   return <div className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{by} · {fmtStamp(at)}</div>;
@@ -128,7 +140,7 @@ function History({ row, field }: { row: PurchaserPlanRow; field: PlanEditField }
   if (mine.length === 0) return null;
   return (
     <div className="mt-0.5">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="text-[10px] font-medium text-primary hover:underline" aria-expanded={open} aria-label={`${PLAN_EDIT_FIELD_LABEL[field]} history for MRF #${row.mrfNo}`}>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="text-[10px] font-medium text-primary hover:underline" aria-expanded={open} aria-label={`${PLAN_EDIT_FIELD_LABEL[field]} history for ${rowName(row)}`}>
         {open ? "Hide history" : `History (${mine.length})`}
       </button>
       {open && (
@@ -253,13 +265,16 @@ export function PurchaserPlanTable({
     return (
       <tr key={r.key} className="align-top hover:bg-accent/40">
         <td className="px-2.5 py-2">
-          {canEditType ? (
+          {r.source === "po" ? (
+            // A PO is a purchase to the supplier by definition — nothing to choose.
+            <span>{PLAN_TYPES.find((t) => t.key === r.type)?.label ?? "—"}</span>
+          ) : canEditType ? (
             <select
               value={r.type ?? ""}
               disabled={busy === `${r.key}:type`}
               onChange={(e) => setType(r, e.target.value)}
               className="h-8 w-auto rounded-md border bg-background px-2 text-sm"
-              aria-label={`Type for MRF #${r.mrfNo}`}
+              aria-label={`Type for ${rowName(r)}`}
             >
               <option value="">—</option>
               {PLAN_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
@@ -271,9 +286,16 @@ export function PurchaserPlanTable({
           <History row={r} field="type" />
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">
-          <Link href={r.orderHref} className="font-mono text-xs font-semibold text-primary hover:underline" title={`Open order ${r.orderNo}`}>
-            {r.orderNo}
-          </Link>
+          {r.source === "po" && !r.quotationId ? (
+            // No order behind it: where the request came from, opening it in Purchasing.
+            <Link href={r.orderHref} className="text-xs font-semibold text-primary hover:underline" title="Open the request in Purchasing">
+              {r.orderNo}
+            </Link>
+          ) : (
+            <Link href={r.orderHref} className="font-mono text-xs font-semibold text-primary hover:underline" title={`Open order ${r.orderNo}`}>
+              {r.orderNo}
+            </Link>
+          )}
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">{fmtDay(r.orderedDate) ?? <span className="text-muted-foreground">—</span>}</td>
         <td className="px-2.5 py-2">{r.accountHolder}</td>
@@ -281,9 +303,13 @@ export function PurchaserPlanTable({
         <td className="whitespace-nowrap px-2.5 py-2 tabular-nums">
           {/* A plain link, not <Link>: a full page load is what makes the browser scroll
               to the #mrf- anchor and light up the card with :target. */}
-          <a href={r.mrfHref} className="font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
-            #{r.mrfNo}
-          </a>
+          {r.mrfHref ? (
+            <a href={r.mrfHref} className="font-semibold text-primary hover:underline" title={`Open MRF #${r.mrfNo}`}>
+              #{r.mrfNo}
+            </a>
+          ) : (
+            <span className="text-muted-foreground" title="Not raised from an MRF">—</span>
+          )}
         </td>
         <td className="px-2.5 py-2"><Badge variant={STATUS_VARIANT[r.mrfStatus] ?? "secondary"} className="max-w-[11rem] whitespace-normal text-left font-normal leading-tight">{r.mrfStatus}</Badge></td>
         <td className="px-2.5 py-2">
@@ -323,7 +349,7 @@ export function PurchaserPlanTable({
               every MRF row of that order. */}
           <div
             className="inline-flex h-8 w-36 cursor-not-allowed items-center rounded-md border border-dashed bg-muted/60 px-2 text-sm text-muted-foreground"
-            aria-label={`Client due date for MRF #${r.mrfNo} (set on the order)`}
+            aria-label={`Client due date for ${rowName(r)} (set on the order)`}
             aria-disabled="true"
             title="Set in the order's Phase 1 box"
           >
@@ -333,9 +359,11 @@ export function PurchaserPlanTable({
           {!r.clientDueFromOrder && r.clientDue && (
             <div className="mt-0.5 text-[10px] leading-tight text-amber-700">Set on this plan before — set it on the order</div>
           )}
-          <a href={`${r.orderHref}#phase-1`} className="mt-0.5 block text-[10px] font-medium text-primary hover:underline">
-            {r.clientDue ? "Change on the order" : "Set on the order"}
-          </a>
+          {r.quotationId && (
+            <a href={`${r.orderHref}#phase-1`} className="mt-0.5 block text-[10px] font-medium text-primary hover:underline">
+              {r.clientDue ? "Change on the order" : "Set on the order"}
+            </a>
+          )}
           <History row={r} field="clientDue" />
           {err?.key === r.key && <div className="mt-0.5 text-[11px] text-destructive">{err.msg}</div>}
         </td>
@@ -386,7 +414,7 @@ export function PurchaserPlanTable({
             {view.dir === "asc" ? "Ascending" : "Descending"}
           </button>
           <span className="text-xs text-muted-foreground">
-            {filtered.length === rows.length ? `${rows.length} open MRF${rows.length === 1 ? "" : "s"}` : `${filtered.length} of ${rows.length}`}
+            {filtered.length === rows.length ? planCount(rows) : `${filtered.length} of ${rows.length}`}
           </span>
         </div>
 
@@ -410,7 +438,7 @@ export function PurchaserPlanTable({
             <tbody className="divide-y">
               {filtered.length === 0 && (
                 <tr><td colSpan={COLUMNS.length} className="px-3 py-8 text-center text-muted-foreground">
-                  {rows.length === 0 ? "No open MRFs on paid orders." : "Nothing matches that search."}
+                  {rows.length === 0 ? "No open MRFs on paid orders, and no approved or budgeted POs." : "Nothing matches that search."}
                 </td></tr>
               )}
               {shownGroups.map((g) => (

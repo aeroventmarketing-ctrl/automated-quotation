@@ -1,3 +1,31 @@
+## 2026-10-29 · Purchase Plan: every approved / budgeted PO, not only MRF ones
+
+The owner: *"PO-AFBM20260001004 and PO-AFBM20260001001 not showing in the purchase plan. Once in
+approved tab and budgeted tab. All PO … should show in purchase plan. Once rejected and cancelled it
+will automatically be dropped from the list."* Both were department requisitions (Fans & Blower,
+Office) — no order, no MRF — and the plan only had MRF rows. Answers to the clarifying questions:
+
+- **Which POs:** all of them — department requisitions, stock replenishment, and the Purchaser's own
+  requests on bought-in orders. A PO raised from an MRF stays on its MRF's row, as before.
+- **When on the plan:** while the request is in Purchasing's **Approved** or **Budgeted** tab
+  (`isPlanPoActive`, tested). Pending (incl. a department request the Approver hasn't cleared) is not
+  yet on; **received into stock (Completed) drops off**; **rejected / cancelled drop off completely**
+  — not into the Rejected / Cancelled box.
+- **The row:** Order no. = the linked order, else where it came from (*"Fans & Blower requisition"*,
+  *"Stock replenishment"*), opening the request in Purchasing; Account holder = the order's
+  salesperson, else the **requestor**; Ordered date = the order's, else the request date; PO number;
+  MRF no. "—"; MRF status = the tab (Approved / Budgeted); Purchase due date from Purchasing (with its
+  colours); Client due date from the linked order, else "—"; Type fixed at *Purchase to supplier*.
+- The count reads *"N open MRFs · M POs"*; the My Dashboard tile adds the PO rows, so it still equals
+  the table's row count.
+
+Rendered on the role harness (seeded: Fans & Blower requisition VOUCHER_READY PO-…1004, an Office
+requisition linked to an order PO-…1003, a budgeted stock replenishment, and pending / rejected /
+completed ones): searching 1004 showed *Fans & Blower requisition · Pablito Latican · Approved · due
+today*; 1003 showed under its order with the salesperson and "Set on the order"; the replenishment
+read Budgeted; the pending, rejected and completed POs were not on the plan. The table read
+"3 open MRFs · 25 POs" and the tile 28.
+
 ## 2026-10-28 · EWT Summary: supplier rows dated by the PO date (as the 2307)
 
 The owner, asked whether the EWT Summary and the 2307 should use the same date: *"use the PO date"*.
