@@ -237,17 +237,46 @@ export function planPoNumbers(sources: readonly PlanPoSource[], opts: { includeC
   return out;
 }
 
+// --- POs not raised from an MRF --------------------------------------------------
+
+/**
+ * The owner: *"All PO … should show in purchase plan. Once in approved tab and
+ * budgeted tab. … Once rejected and cancelled it will automatically be dropped
+ * from the list."* A PO raised from an MRF is already on the MRF's row; every
+ * other one — a department requisition, a stock replenishment, a request the
+ * Purchaser raised on a bought-in order — gets a row of its own while its
+ * request sits in Purchasing's **Approved** or **Budgeted** tab. Pending (no
+ * approved purchase yet), Completed (received into stock — nothing left to
+ * plan), Rejected and Cancelled are off the plan: the owner chose to drop them
+ * outright, not to list them in the Rejected / Cancelled box.
+ */
+export function isPlanPoActive(pr: { mrfId?: string | null; kind?: string | null; status: PRStatus; chainLog?: unknown; poNumber?: string | null }): boolean {
+  if (pr.mrfId || !(pr.poNumber ?? "").trim()) return false;
+  const tab = purchasingTabName(pr);
+  return tab === TAB_LABEL.approved || tab === TAB_LABEL.budgeted;
+}
+
 // --- The row -------------------------------------------------------------------
 
 export interface PurchaserPlanRow {
   key: string;
+  /**
+   * `mrf` — an open MRF on a paid order (the plan's original row). `po` — a PO
+   * not raised from an MRF (see `isPlanPoActive`): no MRF no., its Type is
+   * always "Purchase to supplier", and it has no order unless its request is
+   * linked to one.
+   */
+  source: "mrf" | "po";
+  /** The order's id, or "" for a PO row with no linked order. */
   quotationId: string;
+  /** "" on a PO row. */
   mrfId: string;
+  /** The order number — or, for a PO row with no order, where it came from ("Office requisition"). */
   orderNo: string;
-  /** Order no. → the order's workflow page. */
+  /** Order no. → the order's workflow page; a PO row with no order opens its request in Purchasing. */
   orderHref: string;
-  /** MRF no. → that MRF's card in the order's Phase 3 · Materials (`/orders/{id}#mrf-{mrfId}`). */
-  mrfHref: string;
+  /** MRF no. → that MRF's card in the order's Phase 3 · Materials (`/orders/{id}#mrf-{mrfId}`). Null on a PO row. */
+  mrfHref: string | null;
   orderedDate: string | null;
   accountHolder: string;
   /** Every PO to the supplier raised from this MRF, oldest first — see `planPoNumbers`. */

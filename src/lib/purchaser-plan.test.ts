@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isPlanOpenMrf,
+  isPlanPoActive,
   planClientDue,
   planMrfStatus,
   purchasingTabName,
@@ -123,7 +124,7 @@ describe("Type", () => {
 
 describe("default order — purchase due date, soonest first", () => {
   const row = (mrfNo: string, purchaseDue: string | null, orderedDate: string | null): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", poNumbers: [], mrfNo,
+    key: mrfNo, source: "mrf", quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate, accountHolder: "x", poNumbers: [], mrfNo,
     mrfStatus: "Pending", purchaseDue, receivedOn: null, type: null, typeByName: null, typeAt: null, clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
 
@@ -193,7 +194,7 @@ describe("the Purchase due date colour — the owner's four bands", () => {
 // --- Sort and group --------------------------------------------------------------
 describe("sort and group", () => {
   const r = (mrfNo: string, over: Partial<PurchaserPlanRow> = {}): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", orderHref: "#", mrfHref: "#", orderedDate: "2026-10-08",
+    key: mrfNo, source: "mrf", quotationId: "q", mrfId: mrfNo, orderNo: "2026 - AFBM00003747A", orderHref: "#", mrfHref: "#", orderedDate: "2026-10-08",
     accountHolder: "May-Ann Asong", poNumbers: [], mrfNo, mrfStatus: "Pending", purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [], ...over,
   });
@@ -369,7 +370,7 @@ describe("sorting by Purchase due date puts what's still due first", () => {
   // The owner: "show the 10 soon to due rows". A row already received into stock
   // is not due any more, however old its date.
   const r = (mrfNo: string, purchaseDue: string | null, receivedOn: string | null = null): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
+    key: mrfNo, source: "mrf", quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
     accountHolder: "x", poNumbers: [], mrfNo, mrfStatus: "Approved", purchaseDue, receivedOn, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
   });
@@ -446,7 +447,7 @@ describe("PO number — every PO to the supplier raised from the MRF", () => {
   });
 
   const r = (mrfNo: string, numbers: string[]): PurchaserPlanRow => ({
-    key: mrfNo, quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
+    key: mrfNo, source: "mrf", quotationId: "q", mrfId: mrfNo, orderNo: "o", orderHref: "#", mrfHref: "#", orderedDate: null,
     accountHolder: "x", poNumbers: numbers.map((number, i) => ({ number, prId: `${mrfNo}-${i}` })), mrfNo, mrfStatus: "Approved",
     purchaseDue: null, receivedOn: null, type: null, typeByName: null, typeAt: null,
     clientDue: null, clientDueByName: null, clientDueAt: null, clientDueFromOrder: true, edits: [],
@@ -462,5 +463,32 @@ describe("PO number — every PO to the supplier raised from the MRF", () => {
       ["PO-AFBM20260000991", ["1"]],
       ["No PO yet", ["2"]],
     ]);
+  });
+});
+
+describe("POs not raised from an MRF — on the plan while Approved or Budgeted", () => {
+  // The owner: "All PO … should show in purchase plan. Once in approved tab and
+  // budgeted tab. … Once rejected and cancelled it will automatically be dropped."
+  const po = (status: string, over: Record<string, unknown> = {}) =>
+    isPlanPoActive({ kind: "department", status: status as never, chainLog: { approve_po: { byName: "Rey Gil" } }, poNumber: "PO-AFBM20260001004", mrfId: null, ...over });
+  it("Approved and Budgeted tabs are on", () => {
+    expect(po("APPROVED")).toBe(true);
+    expect(po("VOUCHER_READY")).toBe(true); // "Voucher ready — awaiting signing", Approved tab
+    expect(po("VOUCHER_SIGNED")).toBe(true); // Budgeted
+    expect(po("PURCHASED")).toBe(true);
+  });
+  it("Pending, Completed, Rejected and Cancelled are off", () => {
+    expect(po("PENDING_APPROVAL")).toBe(false);
+    expect(po("APPROVED", { chainLog: {} })).toBe(false); // department request the Approver hasn't cleared: Pending tab
+    expect(po("COMPLETED")).toBe(false);
+    expect(po("REJECTED")).toBe(false);
+    expect(po("CANCELLED")).toBe(false);
+  });
+  it("every kind counts — but a PO from an MRF is on its MRF's row, and no PO number, no row", () => {
+    expect(po("VOUCHER_READY", { kind: "replenishment", chainLog: {} })).toBe(true);
+    expect(po("APPROVED", { kind: "order", chainLog: {} })).toBe(true);
+    expect(po("VOUCHER_READY", { mrfId: "m1" })).toBe(false);
+    expect(po("VOUCHER_READY", { poNumber: "" })).toBe(false);
+    expect(po("VOUCHER_READY", { poNumber: null })).toBe(false);
   });
 });
