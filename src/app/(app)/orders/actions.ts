@@ -9,13 +9,13 @@ import { resolveItemSkus, skusForLines, buildCatalogueSkuIndex } from "@/lib/pr-
 import type { SkuIndex } from "@/lib/item-sku";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { buildPoPriceCatalog, cataloguePriceForLine } from "@/lib/po-price-catalog";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import { logActivity } from "@/lib/activity-log";
-import { canEditSinglePo, canEditCombinedPo } from "@/lib/po-edit-access";
+import { canEditSinglePo, canEditCombinedPo, sendsBackForApproval, sentBackFields } from "@/lib/po-edit-access";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -3810,8 +3810,13 @@ export async function savePurchaseOrder(
   }
   // A purchase order can't be prepared until the request has cleared approval and
   // left the pending bucket — PENDING_APPROVAL, or a material/department MRF the
-  // Plant Manager approved but the Approver hasn't purchase-approved yet.
-  if (statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending") {
+  // Plant Manager approved but the Approver hasn't purchase-approved yet. An
+  // EXISTING PO can still be edited there (the owner: "Pending and … Approved
+  // Tab") — e.g. one sent back to the Payment Approver after an amount change.
+  if (
+    !coercePurchaseOrder(pr.po) &&
+    statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending"
+  ) {
     return refuse("This request must be approved before a purchase order can be created.");
   }
 
@@ -3876,13 +3881,40 @@ export async function savePurchaseOrder(
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   };
 
+  // An amount change after the voucher is prepared sends the PO back to the
+  // Payment Approver, and the voucher back to Accounting (lib/po-edit-access).
+  const before = existing ? poTotals(existing) : null;
+  const after = poTotals(po);
+  const sentBack = !!before && sendsBackForApproval(pr.status, before, after);
   await prisma.purchaseRequest.update({
     where: { id: purchaseRequestId },
-    data: { po: po as unknown as Prisma.InputJsonObject },
+    data: {
+      po: po as unknown as Prisma.InputJsonObject,
+      ...(sentBack
+        ? (() => {
+            const f = sentBackFields(
+              { chainLog: pr.chainLog, isDept: isDeptRequisition(pr) },
+              { byName: user.name, role: isAdmin(user) ? "Admin" : "Purchaser", at: new Date().toISOString(), from: before!.net, to: after.net },
+            );
+            return { ...f, chainLog: f.chainLog as Prisma.InputJsonValue };
+          })()
+        : {}),
+    },
   });
+  if (sentBack) {
+    await logActivity(user, {
+      action: "purchase.sent_back",
+      category: "purchase",
+      summary: `${po.poNumber}: amount changed ${before!.net.toLocaleString("en-PH", { minimumFractionDigits: 2 })} → ${after.net.toLocaleString("en-PH", { minimumFractionDigits: 2 })} at Voucher ready — sent back to the Payment Approver`,
+      entity: "purchase",
+      entityId: purchaseRequestId,
+      href: `/purchasing?req=${purchaseRequestId}`,
+    });
+  }
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
   return done;
 }
 
@@ -4095,9 +4127,35 @@ export async function updateCombinedPO(
     batchId,
     memberPrIds: ids,
   };
+  // An amount change after the voucher is prepared sends EVERY request on the PO
+  // back to the Payment Approver (lib/po-edit-access) — they move as one.
+  const before = existing ? poTotals(existing) : null;
+  const after = poTotals(po as unknown as PurchaseOrder);
+  const sentBack = !!before && sendsBackForApproval(anchor.status, before, after);
+  const memberRows = sentBack
+    ? await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { id: true, chainLog: true, kind: true, mrfId: true } })
+    : [];
+  const stamp = { byName: user.name, role: isAdmin(user) ? "Admin" : "Purchaser", at: new Date().toISOString(), from: before?.net ?? 0, to: after.net };
   await prisma.$transaction(
-    ids.map((id) => prisma.purchaseRequest.update({ where: { id }, data: { po: po as unknown as Prisma.InputJsonObject } })),
+    ids.map((id) => {
+      const m = memberRows.find((r) => r.id === id);
+      const back = sentBack && m ? sentBackFields({ chainLog: m.chainLog, isDept: isDeptRequisition(m) }, stamp) : null;
+      return prisma.purchaseRequest.update({
+        where: { id },
+        data: { po: po as unknown as Prisma.InputJsonObject, ...(back ? { ...back, chainLog: back.chainLog as Prisma.InputJsonValue } : {}) },
+      });
+    }),
   );
+  if (sentBack) {
+    await logActivity(user, {
+      action: "purchase.sent_back",
+      category: "purchase",
+      summary: `Combined ${po.poNumber}: amount changed ${stamp.from.toLocaleString("en-PH", { minimumFractionDigits: 2 })} → ${stamp.to.toLocaleString("en-PH", { minimumFractionDigits: 2 })} at Voucher ready — sent back to the Payment Approver`,
+      entity: "purchase",
+      entityId: anchor.id,
+      href: `/purchasing?req=${anchor.id}`,
+    });
+  }
   await rememberSupplier(d.supplier);
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { quotationId: true } });
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {

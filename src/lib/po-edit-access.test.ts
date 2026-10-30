@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inPendingOrApprovedTab, canEditSinglePo, canEditCombinedPo } from "./po-edit-access";
+import { inPendingOrApprovedTab, canEditSinglePo, canEditCombinedPo, sendsBackForApproval, poAmountChanged, sentBackFields, readSentBack } from "./po-edit-access";
 
 // The owner: "allow purchaser to edit purchase order, delete and modify rows in
 // purchase order in Purchasing Pending and Purchasing Approved Tab".
@@ -46,5 +46,36 @@ describe("a combined PO", () => {
   });
   it("not for anyone else", () => {
     expect(canEditCombinedPo({ admin: false, purchaser: false, status: "APPROVED" })).toBe(false);
+  });
+});
+
+describe("an amount change at Voucher ready goes back to the Payment Approver", () => {
+  const a = { total: 88300, net: 87511.61 };
+  it("only at Voucher ready, and only when the amount moves", () => {
+    expect(sendsBackForApproval("VOUCHER_READY", a, { total: 88300, net: 87511.61 })).toBe(false); // a remark edit
+    expect(sendsBackForApproval("VOUCHER_READY", a, { total: 85420, net: 84657.32 })).toBe(true); // a row deleted
+    expect(sendsBackForApproval("VOUCHER_READY", a, { total: 88300, net: 88300 })).toBe(true); // EWT removed
+    expect(sendsBackForApproval("APPROVED", a, { total: 1, net: 1 })).toBe(false); // no voucher yet
+    expect(sendsBackForApproval("VOUCHER_SIGNED", a, { total: 1, net: 1 })).toBe(false); // can't be edited there anyway
+    expect(poAmountChanged(a, { total: 88300.004, net: 87511.61 })).toBe(false);
+  });
+  const stamp = { byName: "Allan Ramos", role: "Purchaser", at: "2026-10-30T02:00:00.000Z", from: 87511.61, to: 84657.32 };
+  it("a department requisition: back to APPROVED, its PO approval and voucher cleared", () => {
+    const f = sentBackFields({ isDept: true, chainLog: { approve_po: { byName: "Rey Gil" }, other: { byName: "x" } } }, stamp);
+    expect(f.status).toBe("APPROVED");
+    expect(f.chainLog.approve_po).toBeUndefined();
+    expect(f.chainLog.other).toEqual({ byName: "x" });
+    expect(f.voucherByName).toBeNull();
+    expect("decidedByName" in f).toBe(false); // the Plant Manager's MRF approval stands
+    expect(readSentBack(f.chainLog)).toEqual(stamp);
+  });
+  it("any other request: back to PENDING_APPROVAL, the Approver's decision cleared", () => {
+    const f = sentBackFields({ isDept: false, chainLog: {} }, stamp);
+    expect(f.status).toBe("PENDING_APPROVAL");
+    expect(f.decidedByName).toBeNull();
+  });
+  it("no stamp, nothing to read", () => {
+    expect(readSentBack({})).toBeNull();
+    expect(readSentBack(null)).toBeNull();
   });
 });

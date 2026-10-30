@@ -640,6 +640,7 @@ export function PurchasingChain({
                   catalogSkuKeys={catalogSkuKeys}
                   catalogPrices={catalogPrices}
                   scanProducts={scanProducts}
+                  sendBackFrom={r.status === "VOUCHER_READY" && r.po ? poTotals(r.po) : null}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (

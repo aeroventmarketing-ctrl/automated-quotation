@@ -35,3 +35,89 @@ export function canEditSinglePo(o: { admin: boolean; purchaser: boolean; status:
 export function canEditCombinedPo(o: { admin: boolean; purchaser: boolean; status: PRStatus | string }): boolean {
   return (o.admin || o.purchaser) && inPendingOrApprovedTab(o.status);
 }
+
+// --- An amount change after the voucher is prepared ------------------------------
+
+/**
+ * The owner, offered it after the Purchaser was allowed to edit through the
+ * Approved tab: *"Please proceed with this"* — **an edit that changes a PO's
+ * amount at Voucher ready sends it back to the Payment Approver.** By then
+ * Accounting has prepared the voucher and the checks from the old amount, and
+ * the next step is the Payment Approver signing them; signing a voucher that no
+ * longer matches its PO is exactly what this stops.
+ *
+ * Sent back means: the Payment Approver's PO approval and the prepared voucher
+ * are cleared, and the request returns to the Pending tab awaiting the Payment
+ * Approver's **Approve purchase** — then Accounting prepares the voucher afresh
+ * and the chain runs on as before. A department / MRF requisition goes back to
+ * APPROVED without `approve_po` (the Plant Manager's MRF approval stands); any
+ * other request, whose one approval IS the Payment Approver's, goes back to
+ * PENDING_APPROVAL. The send-back itself is stamped in the chain log
+ * (`sent_back`: who, as what, when, from and to which amount).
+ *
+ * An edit that leaves the amount alone (a remark, the terms, a description)
+ * sends nothing back. It applies to whoever edits, an admin included: the
+ * voucher no longer matches either way.
+ */
+export const SENT_BACK_KEY = "sent_back";
+
+/** Total and net (after EWT), to the centavo — the figures the voucher is drawn for. */
+export interface PoAmount {
+  total: number;
+  net: number;
+}
+
+export const poAmountChanged = (before: PoAmount, after: PoAmount): boolean =>
+  Math.abs(before.total - after.total) >= 0.005 || Math.abs(before.net - after.net) >= 0.005;
+
+/** Does saving this edit send the PO back to the Payment Approver? */
+export const sendsBackForApproval = (status: PRStatus | string, before: PoAmount, after: PoAmount): boolean =>
+  status === "VOUCHER_READY" && poAmountChanged(before, after);
+
+export interface SentBack {
+  byName: string;
+  role: string;
+  at: string;
+  /** The PO's net before and after the edit. */
+  from: number;
+  to: number;
+}
+
+/**
+ * The fields that send one request back. `isDept` is `isDeptRequisition(pr)`.
+ * Returned as plain values so the server actions can hand them to Prisma.
+ */
+export function sentBackFields(
+  pr: { chainLog: unknown; isDept: boolean },
+  stamp: SentBack,
+): {
+  status: "APPROVED" | "PENDING_APPROVAL";
+  chainLog: Record<string, unknown>;
+  voucherByName: null;
+  voucherAt: null;
+  voucherRef: null;
+  decidedById?: null;
+  decidedByName?: null;
+  decidedAt?: null;
+} {
+  const log = { ...((pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>) };
+  delete log.approve_po;
+  log[SENT_BACK_KEY] = { ...stamp };
+  const base = { chainLog: log, voucherByName: null, voucherAt: null, voucherRef: null } as const;
+  return pr.isDept
+    ? { status: "APPROVED", ...base }
+    : { status: "PENDING_APPROVAL", ...base, decidedById: null, decidedByName: null, decidedAt: null };
+}
+
+/** The stamp, read back for the card's trail — or null. */
+export function readSentBack(chainLog: unknown): SentBack | null {
+  const e = (chainLog && typeof chainLog === "object" ? (chainLog as Record<string, unknown>)[SENT_BACK_KEY] : null) as Record<string, unknown> | null;
+  if (!e || typeof e !== "object" || typeof e.byName !== "string") return null;
+  return {
+    byName: e.byName,
+    role: typeof e.role === "string" ? e.role : "",
+    at: typeof e.at === "string" ? e.at : "",
+    from: Number(e.from) || 0,
+    to: Number(e.to) || 0,
+  };
+}
