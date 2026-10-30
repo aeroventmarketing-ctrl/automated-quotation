@@ -15,6 +15,7 @@ import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import { logActivity } from "@/lib/activity-log";
+import { canEditSinglePo, canEditCombinedPo } from "@/lib/po-edit-access";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -3798,10 +3799,14 @@ export async function savePurchaseOrder(
   if (!pr) return refuse("Purchase request not found.");
   if (pr.status === "REJECTED") return refuse("This purchase request was rejected.");
   // The purchase is approved first, then the Purchaser prepares the PO — so
-  // creating the first PO is always allowed. Only EDITING an existing PO locks
-  // once the purchase is approved (admin override aside).
-  if (isPoApproved(pr.chainLog) && coercePurchaseOrder(pr.po) && !isAdmin(user)) {
-    return refuse("This purchase order is approved — only an admin can edit it.");
+  // creating the first PO is always allowed. EDITING an existing PO is the rule
+  // in lib/po-edit-access: the Purchaser through the Pending and Approved tabs
+  // (the owner), an admin always.
+  if (
+    coercePurchaseOrder(pr.po) &&
+    !canEditSinglePo({ admin: isAdmin(user), purchaser: true, status: pr.status, poApproved: isPoApproved(pr.chainLog) })
+  ) {
+    return refuse("This purchase order's voucher is signed — only an admin can edit it now.");
   }
   // A purchase order can't be prepared until the request has cleared approval and
   // left the pending bucket — PENDING_APPROVAL, or a material/department MRF the
@@ -4063,14 +4068,12 @@ export async function updateCombinedPO(
   }
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
-  // Once the purchase order is approved, only an admin may edit it.
-  if (isPoApproved(anchor.chainLog) && !isAdmin(user)) {
-    throw new Error("This purchase order is approved — only an admin can edit it.");
-  }
+  // The Purchaser and an admin alike, while it is in the Pending or Approved tab
+  // — the owner opened an approved PO to the Purchaser (lib/po-edit-access).
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
-  if (!(["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(anchor.status)) {
-    throw new Error("A combined PO can only be edited before it is purchased.");
+  if (!canEditCombinedPo({ admin: isAdmin(user), purchaser: true, status: anchor.status })) {
+    throw new Error("A combined PO can only be edited before its voucher is signed.");
   }
   const existing = coercePurchaseOrder(anchor.po);
   const batchId = poBatchId(anchor.po);

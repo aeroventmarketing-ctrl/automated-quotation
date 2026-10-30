@@ -28,6 +28,7 @@ import { SupplierPaymentsPanel } from "./supplier-payments-panel";
 import type { SupplierPayment } from "@/lib/supplier-payments";
 import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
+import { canEditCombinedPo } from "@/lib/po-edit-access";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -78,7 +79,7 @@ export interface BatchCard {
   status: PRStatus;
   statusLabel: string;
   variant: "secondary" | "warning" | "success" | "destructive";
-  poApproved: boolean; // the Approver approved the PO — after this only admin may edit
+  poApproved: boolean; // the Approver approved the PO
   lines: POLine[];
   members: BatchMember[];
   trail: string[];
@@ -324,8 +325,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct, ewtMode: batch.ewtMode, ewtAmount: batch.ewtAmount });
   const actionable = batch.actions.filter((a) => a.canAct);
   const awaiting = batch.actions.find((a) => !a.canAct);
-  // Once the PO is approved, only an admin may edit it.
-  const editable = batch.canManagePO && (!batch.poApproved || admin) && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
+  // The Purchaser and an admin, while in the Pending or Approved tab — lib/po-edit-access.
+  const editable = batch.canManagePO && canEditCombinedPo({ admin, purchaser: true, status: batch.status });
 
   async function run(stepKey: string) {
     setBusy(stepKey); setErr(null);
