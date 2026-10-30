@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import type { PoAmount } from "@/lib/po-edit-access";
+import { SendBackNotice } from "../../purchasing/send-back-notice";
 
 /** A PO line while it is being edited: the stored line plus the reason box. */
 type EditLine = POLine & { priceReason?: string };
@@ -49,6 +51,7 @@ export function PurchaseOrderPanel({
   catalogSkuKeys = {},
   catalogPrices = {},
   scanProducts = [],
+  sendBackFrom = null,
   onDone,
 }: {
   prId: string;
@@ -63,6 +66,8 @@ export function PurchaseOrderPanel({
   catalogSkuKeys?: CatalogSkuKeys;
   catalogPrices?: CatalogPrices;
   scanProducts?: ScanProduct[];
+  /** Editing at Voucher ready: the amount the voucher was drawn for — see SendBackNotice. */
+  sendBackFrom?: PoAmount | null;
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -513,6 +518,7 @@ export function PurchaseOrderPanel({
         )}
       </div>
 
+      <SendBackNotice saved={sendBackFrom} now={totals} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={save}>{busy ? "Saving…" : po ? "Save changes" : "Create purchase order"}</Button>
         {po && (

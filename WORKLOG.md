@@ -1,3 +1,52 @@
+## 2026-10-30 · Purchasing: the Purchaser edits a PO through the Pending and Approved tabs
+
+The owner: *"allow purchaser to edit purchase order, delete and modify rows in purchase order in
+Purchasing Pending and Purchasing Approved Tab."* (Approved change to the frozen Phase 4 area.)
+
+- Until now the Payment Approver's PO approval locked the PO to admins, so a PO in the Approved tab —
+  e.g. *"Voucher ready — awaiting signing"* — showed no Edit for the Purchaser.
+- Now the Purchaser gets **Edit** — supplier, terms, EWT, remarks and the lines (change, add, delete
+  with ×) — on single and combined POs while the request is in the **Pending or Approved** tab:
+  PENDING_APPROVAL, APPROVED, VOUCHER_READY. From **voucher signed** (Budgeted) on, admin only, as
+  before. Accounting, Warehouse, Sales etc. never.
+- An admin's reach is unchanged (a single PO any time; a combined PO until the voucher is signed). A
+  single PO that never takes the Approver's PO approval (one linked to an order) keeps the reach the
+  Purchaser always had.
+- The catalogue-price rule still applies to every save (a different price needs a reason).
+
+One rule for the cards and the server actions: `lib/po-edit-access.ts` (`canEditSinglePo`,
+`canEditCombinedPo`, tested), used by `savePurchaseOrder`, `updateCombinedPO`, the single-PO card
+(`purchasing-chain.tsx`) and the combined-PO card (`combined-purchasing.tsx`).
+
+**An amount change at Voucher ready goes back to the Payment Approver** — offered, and the owner:
+*"Please proceed with this."* At Voucher ready Accounting has already drawn the voucher and checks from
+the PO's amount, and the next step is the Payment Approver signing them. So an edit (by anyone, admin
+included) that moves the PO's total or net there (`sendsBackForApproval`):
+
+- clears the Payment Approver's PO approval and the prepared voucher, and returns the request to the
+  **Pending** tab awaiting **Approve purchase** — a department / MRF requisition back to APPROVED
+  without `approve_po` (the Plant Manager's MRF approval stands); any other request back to
+  PENDING_APPROVAL with the Approver's decision cleared. Then Accounting prepares the voucher afresh;
+- on a combined PO, every request on it, together;
+- stamps `chainLog.sent_back` (who, as what, when, net from → to), shown on the card's trail —
+  *"Amount changed ₱1,189.29 → ₱991.07 after the voucher was prepared — sent back to the Payment
+  Approver — Allan Ramos (Purchaser)"* — and an activity entry `purchase.sent_back`;
+- is announced in the edit form before saving, the moment the amount moves (`SendBackNotice`).
+
+An edit that leaves the amount alone (remarks, terms, a description) sends nothing back. A PO already
+sent back can still be edited in the Pending tab (an existing PO only — a new one still waits for
+approval). Check photos already attached stay on the request.
+
+Verified on the role harness as the Purchaser: a single department PO, APPROVED and PO-approved, showed
+Edit; deleting one of its two lines and changing the other's qty to 12 saved. Combined
+PO-AFBM2026000770 at VOUCHER_READY showed Edit and saved qty 11 on both members. A PO at VOUCHER_SIGNED
+showed no Edit; Accounting saw no Edit. Send-back, with POs at Voucher ready: a remark-only edit
+showed no warning and stayed at Voucher ready; deleting a row on a single department PO showed the
+warning (₱1,189.29 → ₱991.07) and saved it back to APPROVED with `approve_po` and the voucher cleared;
+combined PO-770 (qty 10 → 11) sent both members back; an order-linked PO went back to
+PENDING_APPROVAL with the decision cleared. The Payment Approver then saw *Approve purchase* and the
+trail line.
+
 ## 2026-10-29 · Purchase Plan: every approved / budgeted PO, not only MRF ones
 
 The owner: *"PO-AFBM20260001004 and PO-AFBM20260001001 not showing in the purchase plan. Once in

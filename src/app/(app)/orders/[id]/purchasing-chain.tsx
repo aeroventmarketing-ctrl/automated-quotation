@@ -24,6 +24,7 @@ import { canReconcileAt } from "@/lib/purchase-reconcile";
 import { prMainIndex, type PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
+import { canEditSinglePo } from "@/lib/po-edit-access";
 import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
@@ -639,6 +640,7 @@ export function PurchasingChain({
                   catalogSkuKeys={catalogSkuKeys}
                   catalogPrices={catalogPrices}
                   scanProducts={scanProducts}
+                  sendBackFrom={r.status === "VOUCHER_READY" && r.po ? poTotals(r.po) : null}
                   onDone={() => setPoEditId(null)}
                 />
               ) : r.po ? (
@@ -700,8 +702,9 @@ export function PurchasingChain({
                       cashPaid={r.cashPaid ?? null}
                     />
                   </div>
-                  {/* Once approved, only an admin may edit the PO. */}
-                  {!readOnly && r.canManagePO && (!r.poApproved || admin) && (
+                  {/* The Purchaser through the Pending and Approved tabs, an admin
+                      always — lib/po-edit-access. */}
+                  {!readOnly && r.canManagePO && canEditSinglePo({ admin, purchaser: true, status: r.status, poApproved: !!r.poApproved }) && (
                     <button
                       type="button"
                       onClick={() => setPoEditId(r.id)}

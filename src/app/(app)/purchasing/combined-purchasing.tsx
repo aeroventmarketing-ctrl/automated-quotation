@@ -28,6 +28,8 @@ import { SupplierPaymentsPanel } from "./supplier-payments-panel";
 import type { SupplierPayment } from "@/lib/supplier-payments";
 import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
+import { canEditCombinedPo, type PoAmount } from "@/lib/po-edit-access";
+import { SendBackNotice } from "./send-back-notice";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
 import { ProductScanBox, ADD_JUMP_MODES } from "@/components/product-scan-box";
 import type { ScanProduct } from "@/lib/product-scan";
@@ -78,7 +80,7 @@ export interface BatchCard {
   status: PRStatus;
   statusLabel: string;
   variant: "secondary" | "warning" | "success" | "destructive";
-  poApproved: boolean; // the Approver approved the PO — after this only admin may edit
+  poApproved: boolean; // the Approver approved the PO
   lines: POLine[];
   members: BatchMember[];
   trail: string[];
@@ -324,8 +326,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct, ewtMode: batch.ewtMode, ewtAmount: batch.ewtAmount });
   const actionable = batch.actions.filter((a) => a.canAct);
   const awaiting = batch.actions.find((a) => !a.canAct);
-  // Once the PO is approved, only an admin may edit it.
-  const editable = batch.canManagePO && (!batch.poApproved || admin) && (["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(batch.status);
+  // The Purchaser and an admin, while in the Pending or Approved tab — lib/po-edit-access.
+  const editable = batch.canManagePO && canEditCombinedPo({ admin, purchaser: true, status: batch.status });
 
   async function run(stepKey: string) {
     setBusy(stepKey); setErr(null);
@@ -375,6 +377,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
           initialEwtAmount={batch.ewtAmount}
           initialRemarks={batch.remarks}
           initialDate={poDateYmd(batch.poDate)}
+          sendBackFrom={batch.status === "VOUCHER_READY" ? totals : null}
           suppliers={suppliers}
           paymentTerms={paymentTerms}
           poDefaultRemarks={poDefaultRemarks}
@@ -588,6 +591,7 @@ function CombineForm({
   initialEwtAmount,
   initialRemarks,
   initialDate,
+  sendBackFrom,
   suppliers,
   paymentTerms,
   poDefaultRemarks,
@@ -611,6 +615,8 @@ function CombineForm({
   initialRemarks?: string;
   /** Editing: the PO's saved date (YYYY-MM-DD). */
   initialDate?: string;
+  /** Editing at Voucher ready: the amount the voucher was drawn for — see SendBackNotice. */
+  sendBackFrom?: PoAmount | null;
   suppliers: Supplier[];
   paymentTerms: PaymentTerm[];
   poDefaultRemarks: string;
@@ -849,6 +855,7 @@ function CombineForm({
         <Input className="h-8" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Payment terms / remarks" />
       </div>
 
+      <SendBackNotice saved={sendBackFrom} now={totals} />
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" className="h-8" disabled={busy} onClick={submit}>{busy ? "Saving…" : submitLabel}</Button>
         <Button size="sm" variant="outline" className="h-8" disabled={busy} onClick={onCancel}>Cancel</Button>

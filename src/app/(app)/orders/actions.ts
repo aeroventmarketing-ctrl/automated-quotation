@@ -9,12 +9,13 @@ import { resolveItemSkus, skusForLines, buildCatalogueSkuIndex } from "@/lib/pr-
 import type { SkuIndex } from "@/lib/item-sku";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
-import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { buildPoPriceCatalog, cataloguePriceForLine } from "@/lib/po-price-catalog";
 import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import { logActivity } from "@/lib/activity-log";
+import { canEditSinglePo, canEditCombinedPo, sendsBackForApproval, sentBackFields } from "@/lib/po-edit-access";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -3798,15 +3799,24 @@ export async function savePurchaseOrder(
   if (!pr) return refuse("Purchase request not found.");
   if (pr.status === "REJECTED") return refuse("This purchase request was rejected.");
   // The purchase is approved first, then the Purchaser prepares the PO — so
-  // creating the first PO is always allowed. Only EDITING an existing PO locks
-  // once the purchase is approved (admin override aside).
-  if (isPoApproved(pr.chainLog) && coercePurchaseOrder(pr.po) && !isAdmin(user)) {
-    return refuse("This purchase order is approved — only an admin can edit it.");
+  // creating the first PO is always allowed. EDITING an existing PO is the rule
+  // in lib/po-edit-access: the Purchaser through the Pending and Approved tabs
+  // (the owner), an admin always.
+  if (
+    coercePurchaseOrder(pr.po) &&
+    !canEditSinglePo({ admin: isAdmin(user), purchaser: true, status: pr.status, poApproved: isPoApproved(pr.chainLog) })
+  ) {
+    return refuse("This purchase order's voucher is signed — only an admin can edit it now.");
   }
   // A purchase order can't be prepared until the request has cleared approval and
   // left the pending bucket — PENDING_APPROVAL, or a material/department MRF the
-  // Plant Manager approved but the Approver hasn't purchase-approved yet.
-  if (statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending") {
+  // Plant Manager approved but the Approver hasn't purchase-approved yet. An
+  // EXISTING PO can still be edited there (the owner: "Pending and … Approved
+  // Tab") — e.g. one sent back to the Payment Approver after an amount change.
+  if (
+    !coercePurchaseOrder(pr.po) &&
+    statusBucket(pr.status as PRStatus, { isDept: isDeptRequisition(pr), poApproved: isPoApproved(pr.chainLog) }) === "pending"
+  ) {
     return refuse("This request must be approved before a purchase order can be created.");
   }
 
@@ -3871,13 +3881,40 @@ export async function savePurchaseOrder(
     createdAt: existing?.createdAt ?? new Date().toISOString(),
   };
 
+  // An amount change after the voucher is prepared sends the PO back to the
+  // Payment Approver, and the voucher back to Accounting (lib/po-edit-access).
+  const before = existing ? poTotals(existing) : null;
+  const after = poTotals(po);
+  const sentBack = !!before && sendsBackForApproval(pr.status, before, after);
   await prisma.purchaseRequest.update({
     where: { id: purchaseRequestId },
-    data: { po: po as unknown as Prisma.InputJsonObject },
+    data: {
+      po: po as unknown as Prisma.InputJsonObject,
+      ...(sentBack
+        ? (() => {
+            const f = sentBackFields(
+              { chainLog: pr.chainLog, isDept: isDeptRequisition(pr) },
+              { byName: user.name, role: isAdmin(user) ? "Admin" : "Purchaser", at: new Date().toISOString(), from: before!.net, to: after.net },
+            );
+            return { ...f, chainLog: f.chainLog as Prisma.InputJsonValue };
+          })()
+        : {}),
+    },
   });
+  if (sentBack) {
+    await logActivity(user, {
+      action: "purchase.sent_back",
+      category: "purchase",
+      summary: `${po.poNumber}: amount changed ${before!.net.toLocaleString("en-PH", { minimumFractionDigits: 2 })} → ${after.net.toLocaleString("en-PH", { minimumFractionDigits: 2 })} at Voucher ready — sent back to the Payment Approver`,
+      entity: "purchase",
+      entityId: purchaseRequestId,
+      href: `/purchasing?req=${purchaseRequestId}`,
+    });
+  }
   // Remember the supplier for next time (searchable in the PO form).
   await rememberSupplier(po.supplier);
   revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
   return done;
 }
 
@@ -4063,14 +4100,12 @@ export async function updateCombinedPO(
   }
   const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
   if (!anchor) throw new Error("Purchase request not found");
-  // Once the purchase order is approved, only an admin may edit it.
-  if (isPoApproved(anchor.chainLog) && !isAdmin(user)) {
-    throw new Error("This purchase order is approved — only an admin can edit it.");
-  }
+  // The Purchaser and an admin alike, while it is in the Pending or Approved tab
+  // — the owner opened an approved PO to the Purchaser (lib/po-edit-access).
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
-  if (!(["PENDING_APPROVAL", "APPROVED", "VOUCHER_READY"] as string[]).includes(anchor.status)) {
-    throw new Error("A combined PO can only be edited before it is purchased.");
+  if (!canEditCombinedPo({ admin: isAdmin(user), purchaser: true, status: anchor.status })) {
+    throw new Error("A combined PO can only be edited before its voucher is signed.");
   }
   const existing = coercePurchaseOrder(anchor.po);
   const batchId = poBatchId(anchor.po);
@@ -4092,9 +4127,35 @@ export async function updateCombinedPO(
     batchId,
     memberPrIds: ids,
   };
+  // An amount change after the voucher is prepared sends EVERY request on the PO
+  // back to the Payment Approver (lib/po-edit-access) — they move as one.
+  const before = existing ? poTotals(existing) : null;
+  const after = poTotals(po as unknown as PurchaseOrder);
+  const sentBack = !!before && sendsBackForApproval(anchor.status, before, after);
+  const memberRows = sentBack
+    ? await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { id: true, chainLog: true, kind: true, mrfId: true } })
+    : [];
+  const stamp = { byName: user.name, role: isAdmin(user) ? "Admin" : "Purchaser", at: new Date().toISOString(), from: before?.net ?? 0, to: after.net };
   await prisma.$transaction(
-    ids.map((id) => prisma.purchaseRequest.update({ where: { id }, data: { po: po as unknown as Prisma.InputJsonObject } })),
+    ids.map((id) => {
+      const m = memberRows.find((r) => r.id === id);
+      const back = sentBack && m ? sentBackFields({ chainLog: m.chainLog, isDept: isDeptRequisition(m) }, stamp) : null;
+      return prisma.purchaseRequest.update({
+        where: { id },
+        data: { po: po as unknown as Prisma.InputJsonObject, ...(back ? { ...back, chainLog: back.chainLog as Prisma.InputJsonValue } : {}) },
+      });
+    }),
   );
+  if (sentBack) {
+    await logActivity(user, {
+      action: "purchase.sent_back",
+      category: "purchase",
+      summary: `Combined ${po.poNumber}: amount changed ${stamp.from.toLocaleString("en-PH", { minimumFractionDigits: 2 })} → ${stamp.to.toLocaleString("en-PH", { minimumFractionDigits: 2 })} at Voucher ready — sent back to the Payment Approver`,
+      entity: "purchase",
+      entityId: anchor.id,
+      href: `/purchasing?req=${anchor.id}`,
+    });
+  }
   await rememberSupplier(d.supplier);
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } }, select: { quotationId: true } });
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {

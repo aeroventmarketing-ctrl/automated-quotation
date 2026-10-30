@@ -24,6 +24,7 @@ import { round2 } from "@/lib/quote";
 import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
+import { readSentBack } from "@/lib/po-edit-access";
 
 export interface PurchaseActionOpt {
   key: string;
@@ -374,6 +375,17 @@ export function isBoughtInRequest(pr: { kind?: string | null; dept?: string | nu
     || (pr.kind === "department" && pr.dept === "office" && (pr.note ?? "").startsWith(BOUGHT_IN_REQUEST_NOTE));
 }
 
+/**
+ * An amount change at Voucher ready sent this PO back to the Payment Approver
+ * (lib/po-edit-access). Its line sits before the PO approval it now awaits.
+ */
+function sentBackLine(chainLog: unknown): string | null {
+  const s = readSentBack(chainLog);
+  if (!s) return null;
+  const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `Amount changed ${peso(s.from)} → ${peso(s.to)} after the voucher was prepared — sent back to the Payment Approver — ${s.byName} (${s.role || "Purchaser"}) · ${formatDateTime(s.at ? new Date(s.at) : undefined)}`;
+}
+
 export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
   const status = pr.status as PRStatus;
   const log = coerceChainLog(pr.chainLog);
@@ -413,6 +425,7 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
         ? stamp("Bought-in items requested", purchaser, pr.createdByName, pr.createdAt)
         : stamp("Requested", "Requestor", pr.createdByName, pr.createdAt),
     firstLine,
+    sentBackLine(pr.chainLog),
     lstamp("Purchase order approved", approver, "approve_po"),
     lstamp("Purchase order rejected", approver, "reject_po"),
     stamp("Voucher & checks prepared", acct, pr.voucherByName, pr.voucherAt),
