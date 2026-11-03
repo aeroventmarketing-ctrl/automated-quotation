@@ -26,6 +26,8 @@ import {
 import { getInquiryDocs, setInquiryDocs } from "@/lib/inquiry-docs-store";
 import { saleFromClassification, type SaleDoc } from "@/lib/sale";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
+import { logActivity } from "@/lib/activity-log";
+import { saleRemovalActivity } from "@/lib/sale-activity";
 import { bir2303Access } from "@/lib/bir2303-access";
 import { formatTin, isBir2303Path, parseIssuedOn } from "@/lib/bir2303";
 
@@ -270,16 +272,32 @@ export async function deleteCustomerQuotation(customerId: string, quotationId: s
  * Admin-only: remove a confirmed order — clears the sale record on the quotation
  * so it reverts to a plain quotation (the quotation itself is kept). The inquiry
  * returns to SENT.
+ *
+ * The deal leaves the WON sales report and the dashboard's "Sales this month"
+ * with it, so the removal is recorded in the activity feed — see
+ * `saleRemovalActivity`.
  */
 export async function clearCustomerOrder(customerId: string, quotationId: string) {
   const user = await getCurrentUser();
   if (!isAdmin(user)) throw new Error("Only an admin can remove an order.");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, inquiryId: true, classification: true },
+    select: {
+      id: true,
+      inquiryId: true,
+      classification: true,
+      quoteNumber: true,
+      total: true,
+      discountPct: true,
+      vatMode: true,
+      currency: true,
+      inquiry: { select: { customer: { select: { company: true } } } },
+    },
   });
   if (!quote) throw new Error("Quotation not found.");
   const cls = (quote.classification as Record<string, unknown>) ?? {};
+  // Read what is about to go, before it goes.
+  const cleared = saleFromClassification(cls);
   const { ...rest } = cls;
   delete (rest as Record<string, unknown>).sale;
   await prisma.$transaction([
@@ -289,6 +307,7 @@ export async function clearCustomerOrder(customerId: string, quotationId: string
     }),
     prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } }),
   ]);
+  await logActivity(user, saleRemovalActivity(quote, cleared, "order.removed", "Order removed"));
   revalidatePath(`/customers/${customerId}`);
   revalidatePath("/orders");
   revalidatePath("/dashboard");
