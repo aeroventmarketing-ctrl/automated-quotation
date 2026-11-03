@@ -18,6 +18,7 @@ import { getInquiryDocs } from "@/lib/inquiry-docs-store";
 import { inquiryDocsMissing } from "@/lib/inquiry-docs";
 import { findDuplicateQuotes, type DuplicateMatch } from "@/lib/quote-duplicates";
 import { logActivity } from "@/lib/activity-log";
+import { saleRemovalActivity } from "@/lib/sale-activity";
 import { isCurrentAccountOwner } from "@/lib/account";
 import { coerceReadCounts } from "@/lib/ai/read-allowance";
 
@@ -926,13 +927,32 @@ export async function recordSale(quotationId: string, input: z.infer<typeof sale
   revalidatePath("/dashboard");
 }
 
-/** Remove the sale record from a quotation (and return the inquiry to SENT). */
+/**
+ * Remove the sale record from a quotation (and return the inquiry to SENT).
+ *
+ * This un-books a won deal: the WON sales report and the dashboard's "Sales this
+ * month" count a quotation only while its sale is confirmed, so the deal leaves
+ * both the moment this runs. It used to leave no trace anywhere, which made a
+ * deal that vanished from the month's figures impossible to explain afterwards —
+ * hence the activity entry, which records who cleared it and what was cleared.
+ */
 export async function clearSale(quotationId: string) {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const quote = await prisma.quotation.findUnique({
     where: { id: quotationId },
-    select: { id: true, inquiryId: true, preparedById: true, classification: true },
+    select: {
+      id: true,
+      inquiryId: true,
+      preparedById: true,
+      classification: true,
+      quoteNumber: true,
+      total: true,
+      discountPct: true,
+      vatMode: true,
+      currency: true,
+      inquiry: { select: { customer: { select: { company: true } } } },
+    },
   });
   if (!quote) throw new Error("Quotation not found");
   // Clearing a sale is an accounting / admin action.
@@ -941,6 +961,8 @@ export async function clearSale(quotationId: string) {
     throw new Error("Only accounting or an admin can clear this sale.");
   }
   const cls = (quote.classification as Record<string, unknown>) ?? {};
+  // Read what is about to go, before it goes.
+  const cleared = saleFromClassification(cls);
   await prisma.$transaction([
     prisma.quotation.update({
       where: { id: quotationId },
@@ -948,6 +970,7 @@ export async function clearSale(quotationId: string) {
     }),
     prisma.inquiry.update({ where: { id: quote.inquiryId }, data: { status: "SENT" } }),
   ]);
+  await logActivity(user, saleRemovalActivity(quote, cleared, "sale.cleared", "Sale cleared"));
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/dashboard");
 }
