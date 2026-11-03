@@ -11,7 +11,7 @@
  *
  * Pure and client-safe: the PO cards and the server actions read the same rule.
  */
-import { prMainIndex, type PRStatus } from "@/lib/purchasing";
+import { isPoApproved, prMainIndex, type PRStatus } from "@/lib/purchasing";
 
 /** Purchasing's Pending and Approved tabs: PENDING_APPROVAL, APPROVED, VOUCHER_READY. */
 export function inPendingOrApprovedTab(status: PRStatus | string): boolean {
@@ -119,5 +119,85 @@ export function readSentBack(chainLog: unknown): SentBack | null {
     at: typeof e.at === "string" ? e.at : "",
     from: Number(e.from) || 0,
     to: Number(e.to) || 0,
+  };
+}
+
+// --- Approving a combined PO after a send-back ----------------------------------
+
+/**
+ * The send-back leaves a combined PO's requests awaiting the Payment Approver's
+ * **Approve purchase** again — but not all at the same status, and not where
+ * `advanceCombinedPO` used to look for them:
+ *
+ * - a department / MRF request returns to `APPROVED` with `approve_po` cleared,
+ *   so its step is `approve_po` (status → status, the sign-off lives in the
+ *   chain log);
+ * - an order-linked request returns to `PENDING_APPROVAL`, so its step is
+ *   `approve`.
+ *
+ * A combined PO can carry both, so after one send-back its members can sit at
+ * two different statuses while the card — built from the anchor — offers a
+ * single button. Both are the same decision by the same person, so the combined
+ * approval clears **every** member that is waiting for it, whichever of the two
+ * it is waiting at.
+ *
+ * `awaitingPurchaseApproval` is that one test, and `approveMemberFields` /
+ * `rejectMemberFields` are what each member becomes. Keeping it here, beside
+ * `sentBackFields`, keeps the way back in step with the way out.
+ */
+export function awaitingPurchaseApproval(m: { status: PRStatus | string; chainLog: unknown }): boolean {
+  if (m.status === "PENDING_APPROVAL") return true;
+  return m.status === "APPROVED" && !isPoApproved(m.chainLog);
+}
+
+export interface ApprovalStamp {
+  /** The acting user. */
+  userId: string;
+  byName: string;
+  /** The designation the trail should name (e.g. "Payment Approver", "Admin"). */
+  role: string;
+  at: string;
+  note?: string;
+}
+
+function withChainEntry(chainLog: unknown, key: string, stamp: ApprovalStamp): Record<string, unknown> {
+  const log = { ...((chainLog && typeof chainLog === "object" ? chainLog : {}) as Record<string, unknown>) };
+  log[key] = { byName: stamp.byName, at: stamp.at, role: stamp.role };
+  return log;
+}
+
+/**
+ * One member's fields for the Approver's "Approve purchase" on a combined PO.
+ * `approve_po` is stamped on every member — it is what `isPoApproved` (and so
+ * the Pending / Approved tab split) reads — and a member coming from
+ * `PENDING_APPROVAL` also carries the decision on its own columns, as the
+ * single-request `approve` does.
+ */
+export function approveMemberFields(
+  m: { status: PRStatus | string; chainLog: unknown },
+  stamp: ApprovalStamp,
+): Record<string, unknown> {
+  const fromPending = m.status === "PENDING_APPROVAL";
+  return {
+    status: "APPROVED",
+    chainLog: withChainEntry(m.chainLog, "approve_po", stamp),
+    ...(stamp.note ? { decisionNote: stamp.note } : {}),
+    ...(fromPending ? { decidedById: stamp.userId, decidedByName: stamp.byName, decidedAt: new Date(stamp.at) } : {}),
+  };
+}
+
+/** The same for a rejection — whichever of the two steps the member is at. */
+export function rejectMemberFields(
+  m: { status: PRStatus | string; chainLog: unknown },
+  stamp: ApprovalStamp,
+): Record<string, unknown> {
+  const key = m.status === "PENDING_APPROVAL" ? "reject" : "reject_po";
+  return {
+    status: "REJECTED",
+    chainLog: withChainEntry(m.chainLog, key, stamp),
+    ...(stamp.note ? { decisionNote: stamp.note } : {}),
+    decidedById: stamp.userId,
+    decidedByName: stamp.byName,
+    decidedAt: new Date(stamp.at),
   };
 }

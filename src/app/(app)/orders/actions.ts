@@ -15,7 +15,7 @@ import { poMemberIds, poBatchId } from "@/lib/purchase-batch";
 import { rememberSupplier } from "@/lib/suppliers";
 import { savePaymentTerm, type PaymentTerm } from "@/lib/payment-terms";
 import { logActivity } from "@/lib/activity-log";
-import { canEditSinglePo, canEditCombinedPo, sendsBackForApproval, sentBackFields } from "@/lib/po-edit-access";
+import { canEditSinglePo, canEditCombinedPo, sendsBackForApproval, sentBackFields, awaitingPurchaseApproval, approveMemberFields, rejectMemberFields } from "@/lib/po-edit-access";
 import {
   getWorkflowRoles,
   userHasWorkflowRole,
@@ -4180,9 +4180,59 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
   const ids = poMemberIds(anchor.po);
   if (ids.length === 0) throw new Error("This is not a combined purchase order.");
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+
+  // The Payment Approver's "Approve purchase" / "Reject" — the step a combined PO
+  // comes back to when an amount change at Voucher ready sends it back. Its
+  // members then wait at two different statuses (a department / MRF request at
+  // APPROVED with approve_po cleared, an order-linked one at PENDING_APPROVAL),
+  // so the one-status check below can't speak for it, and `approve_po` has no
+  // case in the switch — which is why pressing Approve on a sent-back combined PO
+  // wrote nothing and the card kept asking for the approval. Each member takes
+  // the shape of the decision its own status calls for (lib/po-edit-access).
+  const approving = stepKey === "approve" || stepKey === "approve_po";
+  const rejecting = stepKey === "reject" || stepKey === "reject_po";
+  if (approving || rejecting) {
+    if (!members.every((m) => awaitingPurchaseApproval({ status: m.status, chainLog: m.chainLog }))) {
+      throw new Error("That step isn't available at the current status.");
+    }
+    const stamp = {
+      userId: user.id,
+      byName: user.name,
+      role: isAdmin(user) ? "Admin" : workflowRoleLabel(stepRole),
+      at: new Date().toISOString(),
+    };
+    await prisma.$transaction(
+      members.map((m) => {
+        const fields = approving
+          ? approveMemberFields({ status: m.status, chainLog: m.chainLog }, stamp)
+          : rejectMemberFields({ status: m.status, chainLog: m.chainLog }, stamp);
+        const { chainLog, ...rest } = fields;
+        return prisma.purchaseRequest.update({
+          where: { id: m.id },
+          data: { ...(rest as Prisma.PurchaseRequestUpdateInput), chainLog: chainLog as Prisma.InputJsonValue },
+        });
+      }),
+    );
+    await logActivity(user, {
+      action: `purchase.${approving ? "approve" : "reject"}`,
+      category: "purchase",
+      summary: `${step.label} — combined ${coercePurchaseOrder(anchor.po)?.poNumber ?? "purchase order"} (${members.length} requests)`,
+      entity: "purchase",
+      entityId: anchor.id,
+      href: `/purchasing?req=${anchor.id}`,
+    });
+    for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+      revalidatePath(`/orders/${qid}`);
+    }
+    revalidatePath("/purchasing");
+    return;
+  }
+
   if (members.some((m) => m.status !== step.from)) throw new Error("That step isn't available at the current status.");
 
   const now = new Date();
+  /** Set when this step's sign-off rides in each member's chain log. */
+  let chainLogStep: string | null = null;
   const data: Prisma.PurchaseRequestUpdateInput = { status: step.to };
   switch (stepKey) {
     case "approve":
@@ -4202,11 +4252,12 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
     case "assign_tasks":
     case "logistics_confirm":
     case "deliver":
-    case "warehouse_approve": {
-      const log = (anchor.chainLog && typeof anchor.chainLog === "object" ? anchor.chainLog : {}) as Record<string, unknown>;
-      data.chainLog = { ...log, [stepKey]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue;
+    case "warehouse_approve":
+      // Stamped on each member's OWN chain log below — copying the anchor's over
+      // every member would overwrite what each of them already carries (its
+      // send-back stamp, its own approval).
+      chainLogStep = stepKey;
       break;
-    }
     case "buy":
       data.purchasedByName = user.name;
       data.purchasedAt = now;
@@ -4220,7 +4271,17 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
       data.plantApprovedAt = now;
       break;
   }
-  await prisma.$transaction(ids.map((id) => prisma.purchaseRequest.update({ where: { id }, data })));
+  await prisma.$transaction(
+    members.map((m) => {
+      const log = (m.chainLog && typeof m.chainLog === "object" ? m.chainLog : {}) as Record<string, unknown>;
+      return prisma.purchaseRequest.update({
+        where: { id: m.id },
+        data: chainLogStep
+          ? { ...data, chainLog: { ...log, [chainLogStep]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue }
+          : data,
+      });
+    }),
+  );
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);
   }

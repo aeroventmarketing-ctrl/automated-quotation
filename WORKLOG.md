@@ -1,3 +1,33 @@
+## 2026-11-03 · Purchasing: a combined PO sent back can be approved again
+
+The owner: *"I cannot approve some PO."* Combined PO-AFBM20260000995 (VIS Industrial Corp, 3 Fans &
+Blower MRF requests) sat at **AWAITING APPROVAL · Payment Approver** after an amount change at Voucher
+ready sent it back (₱165,693.27 → ₱99,628.45), and **Approve Purchase** did nothing: press it, the
+card came back unchanged. (Fix to the frozen Phase 4 area, raised by the owner.)
+
+Why: the send-back returns a department / MRF request to **APPROVED with `approve_po` cleared**, so
+the step it waits at is `approve_po` — and `advanceCombinedPO` had no case for `approve_po` in its
+switch. It wrote `status: "APPROVED"` (the status it was already at) and no chain log, so nothing was
+recorded and the card kept asking for the same approval. The single-request path (`advancePurchaseRequest`)
+has always handled it; only the combined one did not.
+
+- **`approve_po` / `reject_po` (and `approve` / `reject`) on a combined PO are now recorded** — the
+  sign-off, with the acting designation, goes into each member's chain log and an activity entry is
+  written, as the single-request path does.
+- **Members that came back at different statuses are approved together.** A combined PO can carry both
+  kinds, and a send-back splits them: a department / MRF request waits at APPROVED, an order-linked one
+  at PENDING_APPROVAL. The card (built from the anchor) offers one button, so the old "every member must
+  be at this step's `from` status" check refused the mixed case with *"That step isn't available at the
+  current status."* Each member now takes the shape of the decision its own status calls for — one
+  decision by one person, every request on the PO.
+- **Each member keeps its own chain log.** The other combined chain steps (sign, release cash, deliver,
+  warehouse received…) copied the *anchor's* log over every member, overwriting what each of them
+  carried — its send-back stamp, its own approval. They now merge into each member's own.
+
+The rule and its shapes: `lib/po-edit-access.ts` (`awaitingPurchaseApproval`, `approveMemberFields`,
+`rejectMemberFields`), beside `sentBackFields` so the way back stays in step with the way out, and
+tested in `po-edit-access.test.ts`.
+
 ## 2026-10-30 · Purchasing: the Purchaser edits a PO through the Pending and Approved tabs
 
 The owner: *"allow purchaser to edit purchase order, delete and modify rows in purchase order in
