@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { inPendingOrApprovedTab, canEditSinglePo, canEditCombinedPo, sendsBackForApproval, poAmountChanged, sentBackFields, readSentBack } from "./po-edit-access";
+import { inPendingOrApprovedTab, canEditSinglePo, canEditCombinedPo, sendsBackForApproval, poAmountChanged, sentBackFields, readSentBack, awaitingPurchaseApproval, approveMemberFields, rejectMemberFields } from "./po-edit-access";
 
 // The owner: "allow purchaser to edit purchase order, delete and modify rows in
 // purchase order in Purchasing Pending and Purchasing Approved Tab".
@@ -77,5 +77,43 @@ describe("an amount change at Voucher ready goes back to the Payment Approver", 
   it("no stamp, nothing to read", () => {
     expect(readSentBack({})).toBeNull();
     expect(readSentBack(null)).toBeNull();
+  });
+});
+
+// The owner, 3 November: "I cannot approve some PO". A combined PO sent back
+// after an amount change showed AWAITING APPROVAL and did nothing when the
+// Payment Approver pressed Approve purchase — `approve_po` was never recorded.
+describe("approving a combined PO that came back from a send-back", () => {
+  const stamp = { userId: "u1", byName: "Rey Gil", role: "Payment Approver", at: "2026-11-03T02:00:00.000Z" };
+  const sentBackDept = { status: "APPROVED", chainLog: { sent_back: { byName: "Allan Ramos" } } };
+  const sentBackOrder = { status: "PENDING_APPROVAL", chainLog: { sent_back: { byName: "Allan Ramos" } } };
+
+  it("knows which members are still waiting for the Approver", () => {
+    expect(awaitingPurchaseApproval(sentBackDept)).toBe(true);
+    expect(awaitingPurchaseApproval(sentBackOrder)).toBe(true);
+    // Already approved, or further down the chain: not waiting.
+    expect(awaitingPurchaseApproval({ status: "APPROVED", chainLog: { approve_po: { byName: "Rey Gil" } } })).toBe(false);
+    expect(awaitingPurchaseApproval({ status: "VOUCHER_READY", chainLog: {} })).toBe(false);
+  });
+
+  it("stamps approve_po on every member, whichever status it waits at", () => {
+    const dept = approveMemberFields(sentBackDept, stamp);
+    expect(dept.status).toBe("APPROVED");
+    expect((dept.chainLog as Record<string, unknown>).approve_po).toEqual({ byName: "Rey Gil", at: stamp.at, role: "Payment Approver" });
+    // Each member keeps its own log — the send-back stamp stays on the trail.
+    expect((dept.chainLog as Record<string, unknown>).sent_back).toEqual({ byName: "Allan Ramos" });
+    expect("decidedByName" in dept).toBe(false); // it never left APPROVED
+
+    const order = approveMemberFields(sentBackOrder, stamp);
+    expect(order.status).toBe("APPROVED");
+    expect((order.chainLog as Record<string, unknown>).approve_po).toBeTruthy();
+    expect(order.decidedByName).toBe("Rey Gil"); // came from PENDING_APPROVAL
+  });
+
+  it("rejects under the key its own status calls for", () => {
+    expect(rejectMemberFields(sentBackDept, stamp).status).toBe("REJECTED");
+    expect((rejectMemberFields(sentBackDept, stamp).chainLog as Record<string, unknown>).reject_po).toBeTruthy();
+    expect((rejectMemberFields(sentBackOrder, stamp).chainLog as Record<string, unknown>).reject).toBeTruthy();
+    expect(rejectMemberFields(sentBackOrder, stamp).decidedByName).toBe("Rey Gil");
   });
 });
