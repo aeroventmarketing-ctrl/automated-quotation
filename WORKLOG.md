@@ -35,8 +35,9 @@ acts, the step order and the gating are untouched.)
 - Job Orders (all four departments) — in the sheet's print header, top right, red (`stampRushXlsx`):
   no cell, formula or protection touched; the HTML View fallback gets a banner;
 - MRF print page — a red box under the title;
-- PO — view, print page and .xlsx (the **Purchase Order** sheet only; never the BIR 2307). A combined
-  PO is stamped when any request on it is for a rush order.
+- PO — view, print page and .xlsx (the **Purchase Order** sheet only; never the BIR 2307), and there
+  just **"RUSH"**, no date — the PO goes to the supplier (the owner: *"Put the word 'RUSH' but no
+  date"*). A combined PO is stamped when any request on it is for a rush order.
 
 **Pieces:** `lib/rush-order.ts` (states, who, days left, alarm, sort, stamp text — tested),
 `lib/excel/rush-stamp.ts` (tested), `lib/rush-order-data.ts`, `orders/[id]/rush-actions.ts`,
@@ -47,7 +48,7 @@ requested", and the Payment Approver's dashboard showed *Approve RUSH request*; 
 header and all phase cards. Then: Sales' dashboard led with the order (*Waiting 15d — RUSH*); the
 Payment Approver, Warehouse, Purchaser and admin dashboards led with its tasks and MRFs (client hidden
 for the restricted roles); the Orders list put it first; Purchasing, the Purchase Plan and the Team
-Calendar showed it; Management read *1 on time · 0 late*. The MRF and PO prints, the PO .xlsx (PO sheet
+Calendar showed it; Management read *1 on time · 0 late*. The MRF and PO prints (PO: "RUSH" only), the PO .xlsx (PO sheet
 only, not the 2307) and an Accessories Job Order .xlsx (and its View) carried the stamp. The Warehouse
 saw the badge but no buttons; Remove needed a reason and cleared every badge; a second request was
 declined with its reason; the history listed all five steps.
