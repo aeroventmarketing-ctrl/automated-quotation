@@ -87,6 +87,7 @@ import { ClientDuePicker } from "./client-due-picker";
 import { readClientDue } from "@/lib/order-client-due";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { manilaDay } from "@/lib/purchaser-plan";
+import { orderMaterialPurchase } from "@/lib/order-material-purchase";
 import { canGenerateReceipts } from "@/lib/receipts-access";
 import { boughtInPurchasePending } from "@/lib/bought-in-pending";
 import { receiptsApplyTo } from "@/lib/bir-receipts";
@@ -851,6 +852,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const mrfNoById = new Map(wf.materialRequests.map((m) => [m.id, m.formNo]));
   // Printed cash-voucher number covering each purchase request (if any).
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
+  // Total Material Purchase (Phase 1 box) — admin and the Payment Approver only.
+  const materialPurchase =
+    adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey))
+      ? orderMaterialPurchase(purchaseRequests)
+      : null;
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
     // Fold the quotation's specification into the stored lines. Requisitions
@@ -1027,6 +1033,20 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           {wf.stage === "payment_review" || wf.stage === "docs_checked" ? (
             <p className="pt-1 text-xs text-muted-foreground">Complete these sign-offs from the Orders list.</p>
           ) : null}
+          {/* Total Material Purchase — what this order's approved / budgeted POs
+              commit to buy (lib/order-material-purchase). Admin and the Payment
+              Approver only, at the owner's word. */}
+          {materialPurchase && (
+            <div className="pt-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Total Material Purchase</div>
+              <div className="text-lg font-semibold tabular-nums">{formatCurrency(materialPurchase.total, "PHP")}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {materialPurchase.poCount === 0
+                  ? "No approved purchase order yet"
+                  : `${materialPurchase.poCount} approved / budgeted PO${materialPurchase.poCount === 1 ? "" : "s"} · PO total, before EWT`}
+              </div>
+            </div>
+          )}
           </div>
           {/* Client Due Date — the owner: "at the farthest right side … a date picker
               below the word … to monitor the client due." A date to watch; it gates

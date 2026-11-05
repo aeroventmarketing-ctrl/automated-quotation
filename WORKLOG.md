@@ -1,3 +1,26 @@
+## 2026-11-05 · Order workflow: "Total Material Purchase" in the Phase 1 box
+
+The owner: *"In order workflow … in the lower left portion of the box. Put a word 'Total Material
+Purchase' which shows the total amount of materials purchased specific to that client order."*
+Answers to the clarifying questions:
+
+- **Which POs:** approved and budgeted — every PO on the order once it is in Purchasing's Approved or
+  Budgeted tab, through bought and received (`statusBucket` "approved", COMPLETED included). Pending
+  (incl. a department request the Payment Approver hasn't approved), rejected and cancelled don't count.
+- **Amount:** the PO total as printed (VAT-inclusive), before EWT.
+- **Combined PO** shared with other orders: only this order's lines, at the PO's prices (matched by
+  SKU, else description). Wholly this order's: the whole PO, once.
+- **Who sees it:** admin and the Payment Approver only.
+
+Shown under the Phase 1 sign-offs: *TOTAL MATERIAL PURCHASE · ₱13,333.78 · 3 approved / budgeted POs ·
+PO total, before EWT* ("No approved purchase order yet" when there is none). A read-only figure — the
+Phase 1 sign-offs and gating are untouched. `lib/order-material-purchase.ts` (tested); the page reads
+the order's purchase requests it already loads, so no new query.
+
+Rendered on the role harness (an order with two approved single POs ₱10,000 + ₱1,000, a cancelled
+₱999 PO, a request with no PO yet, and a combined PO shared with other orders where this order asked
+for 4 of its GI sheets at ₱583.444): ₱13,333.78 from 3 POs for admin and the Payment Approver; not
+shown to the Purchaser, Accounting or Sales.
 ## 2026-11-03 · Purchasing: a combined PO sent back can be approved again
 
 The owner: *"I cannot approve some PO."* Combined PO-AFBM20260000995 (VIS Industrial Corp, 3 Fans &
