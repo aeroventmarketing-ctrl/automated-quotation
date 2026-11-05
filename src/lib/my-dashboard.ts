@@ -14,6 +14,8 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
+import { jobOrderTasks, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
+import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
 import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
 import { isPlanActive, isPlanPoActive } from "@/lib/purchaser-plan";
@@ -445,8 +447,31 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
       }
+      // Phase 2 job orders — each department's create / approve / issue, for the
+      // Engineer and the admin (lib/job-order-tasks); the Technical Head, who may
+      // also issue, gets the issue step. One task per department.
+      let joTasked = false;
+      const joOwner = isAdmin(user) || user.role === "ENGINEER";
+      if ((joOwner || has("technical_head")) && JOB_ORDER_STAGES.has(wf.stage)) {
+        for (const t of jobOrderTasks(wf, quotationJobOrderDepts(q.items))) {
+          if (t.step !== "issue" && !joOwner) continue;
+          joTasked = true;
+          tasks.push({
+            key: `jo:${q.id}:${t.dept}`, area: "order", areaLabel: AREA_LABEL.order,
+            title: q.quoteNumber, action: t.action,
+            client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+            href: `/orders/${q.id}#phase-2`,
+            deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
+            since: t.since,
+            createdAt: orderCreatedAt,
+          });
+        }
+      }
       const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
       if (!pend) continue;
+      // The order-level "Issue job orders" says what the department tasks above
+      // say more precisely — don't show both.
+      if (joTasked && pend.action === "Issue job orders") continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
       const owesByEngineer = !!pend.engineer && (user.role === "ENGINEER" || isAdmin(user));

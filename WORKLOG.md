@@ -1,3 +1,29 @@
+## 2026-11-05 · My Dashboard: job orders to create, approve or issue (Engineer and admin)
+
+The owner: *"In Phase 2 of Orders Tab, notify Engineer Role and Admin Role, if they must create a job
+order, approve job order or issue job order. Show it in My Dashboard Pending your action for engineer
+role and Production Pending your action for admin role."*
+
+- **Pending Your Action** now carries one task per Phase 2 department (Fans & Blower, Duct,
+  Accessories, Motor Controller), naming the department's earliest outstanding step:
+  - **Create … job order** — the paid quotation has items for the department, no job order yet;
+  - **Approve … job order** — a job order there isn't approved yet (incl. one added after issue);
+  - **Issue … job order** — every job order approved, the department not issued to production yet.
+- For **Engineers and admins** (the admin's My Dashboard is the Production Dashboard). The Technical
+  Head, who may also issue, gets the issue step. Only while job orders can still be issued (released →
+  producing). Each opens the order at Phase 2.
+- The order-level *"Issue job orders"* task is dropped for a viewer who gets the department tasks —
+  they say the same thing more precisely.
+
+Read-only: who may create, approve or issue is unchanged (the frozen Phase 2 actions untouched).
+`lib/job-order-tasks.ts` (tested), used in `lib/my-dashboard.ts` with `quotationJobOrderDepts` over the
+items the dashboard already loads — no new query.
+
+Rendered on the role harness: an order with an unapproved Accessories job order and an approved,
+unissued Motor Controller one showed *Approve Accessories job order* and *Issue Motor Controller job
+order*; an order whose quotation has a motor controller and no job order showed *Create Motor
+Controller job order* — for the Engineer and the admin; Sales and the Purchaser saw none.
+
 ## 2026-11-05 · Order workflow: "Total Material Purchase" in the Phase 1 box
 
 The owner: *"In order workflow … in the lower left portion of the box. Put a word 'Total Material
@@ -21,6 +47,7 @@ Rendered on the role harness (an order with two approved single POs ₱10,000 + 
 ₱999 PO, a request with no PO yet, and a combined PO shared with other orders where this order asked
 for 4 of its GI sheets at ₱583.444): ₱13,333.78 from 3 POs for admin and the Payment Approver; not
 shown to the Purchaser, Accounting or Sales.
+
 ## 2026-11-03 · Purchasing: a combined PO sent back can be approved again
 
 The owner: *"I cannot approve some PO."* Combined PO-AFBM20260000995 (VIS Industrial Corp, 3 Fans &
