@@ -88,6 +88,9 @@ import { readClientDue } from "@/lib/order-client-due";
 import { purchaserPlanAccess } from "@/lib/purchaser-plan-access";
 import { manilaDay } from "@/lib/purchaser-plan";
 import { orderMaterialPurchase } from "@/lib/order-material-purchase";
+import { readRush, isRushActive, rushDaysLeft, canRequestRush, canDecideRush } from "@/lib/rush-order";
+import { RushBadge } from "@/components/rush-badge";
+import { RushControl } from "./rush-control";
 import { canGenerateReceipts } from "@/lib/receipts-access";
 import { boughtInPurchasePending } from "@/lib/bought-in-pending";
 import { receiptsApplyTo } from "@/lib/bir-receipts";
@@ -209,6 +212,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <div>
           <h1 className="text-2xl font-bold">
             {restricted ? custName : <Link href={`/customers/${quote.inquiry.customer.id}`} className="hover:underline">{custName}</Link>}
+            {isRushActive(quote.classification) && <RushBadge daysLeft={rushDaysLeft(readClientDue(quote.classification)?.date, manilaDay(new Date()) ?? "")} size="md" className="ml-3 align-middle" />}
           </h1>
           <p className="text-sm text-muted-foreground">
             Order{" "}
@@ -852,6 +856,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const mrfNoById = new Map(wf.materialRequests.map((m) => [m.id, m.formNo]));
   // Printed cash-voucher number covering each purchase request (if any).
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
+  // RUSH (lib/rush-order) — the flag every role sees on every phase of the order.
+  const rush = readRush(quote.classification);
+  const rushOn = rush?.state === "active";
+  const rushDays = rushDaysLeft(readClientDue(quote.classification)?.date, manilaDay(new Date()) ?? "");
+  const rushTitle = rushOn ? <RushBadge daysLeft={rushDays} size="xs" className="ml-2 align-middle" /> : null;
+  const rushCard = rushOn ? "border-red-400 ring-1 ring-red-300 dark:border-red-800 dark:ring-red-900" : "";
   // Total Material Purchase (Phase 1 box) — admin and the Payment Approver only.
   const materialPurchase =
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey))
@@ -966,6 +976,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {rushOn && <RushBadge daysLeft={rushDays} size="md" />}
           {wf.fulfillmentMode !== "delivery" && (
             <Badge variant="outline" className="gap-1 border-amber-500/50 text-amber-700 dark:text-amber-400">
               <Store className="h-3.5 w-3.5" /> {wf.fulfillmentMode === "plant_pickup" ? "Plant pick up" : "Office pick up"}
@@ -1018,8 +1029,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       </Card>
 
       {/* Phase 1 — approvals */}
-      <Card id="phase-1" className="scroll-mt-24">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 1 · Order intake &amp; payment clearing</CardTitle></CardHeader>
+      <Card id="phase-1" className={`scroll-mt-24 ${rushCard}`}>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 1 · Order intake &amp; payment clearing{rushTitle}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4 text-sm sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
           <div className="flex items-center gap-2">
@@ -1051,18 +1062,30 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           {/* Client Due Date — the owner: "at the farthest right side … a date picker
               below the word … to monitor the client due." A date to watch; it gates
               nothing (lib/order-client-due). */}
-          <ClientDuePicker
-            orderId={quote.id}
-            initial={readClientDue(quote.classification)}
-            canEdit={purchaserPlanAccess(viewer, assignments).canEditClientDue}
-            todayYMD={manilaDay(new Date()) ?? ""}
-          />
+          <div className="flex flex-col items-end gap-4">
+            <ClientDuePicker
+              orderId={quote.id}
+              initial={readClientDue(quote.classification)}
+              canEdit={purchaserPlanAccess(viewer, assignments).canEditClientDue}
+              todayYMD={manilaDay(new Date()) ?? ""}
+            />
+            {/* RUSH — the Sales in-charge requests, the Payment Approver or an admin decides. */}
+            <RushControl
+              orderId={quote.id}
+              rush={rush}
+              daysLeft={rushDays}
+              hasClientDue={!!readClientDue(quote.classification)?.date}
+              canRequest={canRequestRush({ userId: viewer?.id, preparedById: quote.preparedById })}
+              canDecide={canDecideRush({ admin: adminViewer, paymentApprover: viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey) })}
+              closed={wf.stage === "closed"}
+            />
+          </div>
         </CardContent>
       </Card>
 
       {/* Phase 2 — job orders & production */}
-      <Card id="phase-2" className="scroll-mt-24">
-        <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production</CardTitle></CardHeader>
+      <Card id="phase-2" className={`scroll-mt-24 ${rushCard}`}>
+        <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 2 · Job orders &amp; production{rushTitle}</CardTitle></CardHeader>
         <CardContent>
           {/* Fulfilment/handover mode — Delivery / Office pick up / Plant pick up.
               Shown to every role for consistency: interactive for those who may set it
@@ -1208,8 +1231,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       {/* Phase 3 — materials */}
       {showMaterials && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials</CardTitle></CardHeader>
+        <Card className={rushCard}>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 3 · Materials{rushTitle}</CardTitle></CardHeader>
           <CardContent>
             <MaterialRequests orderId={quote.id} requesterName={viewer?.name ?? ""} raisableDepts={raisableDepts} requests={materialReqs} stockItems={stockItems} products={productOptions} suggestions={mrfSuggestions} suggestionDept={OFFICE_DEPT_KEY} showMrfDoc={!hideMrfDoc} admin={adminViewer} canCheckStock={canReleaseMaterials} />
           </CardContent>
@@ -1218,9 +1241,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       {/* Phase 3 — purchasing chain (monitoring only; processed in Purchasing) */}
       {(showMaterials || purchaseRows.length > 0) && (
-        <Card>
+        <Card className={rushCard}>
           <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-sm">Phase 4 · Purchasing</CardTitle>
+            <CardTitle className="text-sm">Phase 4 · Purchasing{rushTitle}</CardTitle>
             <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
@@ -1269,8 +1292,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       {/* Phase 5 — final payment, quality, delivery & documents (single delivery) */}
       {showFulfillment && !multiMode && (
-        <Card id="phase-5" className="scroll-mt-24">
-          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery &amp; documents</CardTitle></CardHeader>
+        <Card id="phase-5" className={`scroll-mt-24 ${rushCard}`}>
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Phase 5 · Final payment, quality, delivery &amp; documents{rushTitle}</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             {fTrail.length > 0 && (
               <div className="space-y-0.5 text-xs text-muted-foreground">

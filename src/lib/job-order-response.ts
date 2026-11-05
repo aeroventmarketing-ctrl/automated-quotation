@@ -52,7 +52,7 @@ export async function dropStaleFormulaCaches(buffer: Buffer): Promise<Buffer> {
  *     return a **pixel-perfect PDF** (renders exactly like Excel, logo & layout).
  *   - Otherwise fall back to the self-contained HTML preview.
  */
-export async function joXlsxResponse(req: Request, buffer: Buffer, filename: string): Promise<Response> {
+export async function joXlsxResponse(req: Request, buffer: Buffer, filename: string, opts: { rushBanner?: string | null } = {}): Promise<Response> {
   const wantsView = new URL(req.url).searchParams.get("view") !== null;
   if (wantsView) {
     const fresh = await dropStaleFormulaCaches(buffer);
@@ -76,7 +76,13 @@ export async function joXlsxResponse(req: Request, buffer: Buffer, filename: str
     // blank field is visibly incomplete, where a stale one reads as authoritative.
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(fresh as unknown as ArrayBuffer);
-    const html = renderXlsxAsHtml(wb, filename.replace(/\.xlsx$/i, ""));
+    let html = renderXlsxAsHtml(wb, filename.replace(/\.xlsx$/i, ""));
+    // A RUSH order's job order: the print header (lib/excel/rush-stamp) doesn't
+    // reach this HTML preview, so the stamp goes on top of it here.
+    if (opts.rushBanner) {
+      const banner = `<div style="margin:8px auto;width:fit-content;padding:3px 14px;border:3px solid #dc2626;color:#dc2626;font:800 15px Arial,sans-serif;letter-spacing:2px;text-transform:uppercase">${opts.rushBanner.replace(/[<>&"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c]!)}</div>`;
+      html = /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (m) => `${m}${banner}`) : banner + html;
+    }
     return new Response(html, {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
     });

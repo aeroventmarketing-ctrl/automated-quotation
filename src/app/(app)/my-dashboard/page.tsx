@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RushBadge, RushWaitAlarm } from "@/components/rush-badge";
 import { redirect } from "next/navigation";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { buildMyDashboard, type MyTask } from "@/lib/my-dashboard";
@@ -93,11 +94,12 @@ function TaskRow({ t }: { t: MyTask }) {
   return (
     <Link
       href={t.href}
-      className="flex items-center gap-3 rounded-md border bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-accent"
+      className={`flex items-center gap-3 rounded-md border bg-card px-3 py-2.5 transition-colors hover:border-primary/40 hover:bg-accent ${t.rush ? "border-red-400 bg-red-50/60 dark:border-red-800 dark:bg-red-950/30" : ""}`}
     >
       <Icon className={`h-5 w-5 shrink-0 ${AREA_COLOR[t.area]}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          {t.rush && <RushBadge daysLeft={t.rush.daysLeft} />}
           <span className="font-medium">{t.title}</span>
           {t.ref && <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 font-mono text-xs font-semibold text-primary">{t.ref}</span>}
           <Badge variant="warning" className="font-normal">{t.action}</Badge>
@@ -106,6 +108,7 @@ function TaskRow({ t }: { t: MyTask }) {
               {t.deliveryMode === "multi" ? "Batch delivery" : "Single delivery"}
             </Badge>
           )}
+          {t.rushWait && <RushWaitAlarm text={t.rushWait} />}
         </div>
         <div className="truncate text-xs text-muted-foreground">
           {t.areaLabel}
@@ -412,6 +415,7 @@ export default async function MyDashboardPage() {
                 <Boxes className="h-4 w-4 shrink-0 text-teal-600" />
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
+                    {m.rush && <RushBadge daysLeft={m.rush.daysLeft} size="xs" />}
                     <span className="font-medium">MRF #{m.formNo} · {m.dept}</span>
                     <Badge variant={m.variant} className="font-normal">{m.label}</Badge>
                   </div>

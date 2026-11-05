@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { readClientDue } from "@/lib/order-client-due";
+import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
 import { listStockItemsWithAvailability } from "@/lib/inventory";
 import { getStockCosts } from "@/lib/stock-catalogue";
 import { AutoRefresh } from "@/components/auto-refresh";
@@ -126,7 +128,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
   const namesForRole = (role: WorkflowRoleKey): string[] =>
     usersWithWorkflowRole(assignments, role).map((uid) => userName.get(uid)).filter((n): n is string => !!n);
 
-  let orderGroups: { id: string; title: string; subtitle: string; joDues: JobOrderDue[]; rows: ReturnType<typeof buildPurchaseChainRow>[] }[] = [];
+  let orderGroups: { id: string; title: string; subtitle: string; joDues: JobOrderDue[]; rows: ReturnType<typeof buildPurchaseChainRow>[]; rush: { daysLeft: number | null } | null }[] = [];
+  const rushByQuote = new Map<string, number | null>();
   let combinable: CombinableItem[] = [];
   let batches: BatchCard[] = [];
   let suggestions: SupplierSuggestion[] = [];
@@ -326,6 +329,14 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         })
       : [];
     const quoteById = new Map(quotations.map((q) => [q.id, q]));
+    // RUSH orders still open (lib/rush-order) → days to their client due date —
+    // every request and PO of theirs carries the badge and sorts first.
+    for (const q of quotations) {
+      if (isRushActive(q.classification) && readOrderWorkflow(q.classification).stage !== "closed") {
+        rushByQuote.set(q.id, rushDaysLeft(readClientDue(q.classification)?.date, todayYMD));
+      }
+    }
+    const rushOf = (qid: string | null | undefined) => (qid && rushByQuote.has(qid) ? { daysLeft: rushByQuote.get(qid) ?? null } : null);
     // The quotation's specification per order, so a requisition raised before the
     // generator carried it still reads — and prints on its PO — the way the
     // quotation does.
@@ -473,6 +484,8 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         // wrong figure on a completed PO can still be put right.
         canApproveCheckIssue: canApproveCheckDiscrepancy(checkActor),
         anchorId: anchor.id,
+        // RUSH if any request on the PO is for a rush order.
+        rush: members.map((m) => rushOf(m.quotationId)).find(Boolean) ?? null,
         orderIdForPrint: anchor.quotationId ?? "",
         poNumber: po?.poNumber ?? "—",
         poDate: po?.date ?? "",
@@ -527,7 +540,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
         // feeding four job orders at once, and which one a given purchase serves
         // is not something this screen can know.
         const joDues = jobOrderDues(readOrderWorkflow(q.classification));
-        return { id: q.id, title: q.inquiry.customer.company, subtitle: `Order ${q.quoteNumber}${project ? ` · ${project}` : ""}`, joDues, rows };
+        return { id: q.id, title: q.inquiry.customer.company, subtitle: `Order ${q.quoteNumber}${project ? ` · ${project}` : ""}`, joDues, rows, rush: rushOf(q.id) };
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
 

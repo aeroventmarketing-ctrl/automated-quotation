@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { rushStampText } from "@/lib/rush-order";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -21,6 +22,7 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
   });
   if (!quote) notFound();
   const wf = readOrderWorkflow(quote.classification);
+  const rushStamp = rushStampText(quote.classification);
   const mrf = wf.materialRequests.find((m) => m.id === mrfId);
   if (!mrf) notFound();
 
@@ -72,6 +74,12 @@ export default async function MrfPrintPage({ params }: { params: Promise<{ id: s
         </div>
 
         <h1 className="mt-3 text-center text-base font-bold tracking-wide">CONSUMABLES, TOOLS &amp; MATERIAL REQUEST FORM</h1>
+        {/* A RUSH order's MRF says so on the paper (lib/rush-order). */}
+        {rushStamp && (
+          <div className="mx-auto mt-2 w-fit rounded border-4 border-red-600 px-4 py-1 text-center text-lg font-extrabold uppercase tracking-widest text-red-600">
+            {rushStamp}
+          </div>
+        )}
 
         {/* Requested by / date */}
         <div className="mt-4 flex items-end justify-between gap-6 text-sm">

@@ -15,6 +15,8 @@ import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
 import { jobOrderTasks, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
+import { readClientDue } from "@/lib/order-client-due";
+import { readRush, rushDaysLeft, rushWaitAlarm, rushWaitText, rushFirst } from "@/lib/rush-order";
 import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
 import { readOrderWorkflow, pendingStep, phaseAnchor, requisitionDeptLabel, deptRole, isMrfRequestorFor, isOfficeDept } from "@/lib/order-workflow";
 import { showsConfirmReceiptTask, accountNameSet } from "@/lib/mrf-confirm-task";
@@ -60,6 +62,10 @@ export interface MyTask {
   since?: string; // ISO — when it became pending (for the notification backlog reset)
   createdAt?: string; // ISO — when the underlying order was created (go-live gate: a
   // pre-launch order stays quiet even after a post-launch stage stamp bumps `since`)
+  /** The task is for a RUSH order (lib/rush-order): days to its client due date. */
+  rush?: { daysLeft: number | null };
+  /** A rush task waiting at its step past the 4-hour alarm: "Waiting 5h — RUSH". */
+  rushWait?: string;
 }
 
 /** A cross-role MRF status note shown to the requestor and materials roles. */
@@ -76,6 +82,8 @@ export interface MaterialNote {
    *  `when`: a test order's MRF released after launch is still test data. */
   createdAt?: string;
   href: string;
+  /** The MRF's order is a RUSH (lib/rush-order): days to its client due date. */
+  rush?: { daysLeft: number | null };
 }
 
 /** A supplier-return lifecycle note — shown to the four handling roles + admin. */
@@ -216,6 +224,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   const maskAmount = (n: number | null | undefined): number | null => (restricted ? null : n ?? null);
 
   const tasks: MyTask[] = [];
+  // RUSH orders still open → days to their client due date; and each purchase
+  // request's order, so a Purchasing task can carry its order's badge.
+  const rushOrders = new Map<string, number | null>();
+  const prOrder = new Map<string, string>();
+  const rushToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
   // MRF completed / partially-released notifications for Admin / Warehouse /
   // Purchaser / requesting department (collected while scanning orders below).
   const materialsFeed: MaterialNote[] = [];
@@ -358,6 +371,23 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       const sale = saleFromClassification(q.classification);
       if (!sale || !isSaleConfirmed(sale)) continue;
       const wf = readOrderWorkflow(q.classification);
+      // RUSH (lib/rush-order): remembered per order so every task and note about
+      // it carries the badge; a request waits on the Payment Approver / admin.
+      const rush = readRush(q.classification);
+      if (rush?.state === "active" && wf.stage !== "closed") {
+        rushOrders.set(q.id, rushDaysLeft(readClientDue(q.classification)?.date, rushToday));
+      }
+      if (rush?.state === "requested" && (isAdmin(user) || has("payment_approver"))) {
+        tasks.push({
+          key: `rush:${q.id}`, area: "order", areaLabel: AREA_LABEL.order,
+          title: q.quoteNumber, action: "Approve RUSH request",
+          client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+          href: `/orders/${q.id}#phase-1`,
+          deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
+          since: rush.requestedAt || undefined,
+          createdAt: rush.requestedAt || q.createdAt.toISOString(),
+        });
+      }
       if (seesPurchaserPlan) planOpenMrfs += wf.materialRequests.filter((m) => isPlanActive(m.status, planPrStatuses.get(m.id) ?? [])).length;
       // The order's creation instant — a go-live gate applied to every pending
       // action below, so an order created before launch never demands action even
@@ -509,6 +539,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       orderBy: { createdAt: "desc" },
     });
     for (const pr of prs) {
+      if (pr.quotationId) prOrder.set(pr.id, pr.quotationId);
       const isDept = isDeptRequisition(pr);
       const poApproved = isPoApproved(pr.chainLog);
       const company = pr.quotation?.inquiry.customer.company ?? null;
@@ -916,7 +947,31 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   // A pending action is hidden when its own "became pending" time is pre-launch,
   // AND (for order-derived tasks) when the underlying order was created before the
   // launch moment — so a legacy order advanced during testing stays quiet.
-  const visibleTasks = tasks.filter((t) => shows(t.since) && alertPasses(t.createdAt, golive));
+  // A task about a RUSH order carries the badge, and past 4 hours at its step
+  // the alarm; rush work sorts first (lib/rush-order). The order is found from
+  // the task's link: an order page, or a purchase request in Purchasing.
+  const orderOfHref = (href: string): string | null => {
+    const o = href.match(/^\/orders\/([^/?#]+)/);
+    if (o) return o[1];
+    const r = href.match(/[?&]req=([^&#]+)/);
+    return r ? prOrder.get(decodeURIComponent(r[1])) ?? null : null;
+  };
+  const nowMs = Date.now();
+  for (const t of tasks) {
+    const oid = orderOfHref(t.href);
+    if (!oid || !rushOrders.has(oid)) continue;
+    t.rush = { daysLeft: rushOrders.get(oid) ?? null };
+    const h = rushWaitAlarm(t.since, nowMs);
+    if (h != null) t.rushWait = rushWaitText(h);
+  }
+  for (const m of materialsFeed) {
+    const oid = orderOfHref(m.href);
+    if (oid && rushOrders.has(oid)) m.rush = { daysLeft: rushOrders.get(oid) ?? null };
+  }
+  const visibleTasks = rushFirst(
+    tasks.filter((t) => shows(t.since) && alertPasses(t.createdAt, golive)),
+    (t) => !!t.rush,
+  );
   // The feeds are judged the same way as the tasks: the note's own stamp AND the
   // date of the thing it is about. The owner, 15 September 2026: *"Transactions
   // before August 1, 2026 should not give any alarm or notifications. Date before
@@ -975,7 +1030,7 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
     } catch { /* ignore */ }
   }
 
-  visibleFeed.sort((a, b) => b.when.localeCompare(a.when));
+  visibleFeed.sort((a, b) => (b.rush ? 1 : 0) - (a.rush ? 1 : 0) || b.when.localeCompare(a.when));
   const visibleReturns = returnsFeed.filter((r) => shows(r.when || undefined) && alertPasses(r.createdAt, golive));
   // Open returns first (your step, then other awaiting), completed last; newest within each.
   visibleReturns.sort((a, b) => {

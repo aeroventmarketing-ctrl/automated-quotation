@@ -26,6 +26,9 @@ import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { formatAccessoriesJoNumber } from "@/lib/accessories-job-order";
 import { formatMotorControllerJoNumber } from "@/lib/motor-controller-job-order";
 import { OrdersTable } from "./orders-table";
+import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
+import { readClientDue } from "@/lib/order-client-due";
+import { manilaDay } from "@/lib/purchaser-plan";
 import { ackFormState, ackFormFiles, ackAiState, coerceAckChecks } from "@/lib/ack-form";
 
 export const dynamic = "force-dynamic";
@@ -128,6 +131,8 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const boughtInPurchaseFor = await boughtInPendingLookup(
     quotes.map((row) => ({ id: row.id, stage: readOrderWorkflow(withSlimClassification(row, slim).classification).stage })),
   );
+  // Manila "today" — for the RUSH badge's days left to the client due date.
+  const todayYMD = manilaDay(new Date()) ?? "";
   const orders = quotes
     // The slim `classification` goes back on the row, so the loop below reads
     // exactly as it did — `payableTotal(q)` reaches into it too.
@@ -182,6 +187,10 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
         id: q.id,
         quoteNumber: q.quoteNumber,
         jobOrders,
+        // RUSH, while the order is open — every role sees it, sorted first.
+        rush: wf.stage !== "closed" && isRushActive(q.classification)
+          ? { daysLeft: rushDaysLeft(readClientDue(q.classification)?.date, todayYMD) }
+          : null,
         // Restricted (shop-floor) viewers never receive client identity or amounts.
         company: restricted ? CLIENT_HIDDEN : q.inquiry.customer.company,
         customerId: restricted ? "" : q.inquiry.customer.id,
@@ -225,7 +234,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
       };
     })
     .filter((o): o is NonNullable<typeof o> => o != null)
-    .sort((a, b) => b.dateMs - a.dateMs);
+    .sort((a, b) => (b.rush ? 1 : 0) - (a.rush ? 1 : 0) || b.dateMs - a.dateMs);
 
   const currency = orders[0]?.currency ?? "PHP";
   const totalValue = round2(orders.reduce((a, o) => a + o.value, 0));

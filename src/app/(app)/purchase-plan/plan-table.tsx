@@ -26,6 +26,8 @@ import {
   type PurchaserPlanRow,
 } from "@/lib/purchaser-plan";
 import { savePlanType } from "./actions";
+import { RushBadge } from "@/components/rush-badge";
+import { rushFirst } from "@/lib/rush-order";
 
 /** "Oct 13, 2026" — the sheet spells dates out; so does this. */
 const fmtDay = (ymd: string | null) => {
@@ -206,7 +208,11 @@ export function PurchaserPlanTable({
         )
       : rows;
   }, [rows, query]);
-  const groups = useMemo(() => groupPlan(filtered, view.groupKey, view.sortKey, view.dir), [filtered, view]);
+  // RUSH orders' rows first inside every group, whatever the sort (lib/rush-order).
+  const groups = useMemo(
+    () => groupPlan(filtered, view.groupKey, view.sortKey, view.dir).map((g) => ({ ...g, rows: rushFirst(g.rows, (r) => !!r.rush) })),
+    [filtered, view],
+  );
 
   // Ten rows, then "Show N more" — the owner: "show the 10 soon to due rows with
   // show more button at the bottom". The first ten in whatever order is chosen
@@ -286,6 +292,7 @@ export function PurchaserPlanTable({
           <History row={r} field="type" />
         </td>
         <td className="whitespace-nowrap px-2.5 py-2">
+          {r.rush && <div className="mb-0.5"><RushBadge daysLeft={r.rush.daysLeft} size="xs" /></div>}
           {r.source === "po" && !r.quotationId ? (
             // No order behind it: where the request came from, opening it in Purchasing.
             <Link href={r.orderHref} className="text-xs font-semibold text-primary hover:underline" title="Open the request in Purchasing">

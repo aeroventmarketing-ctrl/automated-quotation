@@ -1,3 +1,57 @@
+## 2026-11-05 · Rush orders — flagged, shown everywhere, sorted first, stamped on the paper
+
+The owner: *"Sometimes we have a rush client order. I need to show it to every role and every stage
+of the workflow that it is a rush order."* Suggested first, then built on *"go"* with their answers:
+the Sales in-charge requests, the Payment Approver **or** an admin approves; printed Job Order, MRF and
+PO carry the stamp; one level (Rush); badges + rush-first sorting + a 4-hour alarm + a Management
+tile; no suggested deadlines. (Badges, sorting and stamps across the frozen phases — approved; who
+acts, the step order and the gating are untouched.)
+
+**Marking it** — Phase 1 box, under the Client Due Date (`RushControl`):
+- **Request RUSH** — the order's Sales in-charge (who prepared the quotation), with a reason. Shows
+  "RUSH requested" (grey) and an **Approve RUSH request** task in the Payment Approver's / admin's
+  Pending Your Action.
+- **Approve RUSH / Decline** (optional reason), **Mark RUSH** directly, **Remove RUSH** (reason
+  required) — the Payment Approver or an admin. A client due date is required to request, mark or
+  approve. Any time until the order is closed.
+- Stored as `classification.rush` (state, reason, who/when, append-only history), written with
+  `jsonb_set` guarded on the state it was read in — it can't undo a workflow step or race another
+  decision. Activity entries `order.rush.*`. No migration.
+
+**Shown everywhere** — the red **RUSH · 3d left** badge (`RushBadge`, days to the client due date):
+- order page header and every phase card (red border), for every role incl. the progress-hidden view;
+- Orders list (sorted first);
+- Pending Your Action on every dashboard (My Dashboard / Production Dashboard) — every task whose link
+  is the order or one of its purchase requests; sorted first; **"Waiting 5h — RUSH"** once a rush task
+  has waited 4 hours at its step; the Materials feed (sorted first);
+- Purchasing — the order's group and any combined PO with a rush request (sorted first);
+- Purchase Plan rows (first in every group);
+- Team Calendar — a red "Rush orders — client due dates" list above the calendar (the calendar's
+  schedules are typed in by people, so the dates sit beside it rather than as fake events);
+- Management Dashboard — **Rush orders** tile (open · on time · late) and a list with the stage each
+  is at and since when.
+
+**Printed** — "RUSH ORDER — due Nov 8, 2026":
+- Job Orders (all four departments) — in the sheet's print header, top right, red (`stampRushXlsx`):
+  no cell, formula or protection touched; the HTML View fallback gets a banner;
+- MRF print page — a red box under the title;
+- PO — view, print page and .xlsx (the **Purchase Order** sheet only; never the BIR 2307). A combined
+  PO is stamped when any request on it is for a rush order.
+
+**Pieces:** `lib/rush-order.ts` (states, who, days left, alarm, sort, stamp text — tested),
+`lib/excel/rush-stamp.ts` (tested), `lib/rush-order-data.ts`, `orders/[id]/rush-actions.ts`,
+`orders/[id]/rush-control.tsx`, `components/rush-badge.tsx`.
+
+Verified on the role harness: Sales asked without a client due date → refused; with one → "RUSH
+requested", and the Payment Approver's dashboard showed *Approve RUSH request*; approving lit the
+header and all phase cards. Then: Sales' dashboard led with the order (*Waiting 15d — RUSH*); the
+Payment Approver, Warehouse, Purchaser and admin dashboards led with its tasks and MRFs (client hidden
+for the restricted roles); the Orders list put it first; Purchasing, the Purchase Plan and the Team
+Calendar showed it; Management read *1 on time · 0 late*. The MRF and PO prints, the PO .xlsx (PO sheet
+only, not the 2307) and an Accessories Job Order .xlsx (and its View) carried the stamp. The Warehouse
+saw the badge but no buttons; Remove needed a reason and cleared every badge; a second request was
+declined with its reason; the history listed all five steps.
+
 ## 2026-11-05 · My Dashboard: job orders to create, approve or issue (Engineer and admin)
 
 The owner: *"In Phase 2 of Orders Tab, notify Engineer Role and Admin Role, if they must create a job

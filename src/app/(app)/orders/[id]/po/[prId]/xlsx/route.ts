@@ -6,6 +6,8 @@ import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { getSuppliers } from "@/lib/suppliers";
 import { getSignatory } from "@/lib/signatory";
 import { getPurchaserSignatory } from "@/lib/purchaser-signatory";
+import { rushStampForPurchase } from "@/lib/rush-order-data";
+import { stampRushXlsx } from "@/lib/excel/rush-stamp";
 import { buildPurchaseOrderWorkbook, restore2307Shapes, build2307Fields } from "@/lib/excel/purchase-order-xlsx";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +55,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   });
   const source = await fs.readFile(path.join(dir, "2307-source.xlsx")).catch(() => null);
   if (source) buffer = await restore2307Shapes(buffer, source, fields, signatory?.signature);
+  // A RUSH order's PO prints "RUSH ORDER — due …" in the PO sheet's header — not on the 2307.
+  const rushStamp = await rushStampForPurchase(pr);
+  if (rushStamp) buffer = await stampRushXlsx(buffer, rushStamp, { sheetName: /^Purchase Order$/ });
 
   const filename = `${(po.poNumber || "Purchase-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
   return new Response(new Uint8Array(buffer), {

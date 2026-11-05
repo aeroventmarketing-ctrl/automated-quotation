@@ -7,6 +7,8 @@ import { readOrderWorkflow } from "@/lib/order-workflow";
 import { formatJoNumber, joTypeDef, joTypeLabel } from "@/lib/job-order";
 import { buildFansJobOrderWorkbook } from "@/lib/excel/job-order-xlsx";
 import { joXlsxResponse } from "@/lib/job-order-response";
+import { rushStampText } from "@/lib/rush-order";
+import { stampRushXlsx } from "@/lib/excel/rush-stamp";
 
 export const dynamic = "force-dynamic";
 
@@ -50,5 +52,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   );
 
   const filename = `${(joNumber || "Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
-  return joXlsxResponse(req, buffer, filename);
+  // A RUSH order's Job Order prints "RUSH ORDER — due …" in its page header.
+  const rush = rushStampText(quote.classification);
+  return joXlsxResponse(req, rush ? await stampRushXlsx(buffer, rush) : buffer, filename, { rushBanner: rush });
 }

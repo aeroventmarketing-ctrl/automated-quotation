@@ -303,6 +303,8 @@ export interface PurchaserPlanRow {
   clientDueFromOrder: boolean;
   /** Every change ever made to this row, newest first — see `PlanEdit`. */
   edits: PlanEdit[];
+  /** The order is a RUSH (lib/rush-order): days to its client due date. Sorted first. */
+  rush?: { daysLeft: number | null } | null;
 }
 
 /**

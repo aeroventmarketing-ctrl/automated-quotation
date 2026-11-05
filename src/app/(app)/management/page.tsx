@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw, Store } from "lucide-react";
+import { readClientDue } from "@/lib/order-client-due";
+import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
+import { RushBadge } from "@/components/rush-badge";
+import { ClipboardList, Wallet, PackageX, Percent, TrendingUp, Factory, AlertTriangle, ShoppingCart, CalendarClock, Coins, CalendarDays, Scale, Banknote, RotateCcw, Store, Zap } from "lucide-react";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -353,6 +356,8 @@ export default async function ManagementPage() {
   const atRisk: { orderId: string; company: string; quoteNumber: string; dept: string; dueAt: string; days: number }[] = [];
   // Orders whose collected amount (cash + EWT) doesn't yet settle the deal value.
   const unbalanced: { orderId: string; customerId: string; company: string; quoteNumber: string; value: number; collected: number; balance: number; delivered: boolean; closed: boolean }[] = [];
+  // Open RUSH orders — the Rush orders tile and list.
+  const rushRows: { orderId: string; quoteNumber: string; company: string; daysLeft: number | null; stage: string; since: string | null }[] = [];
   let orderCount = 0;
   let outstanding = 0;
   let openOrders = 0;
@@ -365,6 +370,22 @@ export default async function ManagementPage() {
     const q = withSlimClassification(row, slim);
     const sale = saleFromClassification(q.classification);
     if (!sale || !isSaleConfirmed(sale)) continue;
+    // RUSH orders still open (lib/rush-order) — counted whatever the go-live
+    // gate below says: a rush is about today, not about receivables.
+    {
+      const rwf = readOrderWorkflow(q.classification);
+      if (rwf.stage !== "closed" && isRushActive(q.classification)) {
+        const stamps = Object.values(rwf.approvals ?? {}).map((x) => (x as { at?: string } | null)?.at).filter((t): t is string => !!t).sort();
+        rushRows.push({
+          orderId: q.id,
+          quoteNumber: q.quoteNumber,
+          company: q.inquiry?.customer?.company ?? "—",
+          daysLeft: rushDaysLeft(readClientDue(q.classification)?.date, phToday),
+          stage: ORDER_STAGES.find((x) => x.key === rwf.stage)?.label ?? rwf.stage,
+          since: stamps.at(-1) ?? null,
+        });
+      }
+    }
     // Go-live gate on → skip orders recognised (paid / PO-dated) before launch
     // day. Shared with the Check Monitoring cash position, so the Receivables
     // figure is identical on both screens.
@@ -601,7 +622,18 @@ export default async function ManagementPage() {
   const checkRows = await loadCheckRegister(phToday);
   const checks = checkWatchSummary(checkRows);
 
+  // Late = past its client due date and not closed; most urgent first.
+  rushRows.sort((a, b) => (a.daysLeft ?? 9999) - (b.daysLeft ?? 9999));
+  const rushLate = rushRows.filter((r) => r.daysLeft != null && r.daysLeft < 0).length;
   const tiles = [
+    {
+      label: "Rush orders",
+      value: String(rushRows.length),
+      caption: rushRows.length === 0 ? "none open" : `${rushRows.length - rushLate} on time · ${rushLate} late`,
+      href: "/orders",
+      icon: Zap,
+      color: rushRows.length > 0 ? "#dc2626" : "#94a3b8",
+    },
     { label: "Open orders", value: String(openOrders), caption: `${orderCount} confirmed`, href: "/orders", icon: ClipboardList, color: "#2a78d6" },
     { label: "Counter sales (mo.)", value: formatCurrency(csMonthTotal, CURRENCY), caption: `${csMonthCount} this month`, href: "/counter-sales", icon: Store, color: "#7c3aed" },
     { label: "Receivables", value: formatCurrency(outstanding, CURRENCY), caption: `${collectedPct}% collected`, href: "/orders", icon: Wallet, color: "#1baf7a" },
@@ -678,6 +710,31 @@ export default async function ManagementPage() {
           );
         })}
       </div>
+
+      {/* Rush orders — every open one, where it is stuck, and how long. */}
+      {rushRows.length > 0 && (
+        <Card className="border-red-300 shadow-sm dark:border-red-900">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm"><Zap className="h-4 w-4 text-red-600" /> Rush orders · {rushRows.length - rushLate} on time · {rushLate} late</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y">
+              {rushRows.map((r) => (
+                <li key={r.orderId}>
+                  <Link href={`/orders/${r.orderId}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md px-1 py-2 hover:bg-accent">
+                    <RushBadge daysLeft={r.daysLeft} />
+                    <span className="font-medium">{r.quoteNumber}</span>
+                    <span className="truncate text-sm text-muted-foreground">{r.company}</span>
+                    <span className="ml-auto inline-flex items-center rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                      At: {r.stage}{r.since ? ` · since ${new Date(r.since).toLocaleString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Order pipeline — donut by phase + stage bars */}
