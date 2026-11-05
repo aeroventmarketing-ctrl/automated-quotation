@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { renderPurchaseOrderHtml } from "@/lib/po-html";
+import { rushStampForPurchase } from "@/lib/rush-order-data";
 import { getPurchaserSignatory } from "@/lib/purchaser-signatory";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!po) return new Response("No purchase order issued yet", { status: 404 });
 
   const purchaser = await getPurchaserSignatory().catch(() => null);
-  return new Response(renderPurchaseOrderHtml(po, { name: purchaser?.name, designation: purchaser?.designation, signature: purchaser?.signature }), {
+  // A RUSH order's PO says so (lib/rush-order).
+  const rushStamp = await rushStampForPurchase(pr);
+  return new Response(renderPurchaseOrderHtml(po, { name: purchaser?.name, designation: purchaser?.designation, signature: purchaser?.signature }, { rushStamp }), {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
   });
 }

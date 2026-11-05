@@ -28,6 +28,7 @@ import { SupplierPaymentsPanel } from "./supplier-payments-panel";
 import type { SupplierPayment } from "@/lib/supplier-payments";
 import type { CashPayment } from "@/lib/cash-payment";
 import { catalogPriceFor, withCatalogPrices, carriersForLines, eligibleSuppliers, unregisteredCarriers, type CatalogPrices, type CatalogSuppliers, type CatalogSkuKeys } from "@/lib/po-catalog";
+import { RushBadge } from "@/components/rush-badge";
 import { canEditCombinedPo, type PoAmount } from "@/lib/po-edit-access";
 import { SendBackNotice } from "./send-back-notice";
 import { StockMatchPanel, type StockOpt } from "../orders/[id]/stock-match-panel";
@@ -64,6 +65,8 @@ export interface BatchAction {
 }
 export interface BatchCard {
   anchorId: string;
+  /** A request on this PO is for a RUSH order (lib/rush-order): days to its client due date. */
+  rush?: { daysLeft: number | null } | null;
   /** Payments made to the supplier against this PO (on the anchor; migration 0061). */
   supplierPayments?: SupplierPayment[];
   orderIdForPrint: string;
@@ -397,6 +400,7 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
     <div className="rounded-md border p-3">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 text-sm">
+          {batch.rush && <RushBadge daysLeft={batch.rush.daysLeft} />}
           <Badge variant="success">Combined {batch.poNumber}</Badge>
           {showSupplier && batch.supplierCompany && <span className="text-muted-foreground">{batch.supplierCompany}</span>}
           <span className="text-muted-foreground">· {batch.members.length} requests</span>

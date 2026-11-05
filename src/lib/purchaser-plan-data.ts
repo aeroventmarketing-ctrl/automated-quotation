@@ -21,6 +21,7 @@ import { saleRecognitionDate } from "@/lib/department-pnl";
 import { readOrderWorkflow, requisitionDeptLabel } from "@/lib/order-workflow";
 import { slimClassificationByOrder, withSlimClassification } from "@/lib/slim-classification";
 import { readClientDue } from "@/lib/order-client-due";
+import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
 import { DEPT_REQUISITION_KIND, type PRStatus } from "@/lib/purchasing";
 import {
   isPlanOpenMrf,
@@ -123,6 +124,8 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
 
   const rows: PurchaserPlanRow[] = [];
   const closed: ClosedPlanRow[] = [];
+  const rushByOrder = new Map<string, { daysLeft: number | null }>();
+  const rushToday = manilaDay(new Date()) ?? "";
   // What a PO row needs from the order its request is linked to.
   const orderInfo = new Map<string, { orderNo: string; accountHolder: string; orderedDate: string | null; due: ReturnType<typeof readClientDue> }>();
   for (const row of quotes) {
@@ -135,6 +138,9 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     // The order's client due date — set in its Phase 1 box, shown on every MRF row.
     const orderDue = readClientDue(q.classification);
     orderInfo.set(q.id, { orderNo: q.quoteNumber, accountHolder: q.preparedBy?.name ?? "—", orderedDate, due: orderDue });
+    // RUSH (lib/rush-order) — every row of the order carries it and sorts first.
+    const rush = wf.stage !== "closed" && isRushActive(q.classification) ? { daysLeft: rushDaysLeft(orderDue?.date, rushToday) } : null;
+    if (rush) rushByOrder.set(q.id, rush);
     for (const m of wf.materialRequests) {
       const mine = prsByMrf.get(m.id) ?? [];
       // Rejected / cancelled → the box below the plan, not the plan itself.
@@ -177,6 +183,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
         accountHolder: q.preparedBy?.name ?? "—",
         poNumbers: planPoNumbers(posByMrf.get(m.id) ?? []),
         source: "mrf",
+        rush,
         mrfNo: m.formNo,
         mrfStatus: planMrfStatus(m.status, mine),
         purchaseDue: earliestPurchaseDue(mine),
@@ -215,6 +222,7 @@ export async function loadPurchaserPlan(): Promise<PurchaserPlanData> {
     rows.push({
       key: `po:${p.id}`,
       source: "po",
+      rush: p.quotationId ? rushByOrder.get(p.quotationId) ?? null : null,
       quotationId: o ? p.quotationId! : "",
       mrfId: "",
       orderNo: o?.orderNo ?? from,

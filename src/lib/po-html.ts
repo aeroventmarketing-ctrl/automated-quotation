@@ -23,7 +23,11 @@ function fmtDate(iso: string): string {
 
 export type PoPurchaser = { name?: string | null; designation?: string | null; signature?: string | null };
 
-export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchaser = {}): string {
+/**
+ * `opts.rushStamp` — "RUSH ORDER — due …" when a request on the PO is for a RUSH
+ * order (lib/rush-order); printed in red under the title, so the supplier sees it.
+ */
+export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchaser = {}, opts: { rushStamp?: string | null } = {}): string {
   const totals = poTotals(po);
   const signImg = (purchaser.signature ?? "").trim();
   const signName = (purchaser.name ?? po.createdByName ?? "").trim();
@@ -58,6 +62,7 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchase
   .brand .tag { font-size: 10px; font-style: italic; color: #555; }
   .brand .addr { font-size: 10px; color: #444; margin-top: 2px; }
   h2 { text-align: center; font-size: 16px; letter-spacing: 2px; margin: 10px 0 14px; }
+  .rush { width: fit-content; margin: -6px auto 12px; padding: 3px 14px; border: 3px solid #dc2626; color: #dc2626; font-weight: 800; font-size: 15px; letter-spacing: 2px; text-transform: uppercase; }
   .meta { display: flex; justify-content: space-between; gap: 16px; font-size: 13px; margin-bottom: 12px; }
   .meta .po { font-weight: bold; color: #ED1C24; }
   .sup { border: 1px solid #d1d5db; padding: 8px 10px; font-size: 13px; margin-bottom: 12px; }
@@ -128,6 +133,7 @@ export function renderPurchaseOrderHtml(po: PurchaseOrder, purchaser: PoPurchase
       <div class="addr">${esc(COMPANY.landline)} · ${esc(COMPANY.email)}</div>
     </div>
     <h2>PURCHASE ORDER</h2>
+    ${opts.rushStamp ? `<div class="rush">${esc(opts.rushStamp)}</div>` : ""}
     <div class="meta">
       <div><span class="po">${esc(po.poNumber)}</span></div>
       <div>Date: <b>${esc(fmtDate(po.date))}</b></div>

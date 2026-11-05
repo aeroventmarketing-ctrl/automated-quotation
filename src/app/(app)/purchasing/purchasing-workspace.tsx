@@ -1,5 +1,7 @@
 "use client";
 
+import { RushBadge } from "@/components/rush-badge";
+import { rushFirst } from "@/lib/rush-order";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -37,6 +39,8 @@ export interface OrderGroup {
    */
   joDues: JobOrderDue[];
   rows: PurchaseChainRow[];
+  /** The order is a RUSH (lib/rush-order): days to its client due date. */
+  rush?: { daysLeft: number | null } | null;
 }
 
 // "budgeted" is a workspace-only split of the shared "approved" bucket: once the
@@ -314,9 +318,11 @@ export function PurchasingWorkspace({
       g.rows.reduce((min, r) => Math.min(min, BUCKET_ORDER[rowBucket(r)]), 4)
     ];
 
-  const filteredBatches = batches
-    .filter((b) => inTab(displayBucket(b.status)))
-    .filter((b) => textMatch(batchText(b), query));
+  // RUSH orders' POs first, whatever the sort (lib/rush-order).
+  const filteredBatches = rushFirst(
+    batches.filter((b) => inTab(displayBucket(b.status))).filter((b) => textMatch(batchText(b), query)),
+    (b) => !!b.rush,
+  );
 
   let filteredGroups = orderGroups
     .map((g) => ({ ...g, rows: g.rows.filter((r) => inTab(rowBucket(r))) }))
@@ -330,6 +336,7 @@ export function PurchasingWorkspace({
       return groupAmount(a) - groupAmount(b); // amount_asc
     });
   }
+  filteredGroups = rushFirst(filteredGroups, (g) => !!g.rush);
 
   // Cluster the order cards into sections when grouping is on (a single unnamed
   // section otherwise). Section order follows the sorted group order.
@@ -514,6 +521,7 @@ export function PurchasingWorkspace({
                   <CardContent className="space-y-3 pt-6">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="min-w-0">
+                        {g.rush && <RushBadge daysLeft={g.rush.daysLeft} className="mr-2 align-middle" />}
                         <Link href={`/orders/${g.id}`} className="font-semibold hover:underline">{g.title}</Link>
                         <span className="ml-2 text-xs text-muted-foreground">{g.subtitle}</span>
                         {/* What production is working to. A purchaser choosing

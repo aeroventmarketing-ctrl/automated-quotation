@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { rushStampForPurchase } from "@/lib/rush-order-data";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -22,6 +23,7 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
   if (!po) notFound();
 
   const totals = poTotals(po);
+  const rushStamp = await rushStampForPurchase(pr);
   // Pad rows so the sheet always looks like the standard form.
   const rows = [...po.lines];
   while (rows.length < 6) rows.push({ description: "", qty: "", unit: "", unitPrice: "" });
@@ -59,6 +61,10 @@ export default async function PurchaseOrderPrintPage({ params }: { params: Promi
         <img src="/aerovent-letterhead.png" alt="AEROVENT FANS & BLOWERS MANUFACTURING" className="mx-auto w-full max-w-[720px]" />
 
         <h1 className="mb-1 mt-2 text-center text-[23px] font-bold">Purchase Order</h1>
+        {/* A RUSH order's PO says so — the supplier sees it (lib/rush-order). */}
+        {rushStamp && (
+          <div className="mx-auto mb-2 w-fit border-[3px] border-red-600 px-4 py-0.5 text-center text-[15px] font-extrabold uppercase tracking-widest text-red-600">{rushStamp}</div>
+        )}
 
         {/* Supplier details */}
         <table className="w-full border-collapse text-[13px]">

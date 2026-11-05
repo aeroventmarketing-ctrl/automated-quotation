@@ -4,6 +4,8 @@ import { readOrderWorkflow } from "@/lib/order-workflow";
 import { formatDuctJoNumber } from "@/lib/duct-job-order";
 import { buildDuctJobOrderWorkbook } from "@/lib/excel/duct-job-order-xlsx";
 import { joXlsxResponse } from "@/lib/job-order-response";
+import { rushStampText } from "@/lib/rush-order";
+import { stampRushXlsx } from "@/lib/excel/rush-stamp";
 
 export const dynamic = "force-dynamic";
 
@@ -28,5 +30,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const buffer = await buildDuctJobOrderWorkbook({ ...jo, joNumber });
 
   const filename = `${(joNumber || "Duct-Job-Order").replace(/[^A-Za-z0-9._-]/g, "_")}.xlsx`;
-  return joXlsxResponse(req, buffer, filename);
+  // A RUSH order's Job Order prints "RUSH ORDER — due …" in its page header.
+  const rush = rushStampText(quote.classification);
+  return joXlsxResponse(req, rush ? await stampRushXlsx(buffer, rush) : buffer, filename, { rushBanner: rush });
 }
