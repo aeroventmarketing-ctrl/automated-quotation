@@ -14,7 +14,7 @@ import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, workflowRoleLabel, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey, type WorkflowRoleAssignments } from "@/lib/workflow-roles";
-import { jobOrderTasks, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
+import { jobOrderTasks, issuedJobOrderNotices, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
 import { readClientDue } from "@/lib/order-client-due";
 import { readRush, rushDaysLeft, rushWaitAlarm, rushWaitText, rushFirst } from "@/lib/rush-order";
 import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
@@ -497,11 +497,29 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
           });
         }
       }
+      // The department head is told their job order is issued — until they start
+      // production (lib/job-order-tasks, `issuedJobOrderNotices`).
+      let headTold = false;
+      for (const n of issuedJobOrderNotices(wf)) {
+        if (!has(n.role as WorkflowRoleKey)) continue;
+        headTold = true;
+        tasks.push({
+          key: `jo-issued:${q.id}:${n.dept}`, area: "order", areaLabel: AREA_LABEL.order,
+          title: q.quoteNumber, action: n.action,
+          client: maskClient(q.inquiry.customer.company), amount: null, currency: q.currency,
+          href: `/orders/${q.id}#phase-2`,
+          deliveryMode: wf.deliveryMode === "multi" ? "multi" : "single",
+          since: n.since,
+          createdAt: orderCreatedAt,
+        });
+      }
       const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
       if (!pend) continue;
       // The order-level "Issue job orders" says what the department tasks above
       // say more precisely — don't show both.
       if (joTasked && pend.action === "Issue job orders") continue;
+      // …nor "Start production" beside the head's own "job order issued — start production".
+      if (headTold && pend.action === "Start production") continue;
       const owesByRole = pend.roles.some((r) => has(r as WorkflowRoleKey));
       const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
       const owesByEngineer = !!pend.engineer && (user.role === "ENGINEER" || isAdmin(user));

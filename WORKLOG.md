@@ -1,3 +1,26 @@
+## 2026-11-07 · The department head is told when their job order is issued
+
+The owner: *"Once issue job order button is pressed. Notify in pending my action of the corresponding
+head that the job order is issued"* — *"just notify the department head that there is a job order"*,
+on the dashboard **and** the alarm, for **every** issue (the first release and later top-ups).
+
+- As soon as a department's job order is issued, its head (Fans & Blower / Duct / Accessories / Motor
+  Controller production head) gets **"Fans & Blower job order issued"** in Pending Your Action and on
+  the approver alarm, opening the order at Phase 2. The wording says where the order is:
+  *— awaiting Plant Manager to receive* before the Plant Manager's "Job Orders Received",
+  *— start production* after it. It clears when the head presses **Start production**.
+- A department issued later, while the order is already in production, tells its head the same way.
+- The order-level "Start production" line is dropped for a head who has the notice — it says the same.
+- Read-only: who acts and the order of steps are unchanged (the frozen Phase 2 actions untouched).
+
+`issuedJobOrderNotices` in `lib/job-order-tasks.ts` (tested), used by `lib/my-dashboard.ts` and
+`lib/pending-approvals.ts`.
+
+Verified on the role harness (a Fans & Blower head): after the Engineer pressed **Issue Job Order**,
+the head's dashboard and alarm read *Fans & Blower job order issued — awaiting Plant Manager to
+receive*; once received, *— start production* (and no separate "Start production"); once production
+started, the notice was gone.
+
 ## 2026-11-07 · Approver alarm rings for job orders to create, approve or issue (fix to #624)
 
 The owner: *"The latest feature we added for engineer was silently broken. Please investigate"* — then
