@@ -35,6 +35,15 @@ describe("one task per department — its earliest outstanding step", () => {
     const t = jobOrderTasks(wf({ ductJobOrders: [approved], accessoriesJobOrders: [pending] }), { fans: true, duct: true, accessories: true, motor: false });
     expect(t.map((x) => x.action)).toEqual(["Create Fans & Blower job order", "Issue Duct job order", "Approve Accessories job order"]);
   });
+  it("create even when the department was issued without a document — until its production is finished", () => {
+    // The owner: "Create duct job order is showing but create motor controller job order and
+    // create fans and blowers job order is not" — those two had been issued first.
+    const t = jobOrderTasks(
+      wf({ stage: "in_production", jobOrders: { fans: { status: "issued" }, motor: { status: "in_production" }, accessories: { status: "finished" } } }),
+      { fans: true, duct: true, accessories: true, motor: true },
+    );
+    expect(t.map((x) => x.action)).toEqual(["Create Fans & Blower job order", "Create Duct job order", "Create Motor Controller job order"]);
+  });
   it("a department the order doesn't touch, and stages outside Phase 2, have nothing", () => {
     expect(jobOrderTasks(wf(), none)).toEqual([]);
     expect(jobOrderTasks(wf({ stage: "docs_checked" }), { ...none, fans: true })).toEqual([]);

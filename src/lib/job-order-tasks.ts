@@ -7,7 +7,9 @@
  * department's job order goes through those three steps on the order page:
  *
  *   create  — the paid quotation has items for the department, but it has no
- *             job order yet (Auto-fill, or "Add … job order");
+ *             job order document yet (Auto-fill, or "Add … job order") — even
+ *             when the department was already issued to production; only once
+ *             its production is finished is there nothing to create;
  *   approve — a job order is there but not approved yet (its ✓ Approve);
  *   issue   — the department hasn't been issued to production yet
  *             ("Issue job order").
@@ -63,7 +65,14 @@ export function jobOrderTasks(
     let step: JobOrderStep | null = null;
     let since: string | undefined = cleared;
     if (docs.length === 0) {
-      if (!issued) step = "create";
+      // No job-order document yet — create one, even if the department was
+      // already issued to production from its panel (issuing doesn't wait for a
+      // document). Only a department whose production is finished is past it.
+      // This was `!issued`, which hid Create Fans & Blower / Motor Controller on
+      // orders whose departments had been issued first — the owner's "Create
+      // duct job order is showing but create motor controller … and create fans
+      // and blowers job order is not".
+      if (wf.jobOrders?.[d.key]?.status !== "finished") step = "create";
     } else if (docs.some((x) => !(x.approvedByName ?? "").trim())) {
       step = "approve";
     } else if (!issued) {

@@ -23,12 +23,22 @@ order* and *Create Motor Controller job order*; `/api/pending-approvals` returne
   order moves to a new step for the viewer (approved → now to issue) it rings again instead of being
   treated as already rung.
 
+**And the missing "Create".** The owner, with the Engineer's dashboard: *"Create duct job order is
+showing but create motor controller job order and create fans and blowers job order is not."* The
+rule only asked for Create while the department was NOT yet issued — but a department can be issued
+from its panel before any job-order document exists, and then nobody was asked to create one.
+Reproduced exactly (Fans and Motor issued without documents → only "Create Duct job order"). Now a
+needed department with no job-order document gets **Create** until that department's production is
+finished, issued or not — on the dashboard and the alarm alike (one rule, `jobOrderTasks`). Orders
+already in production whose departments were issued without a document will now show Create.
+
 Verified on the role harness: with a Fans & Blower job order awaiting approval, the alarm feed gave the
 Engineer and the admin *Approve Fans & Blower job order* (and *Create Motor Controller job order* on
 another order); the Technical Head kept "Issue job orders"; Sales nothing. After the Engineer approved
 it, all three got *Issue Fans & Blower job order* under a new key. With production underway and a
 second, unapproved job order added, the Engineer was rung and the Technical Head was not. The popup
-showed 4 orders waiting for the Engineer (was 2).
+showed 4 orders waiting for the Engineer (was 2). An order in production with Fans & Blower issued and
+no document now shows *Create Fans & Blower job order* on the Engineer's dashboard and alarm.
 
 ## 2026-11-07 · Request lines keep their own SKU — edits, splits and partial issues no longer shift codes
 
