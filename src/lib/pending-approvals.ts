@@ -18,6 +18,8 @@ import { getAlertGoLive, alertPasses, type AlertGoLive } from "@/lib/alert-goliv
 // blacklist rather than a whitelist, lives in `lib/slim-classification`, which
 // the other six confirmed-order readers share.
 import { UNREAD_CLASSIFICATION_KEYS } from "@/lib/slim-classification";
+import { jobOrderTasks, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
+import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
 
 export interface PendingApproval {
   id: string;
@@ -25,6 +27,8 @@ export interface PendingApproval {
   company: string;
   action: string; // what the approver must do
   anchor: string; // phase-card id to deep-link to (e.g. "phase-2"), "" if none
+  /** What is owed on the order — the alarm rings once per key, so a new step rings anew. */
+  key: string;
 }
 
 interface Viewer {
@@ -167,48 +171,76 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
 
     const wf = readOrderWorkflow(q.classification);
     const stockOnly = isStockOnlyOrder(q.items);
-    const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
-    if (!pend) continue;
-    // Production underway ("Complete production") is ongoing work, not an approval
-    // awaiting a decision — don't ring the alarm for it once production has
-    // started. It still appears as a task on My Dashboard; this only silences the
-    // siren so the production heads aren't alarmed on every page load while they
-    // build.
-    if (wf.stage === "producing") continue;
 
-    const owesByRole = pend.roles.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
-    const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
-    const owesByEngineer = !!pend.engineer && user.role === "ENGINEER";
-    if (!owesByRole && !owesBySales && !owesByEngineer) continue;
+    // Phase 2 job orders — each department's create / approve / issue, by the
+    // same rule My Dashboard lists them (lib/job-order-tasks). The owner asked to
+    // NOTIFY the Engineer and the admin; #624 put the tasks on the dashboard but
+    // never here, so nobody was rung. Engineers and admins get every step, the
+    // Technical Head (who may also issue) the issue step. Each step is judged by
+    // the same gates as the rest of the alarm, against when IT became due.
+    const joOwner = user.role === "ADMIN" || user.role === "ENGINEER";
+    const joIssuer = joOwner || userHasWorkflowRole(assignments, user.id, "technical_head" as WorkflowRoleKey);
+    const joActions =
+      joIssuer && JOB_ORDER_STAGES.has(wf.stage) && alertPasses(q.createdAt, golive)
+        ? jobOrderTasks(wf, quotationJobOrderDepts(q.items))
+            .filter((t) => t.step === "issue" || joOwner)
+            .filter((t) => passesNotificationBaseline(t.since, baseline) && alertPasses(t.since, golive))
+            .map((t) => t.action)
+        : [];
 
-    // Notification backlog reset: hide orders that were already awaiting this
-    // step before the reset (practice slate). "Pending since" = the most recent
-    // approval stamp (when it entered this step), or the order's creation time.
-    const stampTimes = Object.values(wf.approvals ?? {})
-      .map((s) => (s as { at?: string } | null)?.at)
-      .filter((t): t is string => !!t);
-    const pendingSince = stampTimes.length ? [...stampTimes].sort().at(-1)! : q.createdAt.toISOString();
-    if (!passesNotificationBaseline(pendingSince, baseline)) continue;
-    // Alerts go-live gate: silent before launch; afterwards only approvals that
-    // entered their step after the go-live moment ring (pre-launch backlog stays quiet).
-    if (!alertPasses(pendingSince, golive)) continue;
-    // …and the ORDER's own date, not just the step's. The owner, 15 September
-    // 2026: *"Transactions before August 1, 2026 should not give any alarm or
-    // notifications. Date before the said day is a testing stage."*
-    //
-    // `pendingSince` is the most recent approval stamp, so a test order from the
-    // practice weeks starts ringing the moment anyone touches it — press one
-    // button on a July order in September and it is "pending since September".
-    // An order raised during the testing stage is test data whatever happens to
-    // it later, so the gate asks when the ORDER was raised as well.
-    if (!alertPasses(q.createdAt, golive)) continue;
+    const orderAction = ((): string | null => {
+      const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
+      if (!pend) return null;
+      // The department steps above say what "Issue job orders" says, per department.
+      if (joActions.length > 0 && pend.action === "Issue job orders") return null;
+      // Production underway ("Complete production") is ongoing work, not an approval
+      // awaiting a decision — don't ring the alarm for it once production has
+      // started. It still appears as a task on My Dashboard; this only silences the
+      // siren so the production heads aren't alarmed on every page load while they
+      // build.
+      if (wf.stage === "producing") return null;
 
+      const owesByRole = pend.roles.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+      const owesBySales = !!pend.sales && (user.role === "SALES" || user.role === "ENGINEER" || q.preparedById === user.id);
+      const owesByEngineer = !!pend.engineer && user.role === "ENGINEER";
+      if (!owesByRole && !owesBySales && !owesByEngineer) return null;
+
+      // Notification backlog reset: hide orders that were already awaiting this
+      // step before the reset (practice slate). "Pending since" = the most recent
+      // approval stamp (when it entered this step), or the order's creation time.
+      const stampTimes = Object.values(wf.approvals ?? {})
+        .map((x) => (x as { at?: string } | null)?.at)
+        .filter((t): t is string => !!t);
+      const pendingSince = stampTimes.length ? [...stampTimes].sort().at(-1)! : q.createdAt.toISOString();
+      if (!passesNotificationBaseline(pendingSince, baseline)) return null;
+      // Alerts go-live gate: silent before launch; afterwards only approvals that
+      // entered their step after the go-live moment ring (pre-launch backlog stays quiet).
+      if (!alertPasses(pendingSince, golive)) return null;
+      // …and the ORDER's own date, not just the step's. The owner, 15 September
+      // 2026: *"Transactions before August 1, 2026 should not give any alarm or
+      // notifications. Date before the said day is a testing stage."*
+      //
+      // `pendingSince` is the most recent approval stamp, so a test order from the
+      // practice weeks starts ringing the moment anyone touches it — press one
+      // button on a July order in September and it is "pending since September".
+      // An order raised during the testing stage is test data whatever happens to
+      // it later, so the gate asks when the ORDER was raised as well.
+      if (!alertPasses(q.createdAt, golive)) return null;
+      return pend.action;
+    })();
+
+    // One entry per order (the alarm opens the order from it): its own step and
+    // its job-order steps together. `key` names WHAT is owed, so a new step on an
+    // order that already rang — Approve → Issue — rings again.
+    const actions = [...(orderAction ? [orderAction] : []), ...joActions];
+    if (actions.length === 0) continue;
     out.push({
       id: q.id,
+      key: `${q.id}:${actions.join("|")}`,
       code: q.quoteNumber,
       company: q.company,
-      action: pend.action,
-      anchor: phaseAnchor(wf.stage),
+      action: actions.join(" · "),
+      anchor: orderAction ? phaseAnchor(wf.stage) : "phase-2",
     });
   }
   return out;
