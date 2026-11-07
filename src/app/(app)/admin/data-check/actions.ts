@@ -23,6 +23,13 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { scanInheritedWorkflows } from "@/lib/inherited-workflow-scan";
+import { Prisma } from "@prisma/client";
+import { logActivity } from "@/lib/activity-log";
+import { buildCatalogueSkuIndex } from "@/lib/pr-item-skus";
+import { correctSkus, checkArticleSku } from "@/lib/item-sku-align";
+import { correctPoLineSkus } from "@/lib/sku-drift-audit";
+import { coercePurchaseOrder } from "@/lib/purchase-order";
+import { poMemberIds } from "@/lib/purchase-batch";
 
 export interface ResetResult {
   quoteNumber: string;
@@ -99,4 +106,64 @@ export async function resetInheritedWorkflow(quotationId: string): Promise<Reset
     removedStamps: finding.stamps.length,
     removedPaths: finding.foreignPaths.length,
   };
+}
+
+/**
+ * Correct the per-line codes the SKU-drift check found (lib/sku-drift-audit):
+ * on the request, and on its PO's lines — on every request of a combined PO,
+ * which share one PO. Recomputed here from the database, never taken from the
+ * page, and only clear contradictions are changed. Admin only; each repair is
+ * recorded in the activity log.
+ */
+export async function repairSkuDrift(prIds: string[]): Promise<{ requests: number; lines: number }> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Admin access required");
+  const ids = [...new Set((prIds ?? []).filter((x): x is string => typeof x === "string" && !!x))];
+  if (ids.length === 0) return { requests: 0, lines: 0 };
+  const index = await buildCatalogueSkuIndex();
+  let requests = 0;
+  let lines = 0;
+  for (const id of ids) {
+    const pr = await prisma.purchaseRequest.findUnique({ where: { id }, select: { id: true, items: true, itemSkus: true, po: true, quotationId: true } });
+    if (!pr) continue;
+    const items = Array.isArray(pr.items) ? (pr.items as unknown[]).map(String) : [];
+    const req = Array.isArray(pr.itemSkus) ? correctSkus(items, pr.itemSkus as unknown[], index) : { skus: [], fixed: [] };
+    const po = coercePurchaseOrder(pr.po);
+    const poFix = po ? correctPoLineSkus(po.lines, index) : { lines: [], fixed: [] };
+    if (req.fixed.length === 0 && poFix.fixed.length === 0) continue;
+    await prisma.$transaction(async (tx) => {
+      if (req.fixed.length) await tx.purchaseRequest.update({ where: { id }, data: { itemSkus: req.skus as Prisma.InputJsonValue } });
+      if (poFix.fixed.length && pr.po && typeof pr.po === "object") {
+        const memberIds = poMemberIds(pr.po);
+        const targets = memberIds.length ? memberIds : [id];
+        for (const t of targets) {
+          const row = await tx.purchaseRequest.findUnique({ where: { id: t }, select: { po: true } });
+          if (!row?.po || typeof row.po !== "object") continue;
+          // On the stored lines themselves, so nothing else in the PO is touched.
+          const raw = row.po as Record<string, unknown>;
+          const rawLines = Array.isArray(raw.lines) ? (raw.lines as Record<string, unknown>[]) : [];
+          const nextLines = rawLines.map((l) => {
+            const c = checkArticleSku(String(l?.description ?? ""), typeof l?.sku === "string" ? l.sku : "", index);
+            return c.status === "mismatch" ? { ...l, sku: c.expected } : l;
+          });
+          await tx.purchaseRequest.update({ where: { id: t }, data: { po: { ...raw, lines: nextLines } as Prisma.InputJsonValue } });
+        }
+      }
+    });
+    requests++;
+    lines += req.fixed.length + poFix.fixed.length;
+    const what = [...req.fixed.map((f) => `${f.item}: ${f.from} → ${f.to}`), ...poFix.fixed.map((f) => `PO ${f.description}: ${f.from} → ${f.to}`)].join("; ");
+    await logActivity(user, {
+      action: "purchase.sku_repair",
+      category: "purchase",
+      summary: `Corrected SKUs — ${what}`.slice(0, 900),
+      entity: "purchase",
+      entityId: id,
+      href: `/purchasing?req=${id}`,
+    });
+    if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  }
+  revalidatePath("/admin/data-check");
+  revalidatePath("/purchasing");
+  return { requests, lines };
 }

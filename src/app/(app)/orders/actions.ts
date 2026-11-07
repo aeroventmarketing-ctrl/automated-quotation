@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveItemSkus, skusForLines, buildCatalogueSkuIndex } from "@/lib/pr-item-skus";
+import { realignSkus } from "@/lib/item-sku-align";
 import type { SkuIndex } from "@/lib/item-sku";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
@@ -2393,6 +2394,12 @@ export async function issueRequisitionLineFromStock(
     const newItems = [...items.slice(0, lineIndex), ...replacement, ...items.slice(lineIndex + 1)];
     const remainingToBuy = newItems.filter((s) => !isIssuedFromStockLine(s));
     const data: Prisma.PurchaseRequestUpdateInput = { items: newItems as Prisma.InputJsonValue };
+    // One line can become two (issued + the shortfall still to buy) — both keep
+    // the line's code, and every later line keeps its own (lib/item-sku-align).
+    if (Array.isArray(pr.itemSkus)) {
+      const skus = items.map((_, i) => String((pr.itemSkus as unknown[])[i] ?? ""));
+      data.itemSkus = [...skus.slice(0, lineIndex), ...replacement.map(() => skus[lineIndex] ?? ""), ...skus.slice(lineIndex + 1)] as Prisma.InputJsonValue;
+    }
     if (remainingToBuy.length === 0) data.status = "COMPLETED";
     await tx.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
     return { issued, remaining: remainingToBuy.length };
@@ -3693,10 +3700,29 @@ export async function adminEditPurchaseRequestItems(purchaseRequestId: string, i
   if (!pr) throw new Error("Purchase request not found");
   const clean = (items ?? []).map((s) => s.trim()).filter(Boolean);
   if (clean.length === 0) throw new Error("List at least one item.");
+  // The lines' catalogue codes follow the lines: an unchanged line keeps its code,
+  // a changed or new one is looked up by its name. Writing `items` alone left the
+  // old codes on whatever line now sat at each position (lib/item-sku-align) —
+  // PO-AFBM20260001051's DRILL BIT carried another item's SKU and stock.
+  const oldItems = Array.isArray(pr.items) ? (pr.items as unknown[]).map(String) : [];
+  const itemSkus = realignSkus(oldItems, Array.isArray(pr.itemSkus) ? (pr.itemSkus as unknown[]) : null, clean, await buildCatalogueSkuIndex());
   await prisma.purchaseRequest.update({
     where: { id: purchaseRequestId },
-    data: { items: clean as Prisma.InputJsonValue, ...(note !== undefined ? { note: note.trim() || null } : {}) },
+    data: { items: clean as Prisma.InputJsonValue, itemSkus: itemSkus as Prisma.InputJsonValue, ...(note !== undefined ? { note: note.trim() || null } : {}) },
   });
+  // Recorded, so who changed a request's lines — and from what — can be found.
+  const removed = oldItems.filter((o) => !clean.includes(o));
+  const added = clean.filter((c) => !oldItems.includes(c));
+  if (removed.length || added.length) {
+    await logActivity(user, {
+      action: "purchase.edit_items",
+      category: "purchase",
+      summary: `Edited request lines${removed.length ? ` — removed: ${removed.join("; ")}` : ""}${added.length ? ` — added: ${added.join("; ")}` : ""}`.slice(0, 900),
+      entity: "purchase",
+      entityId: purchaseRequestId,
+      href: `/purchasing?req=${purchaseRequestId}`,
+    });
+  }
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
@@ -3949,12 +3975,18 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
   if (move.length === 0) throw new Error("Select at least one line to split off.");
 
   // Remove each moved line from the original by first match (so duplicate lines
-  // split one at a time), verifying every selected line still exists.
+  // split one at a time), verifying every selected line still exists. Each line's
+  // catalogue code travels WITH it — `itemSkus` is aligned by index, so splicing
+  // the lines alone left the codes on the wrong lines (lib/item-sku-align).
+  const hasSkus = Array.isArray(pr.itemSkus);
   const remaining = [...items];
+  const remainingSkus = items.map((_, i) => String((pr.itemSkus as unknown[] | null)?.[i] ?? ""));
+  const movedSkus: string[] = [];
   for (const m of move) {
     const idx = remaining.findIndex((it) => it === m);
     if (idx < 0) throw new Error("A selected line isn't on this requisition anymore — refresh and try again.");
     remaining.splice(idx, 1);
+    movedSkus.push(remainingSkus.splice(idx, 1)[0] ?? "");
   }
   if (remaining.length === 0) {
     throw new Error("Keep at least one line on the original requisition — to change every line's supplier, edit the PO instead.");
@@ -3980,6 +4012,7 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
         mrfId: pr.mrfId,
         stockItemId: pr.stockItemId,
         items: move as Prisma.InputJsonValue,
+        ...(hasSkus ? { itemSkus: movedSkus as Prisma.InputJsonValue } : {}),
         note: pr.note ? `${pr.note} (split)` : "Split from a multi-supplier requisition",
         createdById: pr.createdById,
         createdByName: pr.createdByName,
@@ -4000,7 +4033,7 @@ export async function splitPurchaseRequest(purchaseRequestId: string, moveItems:
     });
     await tx.purchaseRequest.update({
       where: { id: purchaseRequestId },
-      data: { items: remaining as Prisma.InputJsonValue },
+      data: { items: remaining as Prisma.InputJsonValue, ...(hasSkus ? { itemSkus: remainingSkus as Prisma.InputJsonValue } : {}) },
     });
   });
 

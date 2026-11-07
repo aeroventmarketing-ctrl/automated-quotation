@@ -3,8 +3,8 @@
  *
  * Runs the inherited-workflow scan with the credentials the app already holds,
  * so finding out whether an order is carrying another order's state is a click
- * rather than a database console. READ ONLY: this page reads and prints, and has
- * no action that could change an order.
+ * rather than a database console. It reads and prints; its only writes are the
+ * guarded repairs in ./actions (an inherited workflow, drifted SKUs).
  *
  * The detection lives in src/lib/inherited-workflow-scan.ts, shared with
  * scripts/scan-inherited-workflows.ts so the two can never disagree.
@@ -18,19 +18,65 @@ import { auditPoPrices } from "@/lib/po-price-audit";
 import { auditPoSuppliers } from "@/lib/po-supplier-audit";
 import { formatCurrency } from "@/lib/utils";
 import { ResetInheritedButton } from "./reset-button";
+import { SkuRepairButton } from "./sku-repair-button";
+import { auditSkuDrift } from "@/lib/sku-drift-audit";
 
 // Always the live picture — a cached one would be worse than none.
 export const dynamic = "force-dynamic";
 
 export default async function DataCheckPage() {
-  const [{ scanned, findings }, priceAudit, supplierAudit] = await Promise.all([
+  const [{ scanned, findings }, priceAudit, supplierAudit, skuDrift] = await Promise.all([
     scanInheritedWorkflows(),
     auditPoPrices(),
     auditPoSuppliers(),
+    auditSkuDrift(),
   ]);
 
   return (
     <div className="space-y-4">
+      {/* Request lines carrying another item's SKU (lib/sku-drift-audit). */}
+      <Card className={skuDrift.issues.length ? "border-amber-400" : ""}>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Request lines carrying another item&apos;s SKU</CardTitle>
+            {skuDrift.issues.length > 1 && <SkuRepairButton prIds={skuDrift.issues.map((i) => i.prId)} label={`Correct all ${skuDrift.issues.length}`} />}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            A line&apos;s SKU decides its &ldquo;in stock&rdquo; count, its catalogue price and which stock item receiving
+            pre-selects. Editing a request&apos;s lines, splitting it for a second supplier, or issuing part of a line
+            from stock used to leave the old codes on whatever line now sat in their place — PO-AFBM20260001051&apos;s
+            DRILL BIT carried another item&apos;s code. Listed here: every line whose name is a catalogue item with a
+            different code than the one stored. Correcting sets the code the name gives, on the request and its PO
+            lines, and records it in the activity log. Checked {skuDrift.checked} request{skuDrift.checked === 1 ? "" : "s"}.
+          </p>
+          {skuDrift.issues.length === 0 ? (
+            <div className="flex items-center gap-3"><Badge variant="success">Clear</Badge><span>Every stored SKU matches its line.</span></div>
+          ) : (
+            <ul className="divide-y rounded-md border">
+              {skuDrift.issues.map((i) => (
+                <li key={i.prId} className="space-y-1 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      <Link href={i.href} className="font-medium text-primary hover:underline">{i.label}</Link>
+                      {i.poNumber && <span className="ml-2 font-mono text-xs">{i.poNumber}</span>}
+                      <span className="ml-2 text-xs text-muted-foreground">{i.status}</span>
+                    </span>
+                    <SkuRepairButton prIds={[i.prId]} label="Correct" />
+                  </div>
+                  {[...i.fixes.map((f) => ({ k: `r${f.line}`, what: f.item, from: f.from, to: f.to, po: false })), ...i.poFixes.map((f) => ({ k: `p${f.line}`, what: f.description, from: f.from, to: f.to, po: true }))].map((f) => (
+                    <div key={f.k} className="text-xs text-muted-foreground">
+                      {f.po ? "PO line · " : ""}<span className="text-foreground">{f.what}</span> — stored <span className="font-mono text-destructive">{f.from}</span>, its name is <span className="font-mono text-emerald-700">{f.to}</span>
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Orders carrying another order&apos;s state</CardTitle>

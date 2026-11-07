@@ -32,7 +32,8 @@ import type { PaymentTerm } from "@/lib/payment-terms";
 import type { CatalogSuppliers, CatalogPrices, CatalogSkuKeys } from "@/lib/po-catalog";
 import type { ScanProduct } from "@/lib/product-scan";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
-import { ItemSku } from "@/components/item-sku";
+import { ItemSku, SkuMismatch } from "@/components/item-sku";
+import { effectiveLineSku } from "@/lib/item-sku-align";
 import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
 import { StockOnHand } from "@/components/stock-on-hand";
 import { PoDateControl } from "../../purchasing/po-date-control";
@@ -431,6 +432,10 @@ export function PurchasingChain({
                  * from-stock lines, whose text the warehouse writes here).
                  */
                 const carried = (r.itemSkus?.[i] ?? "").trim();
+                // A stored code that contradicts the line's own name is not used
+                // (lib/item-sku-align) — the card says so instead.
+                const eff = effectiveLineSku(it, carried, skuIndex);
+                const warn = eff.mismatch ? <SkuMismatch stored={eff.mismatch.stored} expected={eff.mismatch.expected} /> : null;
                 const issued = parseIssuedFromStockLine(it);
                 /**
                  * How many the warehouse has of this line, from the inventory
@@ -441,14 +446,14 @@ export function PurchasingChain({
                 const onHand = (desc: string, code: string | null) =>
                   showOnHand ? <StockOnHand on={onHandFor(desc, code, onHandIndex)} /> : null;
                 if (issued) {
-                  const code = carried || skuFor(issued.desc, skuIndex);
+                  const code = eff.code;
                   return (
                     <li key={i} className="marker:text-emerald-600">
                       {issued.desc}
                       <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">
                         Issued {issued.qty}{issued.unit ? ` ${issued.unit}` : ""} from stock
                       </span>
-                      <ItemSku code={code} />
+                      <ItemSku code={code} />{warn}
                       {onHand(issued.desc, code)}
                     </li>
                   );
@@ -456,19 +461,19 @@ export function PurchasingChain({
                 if (isToPurchaseLine(it)) {
                   const line = stripToPurchasePrefix(it);
                   const desc = poLineFromPRItem(line).description;
-                  const code = carried || skuFor(desc, skuIndex);
+                  const code = eff.code;
                   return (
                     <li key={i} className="marker:text-amber-600">
                       {line}
                       <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-700">To purchase</span>
-                      <ItemSku code={code} />
+                      <ItemSku code={code} />{warn}
                       {onHand(desc, code)}
                     </li>
                   );
                 }
                 const desc = poLineFromPRItem(it).description;
-                const code = carried || skuFor(desc, skuIndex);
-                return <li key={i}>{it}<ItemSku code={code} />{onHand(desc, code)}</li>;
+                const code = eff.code;
+                return <li key={i}>{it}<ItemSku code={code} />{warn}{onHand(desc, code)}</li>;
               })}
             </ul>
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
@@ -485,7 +490,7 @@ export function PurchasingChain({
               // The warehouse can release from stock only once the Plant Manager has
               // approved the requisition; before that it's a read-only stock lookup.
               canIssueStock && !r.po && r.status === "APPROVED"
-                ? <RequisitionStockCheck prId={r.id} dept={r.dept ?? undefined} items={r.items} skus={r.items.map((it, i) => (r.itemSkus?.[i] ?? "").trim() || skuFor(poLineFromPRItem(stripToPurchasePrefix(it)).description, skuIndex))} stockItems={stockItems} canIssue />
+                ? <RequisitionStockCheck prId={r.id} dept={r.dept ?? undefined} items={r.items} skus={r.items.map((it, i) => effectiveLineSku(it, r.itemSkus?.[i], skuIndex).code ?? "")} stockItems={stockItems} canIssue />
                 : <StockAvailabilityLookup terms={r.items} />
             )}
             {r.note && <p className="mt-1 text-xs text-muted-foreground">Note: {r.note}</p>}
@@ -529,7 +534,8 @@ export function PurchasingChain({
                   // quantity still out on an unresolved supplier return. Editable.
                   const { qty, desc } = parseReqLine(it);
                   const returned = returnedQtyForLine(desc, r.returns ?? []);
-                  return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "", sku: (r.itemSkus?.[i] ?? "").trim() || null };
+                  // Receiving pre-selects by this code — never one that contradicts the line's name.
+                  return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "", sku: effectiveLineSku(it, r.itemSkus?.[i], skuIndex).code };
                 })}
                 stockItems={stockItems}
                 submitLabel="Receive & add to stock"
