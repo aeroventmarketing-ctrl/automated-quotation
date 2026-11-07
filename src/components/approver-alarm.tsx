@@ -9,6 +9,8 @@ interface Pending {
   company: string;
   action: string;
   anchor: string; // phase-card id to scroll to on the order page (e.g. "phase-2")
+  /** What is owed — rung once per key, so a new step on the same order rings again. */
+  key?: string;
 }
 
 const POLL_MS = 30_000; // re-check for new approvals every 30s while the tab is on screen
@@ -216,11 +218,14 @@ export function ApproverAlarm() {
         // The answer is in hand, so this token is now genuinely "seen".
         if (token !== null) seen = token;
         const orders = data.orders ?? [];
-        const currentIds = new Set(orders.map((o) => o.id));
+        // Remembered by WHAT is owed (`key`), not just the order: an order that moves
+        // to a new step for this viewer — a job order approved, now to issue — rings again.
+        const keyOf = (o: Pending) => o.key ?? o.id;
+        const currentIds = new Set(orders.map(keyOf));
         // Drop remembered IDs that are no longer pending (so they can ring again
         // if they come back later).
         for (const id of alarmedRef.current) if (!currentIds.has(id)) alarmedRef.current.delete(id);
-        const fresh = orders.filter((o) => !alarmedRef.current.has(o.id));
+        const fresh = orders.filter((o) => !alarmedRef.current.has(keyOf(o)));
         if (fresh.length > 0 && !stopSoundRef.current) {
           unlockAudio();
           ring(orders);
@@ -229,7 +234,7 @@ export function ApproverAlarm() {
           // locked on this first ring — the flashing popup still shows, and any
           // later tap unlocks sound for the NEXT new order.) An order that leaves
           // the pending set is forgotten above, so it can ring again if it returns.
-          orders.forEach((o) => alarmedRef.current.add(o.id));
+          orders.forEach((o) => alarmedRef.current.add(keyOf(o)));
         }
       } catch {
         /* ignore network hiccups */
