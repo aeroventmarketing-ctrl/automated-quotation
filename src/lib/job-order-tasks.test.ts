@@ -50,3 +50,22 @@ describe("one task per department — its earliest outstanding step", () => {
     expect(jobOrderTasks(wf({ stage: "production_finished" }), { ...none, fans: true })).toEqual([]);
   });
 });
+
+describe("the department head is told their job order is issued", async () => {
+  const { issuedJobOrderNotices } = await import("./job-order-tasks");
+  const issued = (at = "2026-11-07T02:00:00.000Z") => ({ status: "issued", issuedAt: at, issuedByName: "JayR Basal" });
+  it("awaiting the Plant Manager, then ready to start; gone once started", () => {
+    expect(issuedJobOrderNotices(wf({ stage: "in_production", jobOrders: { fans: issued() } }))).toEqual([
+      { dept: "fans", role: "prod_head_fans", action: "Fans & Blower job order issued — awaiting Plant Manager to receive", since: "2026-11-07T02:00:00.000Z" },
+    ]);
+    expect(issuedJobOrderNotices(wf({ stage: "jo_received", jobOrders: { fans: issued() } }))[0].action).toBe("Fans & Blower job order issued — start production");
+    expect(issuedJobOrderNotices(wf({ stage: "producing", jobOrders: { fans: { ...issued(), status: "in_production" } } }))).toEqual([]);
+  });
+  it("a top-up issued while production is underway is told too", () => {
+    const t = issuedJobOrderNotices(wf({ stage: "producing", jobOrders: { fans: { ...issued(), status: "in_production" }, motor: issued() } }));
+    expect(t.map((x) => [x.role, x.action])).toEqual([["prod_head_motor", "Motor Controller job order issued"]]);
+  });
+  it("nothing outside Phase 2", () => {
+    expect(issuedJobOrderNotices(wf({ stage: "production_finished", jobOrders: { fans: issued() } }))).toEqual([]);
+  });
+});

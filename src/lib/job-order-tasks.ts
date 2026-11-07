@@ -83,3 +83,47 @@ export function jobOrderTasks(
   }
   return out;
 }
+
+// --- Telling the department head their job order is here -------------------------
+
+/** Each department's head (workflow role), as PRODUCTION_DEPTS names them. */
+const HEAD_ROLE: Record<JobOrderDept, string> = {
+  fans: "prod_head_fans",
+  duct: "prod_head_duct",
+  accessories: "prod_head_accessories",
+  motor: "prod_head_motor",
+};
+
+export interface IssuedJobOrderNotice {
+  dept: JobOrderDept;
+  /** The head who is told — a workflow role key. */
+  role: string;
+  /** "Fans & Blower job order issued — awaiting Plant Manager to receive", … */
+  action: string;
+  /** When it was issued (ISO). */
+  since?: string;
+}
+
+/**
+ * The owner: *"Once issue job order button is pressed. Notify in pending my
+ * action of the corresponding head that the job order is issued"* — *"just
+ * notify the department head that there is a job order"*, on the dashboard and
+ * the alarm, at the first release and for every later top-up.
+ *
+ * One notice per department whose job order is ISSUED and not yet started — it
+ * clears when the head presses Start production. Its wording says where the
+ * order is: still waiting for the Plant Manager to receive the job orders, or
+ * received and ready to start. Read-only: nothing about who acts changes.
+ */
+export function issuedJobOrderNotices(wf: Pick<OrderWorkflow, "stage" | "jobOrders">): IssuedJobOrderNotice[] {
+  if (!JOB_ORDER_STAGES.has(wf.stage)) return [];
+  const out: IssuedJobOrderNotice[] = [];
+  for (const d of DEPTS) {
+    const jo = wf.jobOrders?.[d.key];
+    if (jo?.status !== "issued") continue;
+    const tail =
+      wf.stage === "in_production" ? " — awaiting Plant Manager to receive" : wf.stage === "jo_received" ? " — start production" : "";
+    out.push({ dept: d.key, role: HEAD_ROLE[d.key], action: `${d.label} job order issued${tail}`, since: jo.issuedAt || undefined });
+  }
+  return out;
+}

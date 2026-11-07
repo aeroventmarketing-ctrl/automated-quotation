@@ -18,7 +18,7 @@ import { getAlertGoLive, alertPasses, type AlertGoLive } from "@/lib/alert-goliv
 // blacklist rather than a whitelist, lives in `lib/slim-classification`, which
 // the other six confirmed-order readers share.
 import { UNREAD_CLASSIFICATION_KEYS } from "@/lib/slim-classification";
-import { jobOrderTasks, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
+import { jobOrderTasks, issuedJobOrderNotices, JOB_ORDER_STAGES } from "@/lib/job-order-tasks";
 import { quotationJobOrderDepts } from "@/lib/job-order-autogen";
 
 export interface PendingApproval {
@@ -187,12 +187,22 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
             .filter((t) => passesNotificationBaseline(t.since, baseline) && alertPasses(t.since, golive))
             .map((t) => t.action)
         : [];
+    // …and the department head, that their job order is issued — every issue,
+    // the first release and later top-ups, until they start production.
+    const issuedNotices = alertPasses(q.createdAt, golive)
+      ? issuedJobOrderNotices(wf)
+          .filter((n) => userHasWorkflowRole(assignments, user.id, n.role as WorkflowRoleKey))
+          .filter((n) => passesNotificationBaseline(n.since, baseline) && alertPasses(n.since, golive))
+          .map((n) => n.action)
+      : [];
 
     const orderAction = ((): string | null => {
       const pend = pendingStep(wf, stockOnly, stockOnly && isDuctHardwareStockOnly(q.items), wf.officePickup === true, wf.fulfillmentMode === "plant_pickup", boughtInPurchaseFor(q.id));
       if (!pend) return null;
       // The department steps above say what "Issue job orders" says, per department.
       if (joActions.length > 0 && pend.action === "Issue job orders") return null;
+      // The head's "… job order issued — start production" already says it.
+      if (issuedNotices.length > 0 && pend.action === "Start production") return null;
       // Production underway ("Complete production") is ongoing work, not an approval
       // awaiting a decision — don't ring the alarm for it once production has
       // started. It still appears as a task on My Dashboard; this only silences the
@@ -232,7 +242,7 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
     // One entry per order (the alarm opens the order from it): its own step and
     // its job-order steps together. `key` names WHAT is owed, so a new step on an
     // order that already rang — Approve → Issue — rings again.
-    const actions = [...(orderAction ? [orderAction] : []), ...joActions];
+    const actions = [...(orderAction ? [orderAction] : []), ...joActions, ...issuedNotices];
     if (actions.length === 0) continue;
     out.push({
       id: q.id,
