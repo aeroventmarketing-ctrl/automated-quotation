@@ -1,3 +1,42 @@
+## 2026-11-07 · Request lines keep their own SKU — edits, splits and partial issues no longer shift codes
+
+The owner, on PO-AFBM20260001051: *"Sku223 and sku253 is different in sku and description. I like to
+know what happened"* — then *"Proceed to fix"*. (Fix to the frozen Phase 3/4 areas, approved.)
+
+**What happened.** A request stores one catalogue code per line (`itemSkus`), aligned BY POSITION with
+its lines, and the stored code wins over a lookup by name — for the SKU chip, the "N in stock"
+count, the PO line's code (price / supplier matching) and the stock item **Receive & Add Stock**
+pre-selects. Three writes rewrote the lines but not the codes:
+1. **Admin Edit of the request lines** (`adminEditPurchaseRequestItems`) — the old codes stayed at
+   their positions, so a changed line kept the code of what used to be there. Most likely the cause
+   on 1051 (lines 2 and 5 wrong, 3 and 4 right). It also wrote no activity entry.
+2. **Split for a second supplier** — the moved lines left their codes behind (none on the new request,
+   the old ones misaligned on the original).
+3. **Partial issue from stock** — one line became two (issued + shortfall) and every later code
+   shifted down a line.
+
+**The fix.**
+- All three now keep the codes with their lines (`lib/item-sku-align.ts`, tested): an edit keeps the
+  code of every unchanged line and looks up any changed / new line by its name (an old code is never
+  carried onto changed text); a split moves each line's code with it; a partial issue gives both
+  halves the line's code. Admin edits are now recorded (`purchase.edit_items`, removed / added lines).
+- **"SKU doesn't match · was CON000223"** — on any request line whose stored code contradicts its own
+  name (the name is a catalogue item with a different code), the card shows the warning and USES the
+  name's code for the chip, the stock count, the stock check and the receiving pre-selection, so
+  nothing is counted or received into the other item. A name the catalogue doesn't know can't be
+  checked and is left alone.
+- **Admin → Data check · "Request lines carrying another item's SKU"** — every request (and PO line)
+  whose stored code contradicts its line, with **Correct** per request and **Correct all**: sets the
+  code the name gives on the request and on its PO's lines (every member of a combined PO), recomputed
+  on the server, recorded as `purchase.sku_repair`.
+
+Verified on the role harness (stock seeded with DRILL BIT 8.5mm = CON000223, DRILL BIT 8.5mm - COBALT =
+CON000300, CUTTING OFF BLADE 14"Ø = CON000254, HACKSAW BLADE = CON000253): a drifted request showed
+"SKU CON000300 · SKU doesn't match · was CON000223" and "CON000254 · was CON000253"; Data check listed
+both lines and **Correct** fixed them (then read Clear), logged. An admin edit changing one line and
+deleting another saved `[CON000300, 10001]` and logged the edit; a partial issue (6 asked, 4 in stock)
+gave `[10001, 10001, CON000254]`; a split moved CON000300 with its line.
+
 ## 2026-11-05 · Rush orders — flagged, shown everywhere, sorted first, stamped on the paper
 
 The owner: *"Sometimes we have a rush client order. I need to show it to every role and every stage
