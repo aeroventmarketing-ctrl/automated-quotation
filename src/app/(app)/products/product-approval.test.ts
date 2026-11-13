@@ -83,6 +83,8 @@ run("a product change waits for the price owner", () => {
   beforeEach(async () => {
     await prisma.productChange.deleteMany({});
     await prisma.product.deleteMany({});
+    await prisma.stockPriceChange.deleteMany({});
+    await prisma.stockItem.deleteMany({ where: { name: { startsWith: "BELT" } } });
   });
 
   it("applies the parked change verbatim — the proposed price included", async () => {
@@ -186,5 +188,62 @@ run("a product change waits for the price owner", () => {
     expect(await updateProduct({ id: p.id, ...belt(240) })).toEqual({ ok: true, applied: true });
     expect(((await live())!.suppliers as { price?: number }[])[0].price).toBe(240);
     expect(await prisma.productChange.count()).toBe(0);
+  });
+
+  // The owner: "price movement is not updating when I approve the price change"
+  // — the inventory item of the same name gets a Supplier price row, and its
+  // unit cost becomes the highest supplier price.
+  describe("the inventory item follows an approved supplier price", () => {
+    const stock = () => prisma.stockItem.findFirst({ where: { name: "BELT B-50" } });
+    const rows = () => prisma.stockPriceChange.findMany({ orderBy: { createdAt: "asc" } });
+
+    it("logs the supplier price row and sets the unit cost to the highest price", async () => {
+      await prisma.stockItem.create({ data: { name: "BELT B-50", unit: "pc", unitCost: 210, sellPrice: 300 } });
+      const p = await seedThenPropose(128); // the owner's own Add leaves the cost at 210 — it already is
+      await prisma.stockPriceChange.deleteMany({});
+      // A second supplier, higher, on the same proposal.
+      be("purchaser");
+      await withdrawProductChange((await pending())!.id);
+      await updateProduct({ id: p.id, ...belt(128), suppliers: [{ supplierId: "", company: WINGS, price: 128 }, { supplierId: "", company: "ACME BELTS", price: 150 }] });
+
+      be("payment_approver");
+      await approveProductChange((await pending())!.id);
+
+      const it_ = (await stock())!;
+      expect(Number(it_.unitCost)).toBe(150);
+      expect(Number(it_.sellPrice)).toBe(300); // the selling price is the owner's own
+      const [r] = await rows();
+      expect(r.source).toBe("supplier");
+      expect(Number(r.oldUnitCost)).toBe(210);
+      expect(Number(r.newUnitCost)).toBe(150);
+      expect(r.byName).toBe("Allan Ramos");
+      expect(r.approvedByName).toBe("Ana Cruz");
+      expect(r.note).toContain(`${WINGS} ₱210 → ₱128`);
+      expect(r.note).toContain("ACME BELTS (new) ₱150");
+    });
+
+    it("leaves the item untouched while the change waits, and when it is rejected", async () => {
+      await prisma.stockItem.create({ data: { name: "BELT B-50", unit: "pc", unitCost: 210, sellPrice: 300 } });
+      await seedThenPropose(128);
+      await prisma.stockPriceChange.deleteMany({});
+      expect(Number((await stock())!.unitCost)).toBe(210);
+      be("payment_approver");
+      await rejectProductChange((await pending())!.id, "no quote");
+      expect(Number((await stock())!.unitCost)).toBe(210);
+      expect(await rows()).toHaveLength(0);
+    });
+
+    it("follows the owner's own Save the same way, with no separate approver", async () => {
+      be("admin");
+      await createProduct(belt(210));
+      await prisma.stockItem.create({ data: { name: "belt b-50", unit: "pc", unitCost: 200, sellPrice: 300 } });
+      const p = (await live())!;
+      await updateProduct({ id: p.id, ...belt(240) });
+      expect(Number((await prisma.stockItem.findFirst({ where: { name: "belt b-50" } }))!.unitCost)).toBe(240);
+      const [r] = await rows();
+      expect(r.source).toBe("supplier");
+      expect(r.approvedByName).toBeNull();
+      await prisma.stockItem.deleteMany({ where: { name: "belt b-50" } });
+    });
   });
 });

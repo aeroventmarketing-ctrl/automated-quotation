@@ -18,7 +18,7 @@ export interface Prices {
   sellPrice: number;
 }
 
-export type PriceSource = "approval" | "direct" | "import" | "create" | "merge";
+export type PriceSource = "approval" | "direct" | "import" | "create" | "merge" | "supplier";
 
 export const PRICE_SOURCE_LABEL: Record<PriceSource, string> = {
   approval: "Approved edit",
@@ -26,6 +26,7 @@ export const PRICE_SOURCE_LABEL: Record<PriceSource, string> = {
   import: "Excel import",
   create: "New item",
   merge: "Merged duplicates",
+  supplier: "Supplier price",
 };
 
 export interface PriceHistoryEntry {
@@ -51,7 +52,7 @@ export interface PriceHistoryEntry {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function coercePriceSource(v: unknown): PriceSource {
-  return v === "approval" || v === "direct" || v === "import" || v === "create" || v === "merge" ? v : "direct";
+  return v === "approval" || v === "direct" || v === "import" || v === "create" || v === "merge" || v === "supplier" ? v : "direct";
 }
 
 /** Did either price move? Compared to the centavo, as the columns store it. */
@@ -156,7 +157,10 @@ export function maskPriceEntry(e: PriceHistoryEntry, see: { cost: boolean; sell:
   if (!see.cost && !see.sell) return null;
   const costMoved = e.oldUnitCost == null || round2(e.oldUnitCost) !== round2(e.newUnitCost);
   const sellMoved = e.oldSellPrice == null || round2(e.oldSellPrice) !== round2(e.newSellPrice);
-  if (!((see.cost && costMoved) || (see.sell && sellMoved))) return null;
+  // A supplier price row stands even when the unit cost didn't move (the
+  // highest supplier price was already the cost): the supplier prices did.
+  const supplierRow = e.source === "supplier" && see.cost;
+  if (!supplierRow && !((see.cost && costMoved) || (see.sell && sellMoved))) return null;
   return {
     ...e,
     ...(see.cost ? {} : { oldUnitCost: null, newUnitCost: 0 }),

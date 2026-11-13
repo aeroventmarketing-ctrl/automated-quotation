@@ -86,4 +86,9 @@ describe("what a viewer may see", () => {
   it("nothing to those who see no prices", () => {
     expect(maskPriceEntry(e, { cost: false, sell: false })).toBeNull();
   });
+  it("a supplier price row stands for cost viewers even when the unit cost was already the highest", () => {
+    const sup: PriceHistoryEntry = { ...e, source: "supplier", oldUnitCost: 100, newUnitCost: 100, oldSellPrice: 150, newSellPrice: 150 };
+    expect(maskPriceEntry(sup, { cost: true, sell: false })).not.toBeNull();
+    expect(maskPriceEntry(sup, { cost: false, sell: true })).toBeNull();
+  });
 });

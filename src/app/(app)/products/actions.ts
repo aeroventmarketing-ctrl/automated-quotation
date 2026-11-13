@@ -19,6 +19,8 @@ import { coerceProductSuppliers, type ProductSupplierLink } from "@/lib/products
 import { planSupplierWiring } from "@/lib/supplier-link";
 import { getSuppliers, rememberSupplier, isPricedSupplierName } from "@/lib/suppliers";
 import { setOfficeResaleProduct } from "@/lib/office-resale";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
+import { syncStockCostFromSuppliers } from "@/lib/supplier-cost-sync-data";
 import { productChangeSummary, type ProductChangePayload } from "@/lib/product-change";
 
 async function requireProductManager() {
@@ -174,8 +176,10 @@ export async function createProduct(input: z.infer<typeof productSchema>): Promi
   return asSaveResult(async () => {
     await requireProductShaper();
     const d = productSchema.parse(input);
+    const user = await getCurrentUser();
     await prisma.$transaction(async (tx) => {
       const sku = await nextProductSku(tx);
+      const suppliers = coerceProductSuppliers(d.suppliers);
       await tx.product.create({
         data: {
           name: d.name,
@@ -183,12 +187,22 @@ export async function createProduct(input: z.infer<typeof productSchema>): Promi
           category: d.category || null,
           note: d.note || null,
           sku,
-          suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
+          suppliers: suppliers as unknown as Prisma.InputJsonValue,
         },
+      });
+      await syncStockCostFromSuppliers(tx, {
+        names: [d.name],
+        unit: d.unit || "pcs",
+        before: [],
+        after: suppliers,
+        byName: user?.name ?? "Unknown",
+        approvedByName: null,
       });
     });
     revalidateProductCatalogue();
+    revalidateStockCatalogue();
   revalidatePath("/products");
+    revalidatePath("/inventory");
     return APPLIED;
   });
 }
@@ -198,18 +212,36 @@ export async function updateProduct(input: { id: string } & z.infer<typeof produ
     const user = await requireProductManager();
     const d = productSchema.parse(input);
     if (!(await canSetCataloguePrice())) return park(user, "UPDATE", input.id, asPayload(d));
-    await prisma.product.update({
-      where: { id: input.id },
-      data: {
-        name: d.name,
-        unit: d.unit || "pcs",
-        category: d.category || null,
-        note: d.note || null,
-        suppliers: coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue,
-      },
+    // The price owner's own edit is its own approval — the inventory item
+    // follows it exactly as it follows an approved change.
+    await prisma.$transaction(async (tx) => {
+      const prior = await tx.product.findUnique({ where: { id: input.id }, select: { name: true, suppliers: true } });
+      const after = coerceProductSuppliers(d.suppliers);
+      await tx.product.update({
+        where: { id: input.id },
+        data: {
+          name: d.name,
+          unit: d.unit || "pcs",
+          category: d.category || null,
+          note: d.note || null,
+          suppliers: after as unknown as Prisma.InputJsonValue,
+        },
+      });
+      if (prior) {
+        await syncStockCostFromSuppliers(tx, {
+          names: [prior.name, d.name],
+          unit: d.unit || "pcs",
+          before: coerceProductSuppliers(prior.suppliers),
+          after,
+          byName: user.name ?? "Unknown",
+          approvedByName: null,
+        });
+      }
     });
     revalidateProductCatalogue();
+    revalidateStockCatalogue();
   revalidatePath("/products");
+    revalidatePath("/inventory");
     return APPLIED;
   });
 }
@@ -273,21 +305,32 @@ export async function approveProductChange(id: string): Promise<ProductSaveResul
     const d = c.payload as unknown as ProductChangePayload;
     const suppliers = coerceProductSuppliers(d.suppliers) as unknown as Prisma.InputJsonValue;
 
+    // The approved supplier prices reach the inventory item of the same name:
+    // a "Supplier price" row in its Price movements, and its unit cost set to
+    // the highest supplier price (lib/supplier-cost-sync).
+    const stockSync = {
+      unit: d.unit || "pcs",
+      after: coerceProductSuppliers(d.suppliers),
+      byName: c.proposedByName,
+      approvedByName: user.name,
+    };
     await prisma.$transaction(async (tx) => {
       if (c.kind === "CREATE") {
         const sku = await nextProductSku(tx);
         await tx.product.create({
           data: { name: d.name, unit: d.unit || "pcs", category: d.category, note: d.note, sku, suppliers },
         });
+        await syncStockCostFromSuppliers(tx, { ...stockSync, names: [d.name], before: [] });
       } else if (c.kind === "UPDATE") {
         // The product may have been removed while the change waited — say so
         // rather than resurrect it behind the reviewer's back.
-        const exists = await tx.product.findUnique({ where: { id: c.productId! }, select: { id: true } });
+        const exists = await tx.product.findUnique({ where: { id: c.productId! }, select: { id: true, name: true, suppliers: true } });
         if (!exists) throw new Error("That product no longer exists.");
         await tx.product.update({
           where: { id: c.productId! },
           data: { name: d.name, unit: d.unit || "pcs", category: d.category, note: d.note, suppliers },
         });
+        await syncStockCostFromSuppliers(tx, { ...stockSync, names: [exists.name, d.name], before: coerceProductSuppliers(exists.suppliers) });
       } else {
         await tx.product.update({ where: { id: c.productId! }, data: { active: false } });
       }
@@ -306,7 +349,9 @@ export async function approveProductChange(id: string): Promise<ProductSaveResul
       href: "/products",
     });
     revalidateProductCatalogue();
+    revalidateStockCatalogue();
   revalidatePath("/products");
+    revalidatePath("/inventory");
     revalidatePath("/my-dashboard");
     return APPLIED;
   });

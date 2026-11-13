@@ -31,6 +31,8 @@ export interface PriceChangeInput {
   approvedByName?: string | null;
   stockActionId?: string | null;
   note?: string | null;
+  /** Log even when neither price moved — a supplier price row records the supplier prices that did. */
+  force?: boolean;
 }
 
 /**
@@ -40,7 +42,7 @@ export interface PriceChangeInput {
  * very price edit it was logging.
  */
 export async function logPriceChange(db: Db, c: PriceChangeInput): Promise<void> {
-  if (c.before && !pricesDiffer(c.before, c.after)) return;
+  if (c.before && !c.force && !pricesDiffer(c.before, c.after)) return;
   if (!c.before && c.after.unitCost <= 0 && c.after.sellPrice <= 0) return; // a new, unpriced item
   const [row] = await db.$queryRaw<{ ok: boolean }[]>`select to_regclass('public."StockPriceChange"') is not null as ok`;
   if (!row?.ok) return;
