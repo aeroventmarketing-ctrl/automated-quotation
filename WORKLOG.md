@@ -1,3 +1,35 @@
+## 2026-11-13 · An approved supplier price reaches the Inventory item: a Price movements row, unit cost = highest
+
+The owner, on Inventory · History · MS PLATE 3/16" (4.0mm) · Price movements: *"price movement is not
+updating when I approve the price change"* — and chose **"Row + unit cost = highest"**: list the
+supplier price change there, and set the item's unit cost to the highest supplier price after the
+change (TKL ₱3,865 vs Metal Exponent ₱3,800 → unit cost ₱3,865).
+
+**Why it didn't show.** Approving a Products change wrote only `Product.suppliers`. Inventory's price
+history logs `StockItem` price writes, and nothing touched the stock item — so the approval never
+reached its Price movements, and its unit cost stayed where it was.
+
+**Now.** When a supplier price change is applied — the Admin / Payment Approver **approving** a
+proposed change, or saving / adding a product themselves — every active inventory item of the same
+name (the join the PO price catalogue already uses) gets:
+- a **"Supplier price"** row in Price movements: *Supplier price: TKL Steel ₱3,800 → ₱3,865 · unit
+  cost = highest supplier price (₱3,865)*, Changed by = who proposed it, Approved by = who approved
+  it (blank for the owner's own save);
+- its **unit cost set to the highest supplier price** on the product after the change. The selling
+  price is not touched.
+- The row is logged even when the unit cost was already the highest (the supplier prices still
+  moved). Nothing is logged for a change that moves no supplier price (a rename, a note).
+- Safeguards: the unit cost is **kept** (and the row says why) when Products and Inventory count in
+  different units (a per-kg price is not a per-sheet cost), or when no supplier is priced.
+- A rejected or still-pending change does nothing to the item. The Excel product import is unchanged.
+
+The inventory unit cost is what stock is valued at and what in-house transfers / P&L cost read, so
+those follow the approved price from now on. Same authority as before: only the Admin / Payment
+Approver can set an inventory price, and only they approve a product change.
+
+`lib/supplier-cost-sync.ts` (the rule, tested), `lib/supplier-cost-sync-data.ts`, wired into
+`approveProductChange` / `updateProduct` / `createProduct`; `PriceSource` gains `"supplier"`.
+
 ## 2026-11-07 · The department head is told when their job order is issued
 
 The owner: *"Once issue job order button is pressed. Notify in pending my action of the corresponding
