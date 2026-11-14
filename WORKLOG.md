@@ -1,3 +1,35 @@
+## 2026-11-14 · Purchasing · Approved: lines free stock already covers are left off the PO
+
+The owner (approving this change to the frozen Phase 4): *"In approved purchasing tab, if requested
+number of item is greater or equal in available stock in inventory, show the row so it can be
+purchased or included in purchase order. If requested number of item is lesser than the available
+stock in inventory, remove the row so it will not be included in the purchase order."* Clarified:
+**hide, auto-return**; a line that stays is bought at its **full requested quantity**; measured
+against **free stock** (on hand − reservations); applies to order MRFs, department requisitions,
+replenishment top-ups and combined POs.
+
+- On a request in the **Approved** tab (approved, not yet budgeted), a line whose requested quantity
+  is **below** the free stock is greyed and struck through with *Covered by stock — 100 pc free · not
+  purchased*. Equal or more stays purchasable, as the owner put it ("greater or equal").
+- **Create Purchase Order** drafts only the purchasable lines (SKUs kept aligned). When every line is
+  covered, the card says *nothing to purchase; issue it from the warehouse* and offers no Create PO.
+- **Combine builder:** covered lines are struck through and left out of the new combined PO; a
+  request with nothing left to buy can't be ticked; a suggested combine that free stock reduces to one
+  request says so instead of opening.
+- **A combined PO already saved** in the Approved tab is **flagged, not changed**: *Covered by stock —
+  N free · consider removing*. Taking a line off a saved PO is the Purchaser's Edit (and an amount
+  change at Voucher ready sends it back for approval), never done behind their back.
+- **Nothing is deleted.** The line stays on the request; when free stock drops to the requested
+  quantity or below, it is purchasable again on its own. The warehouse issues covered lines from stock
+  as before (the MRF handshake is unchanged).
+- **Never hidden on a guess:** no inventory item with the line's SKU, an unreadable quantity, or
+  different units on the two sides (2 sheets vs 50 kg) → stays purchasable.
+- Pending, Budgeted and later tabs, and the order page's Phase 4 card, are unchanged.
+
+`lib/stock-covered.ts` (tested), used by `orders/[id]/purchasing-chain.tsx` and
+`purchasing/combined-purchasing.tsx` (`coverByStock`, switched on by the Purchasing workspace);
+`CombinableItem` now carries `itemSkus`.
+
 ## 2026-11-13 · Sales Dashboard: "Sales this month" opens the monthly sales history
 
 The owner: *"Make the sales this month tile clickable, once click it will show the monthly sales

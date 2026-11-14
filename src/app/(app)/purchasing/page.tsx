@@ -404,6 +404,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
           deptLabel: deptLabelOf(pr.dept),
           mrfNo: mrfNoOf(pr.quotationId, pr.mrfId),
           items,
+          itemSkus: Array.isArray(pr.itemSkus) ? (pr.itemSkus as unknown[]).map((v) => String(v ?? "")) : [],
           supplierCompanies,
           canDelete: canDeleteStatus(pr.status),
         };

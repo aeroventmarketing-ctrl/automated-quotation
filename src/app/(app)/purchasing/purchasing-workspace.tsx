@@ -492,6 +492,7 @@ export function PurchasingWorkspace({
           showAmounts={showAmounts}
           showSupplier={showSupplier}
           showOnHand={showOnHand}
+          coverByStock
           supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
           highlightId={highlightId}
         />
@@ -565,6 +566,7 @@ export function PurchasingWorkspace({
                       showAmounts={showAmounts}
                       showSupplier={showSupplier}
                       showOnHand={showOnHand}
+          coverByStock
           supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                       adminManage={admin}
                       highlightId={highlightId}
@@ -612,6 +614,7 @@ export function PurchasingWorkspace({
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
                   showOnHand={showOnHand}
+          coverByStock
           supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                   adminManage={admin}
                   highlightId={highlightId}
@@ -649,6 +652,7 @@ export function PurchasingWorkspace({
                   showStockCheck={canCheckStock}
                   canIssueStock={canIssueStock}
                   showOnHand={showOnHand}
+          coverByStock
           supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                   adminManage={admin}
                   highlightId={highlightId}
