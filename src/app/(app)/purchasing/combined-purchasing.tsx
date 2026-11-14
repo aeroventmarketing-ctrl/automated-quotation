@@ -15,7 +15,9 @@ import { formatCurrency } from "@/lib/utils";
 import { poLineAmount, poTotals, poHasEwt, poLinesFromPRItems, displayPRItems, type POLine, type EwtMode } from "@/lib/purchase-order";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
-import type { PRStatus } from "@/lib/purchasing";
+import { statusBucket, isBudgetCommitted, type PRStatus } from "@/lib/purchasing";
+import { effectiveLineSku } from "@/lib/item-sku-align";
+import { coverForItems, coveredLabel, isCoveredByStock, withoutCovered, type LineCover } from "@/lib/stock-covered";
 import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { PurchaseReturnsPanel } from "./purchase-returns-panel";
 import { PurchaseReconcilePanel } from "./purchase-reconcile-panel";
@@ -44,6 +46,8 @@ export interface CombinableItem {
   deptLabel: string;
   mrfNo: string | null;
   items: string[];
+  /** SKU per line of `items`, as recorded (aligned by index). */
+  itemSkus?: string[];
   supplierCompanies: string[];
   canDelete: boolean;
 }
@@ -148,6 +152,7 @@ export function CombinedPurchasing({
   showSupplier = true,
   showOnHand = false,
   supplierPaymentsEditable = false,
+  coverByStock = false,
   highlightId,
 }: {
   combinable: CombinableItem[];
@@ -175,10 +180,25 @@ export function CombinedPurchasing({
   showOnHand?: boolean;
   /** Purchasing's Budgeted tab, for the roles that record them: add / remove supplier payments. */
   supplierPaymentsEditable?: boolean;
+  /**
+   * Leave lines free stock already covers off the combined PO (lib/stock-covered):
+   * struck through in the builder and not drafted; flagged on an Approved
+   * combined PO. Needs `showOnHand`.
+   */
+  coverByStock?: boolean;
   /** A combined-PO anchor id to scroll to / highlight (deep-link from a notification). */
   highlightId?: string;
 }) {
   const router = useRouter();
+  const coverOn = coverByStock && showOnHand;
+  const skuIndex = useMemo(() => buildSkuIndex({ stock: coverOn ? stockItems : [], products: coverOn ? scanProducts ?? [] : [] }), [coverOn, stockItems, scanProducts]);
+  const onHandIndex = useMemo(() => buildOnHandIndex(coverOn ? stockItems : []), [coverOn, stockItems]);
+  // Per combinable request: which lines free stock covers (all false when off).
+  const coverOf = (c: CombinableItem): LineCover =>
+    coverOn
+      ? coverForItems(c.items, c.items.map((it, i) => effectiveLineSku(it, (c.itemSkus?.[i] ?? "").trim(), skuIndex).code), onHandIndex)
+      : { covered: c.items.map(() => false), stock: c.items.map(() => null), purchasable: c.items.length };
+  const purchasableItems = (c: CombinableItem): string[] => withoutCovered(c.items, c.itemSkus, coverOf(c).covered).items;
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [building, setBuilding] = useState(false);
   // Snapshot of the requests being combined, captured when the build starts. The
@@ -219,15 +239,24 @@ export function CombinedPurchasing({
   }
   function acceptSuggestion(s: SupplierSuggestion) {
     setSel(new Set(s.prIds));
-    startBuilding(combinable.filter((c) => s.prIds.includes(c.id)), s.company);
+    const items = combinable.filter((c) => s.prIds.includes(c.id) && purchasableItems(c).length > 0);
+    // Free stock may cover all but one of the suggested requests — no combine left.
+    if (items.length < 2) {
+      window.alert("Free stock now covers the other requests in this suggestion — there is nothing left to combine.");
+      return;
+    }
+    startBuilding(items, s.company);
   }
+
+  // Ticked requests that still have something to buy.
+  const pickable = combinable.filter((c) => sel.has(c.id) && purchasableItems(c).length > 0);
 
   return (
     <div className="space-y-3">
       {/* Existing combined POs */}
       {batches.map((b) => (
         <div key={b.anchorId} id={`req-${b.anchorId}`} className={`scroll-mt-24 rounded-lg ${highlightId === b.anchorId ? "ring-2 ring-primary ring-offset-2" : ""}`}>
-          <BatchCardView batch={b} showOnHand={showOnHand} supplierPaymentsEditable={supplierPaymentsEditable} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
+          <BatchCardView batch={b} showOnHand={showOnHand} coverByStock={coverOn} supplierPaymentsEditable={supplierPaymentsEditable} stockItems={stockItems} suppliers={suppliers} paymentTerms={paymentTerms} poDefaultRemarks={poDefaultRemarks} catalogPrices={catalogPrices} catalogSuppliers={catalogSuppliers} catalogSkuKeys={catalogSkuKeys} scanProducts={scanProducts} admin={admin} showAmounts={showAmounts} showSupplier={showSupplier} />
         </div>
       ))}
 
@@ -239,8 +268,8 @@ export function CombinedPurchasing({
             <div className="space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-medium">Combine requests into one PO</div>
-                <Button size="sm" disabled={sel.size < 2} onClick={() => startBuilding(combinable.filter((c) => sel.has(c.id)), "")}>
-                  Combine {sel.size > 0 ? `${sel.size} ` : ""}into one PO
+                <Button size="sm" disabled={pickable.length < 2} onClick={() => startBuilding(pickable, "")}>
+                  Combine {pickable.length > 0 ? `${pickable.length} ` : ""}into one PO
                 </Button>
               </div>
 
@@ -261,15 +290,41 @@ export function CombinedPurchasing({
 
               <p className="text-xs text-muted-foreground">Tick the open requests going to the same supplier — across any orders — then issue a single PO for all of them.</p>
               <div className="divide-y rounded-md border">
-                {combinable.map((c) => (
+                {combinable.map((c) => {
+                  const cover = coverOf(c);
+                  const anyCovered = cover.covered.some(Boolean);
+                  // Every line covered by free stock — nothing of it to put on a PO.
+                  const nothingToBuy = anyCovered && cover.purchasable === 0;
+                  return (
                   <div key={c.id} className="flex items-start gap-2 p-2 text-sm hover:bg-accent/40">
-                    <label className="flex flex-1 cursor-pointer items-start gap-2">
-                      <input type="checkbox" className="mt-1 accent-[#ED1C24]" checked={sel.has(c.id)} onChange={() => toggle(c.id)} />
+                    <label className={`flex flex-1 items-start gap-2 ${nothingToBuy ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+                      <input type="checkbox" className="mt-1 accent-[#ED1C24]" checked={sel.has(c.id) && !nothingToBuy} disabled={nothingToBuy} onChange={() => toggle(c.id)} />
                       <span className="flex-1">
                         <span className="font-medium">{c.deptLabel}</span>
                         {c.mrfNo && <span className="ml-1 text-muted-foreground">MRF #{c.mrfNo}</span>}
                         <span className="ml-1 text-xs text-muted-foreground">· {c.orderLabel}</span>
-                        <span className="block text-xs text-muted-foreground">{displayPRItems(c.items).join(", ")}</span>
+                        {anyCovered ? (
+                          <span className="block text-xs text-muted-foreground">
+                            {c.items.map((it, i) => {
+                              // Issued-from-stock records aren't listed here, as before.
+                              const text = displayPRItems([it])[0];
+                              if (text == null) return null;
+                              const sep = c.items.slice(i + 1).some((x) => displayPRItems([x]).length > 0) ? ", " : "";
+                              return cover.covered[i] && cover.stock[i] ? (
+                                <span key={i}>
+                                  <span className="line-through opacity-70">{text}</span>
+                                  <span className="ml-1 rounded bg-emerald-600/15 px-1 py-0.5 text-[10px] text-emerald-700">{coveredLabel(cover.stock[i]!)}</span>
+                                  {sep}
+                                </span>
+                              ) : (
+                                <span key={i}>{text}{sep}</span>
+                              );
+                            })}
+                            {nothingToBuy && <span className="block text-emerald-700">Every line is covered by free stock — nothing to purchase.</span>}
+                          </span>
+                        ) : (
+                          <span className="block text-xs text-muted-foreground">{displayPRItems(c.items).join(", ")}</span>
+                        )}
                         {c.supplierCompanies.length > 0 && (
                           <span className="mt-0.5 flex flex-wrap gap-1">
                             {c.supplierCompanies.map((co) => <Badge key={co} variant="secondary" className="font-normal">{co}</Badge>)}
@@ -288,14 +343,15 @@ export function CombinedPurchasing({
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (
             <CombineForm
               title={`New combined PO · ${buildItems.length} requests`}
               submitLabel="Create combined PO"
-              initialLines={buildItems.flatMap((it) => poLinesFromPRItems(it.items))}
+              initialLines={buildItems.flatMap((it) => poLinesFromPRItems(purchasableItems(it)))}
               presetCompany={presetCompany}
               suppliers={suppliers}
               paymentTerms={paymentTerms}
@@ -315,7 +371,7 @@ export function CombinedPurchasing({
   );
 }
 
-function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true, showOnHand = false, supplierPaymentsEditable = false }: { batch: BatchCard; showOnHand?: boolean; supplierPaymentsEditable?: boolean; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
+function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRemarks, catalogPrices, catalogSuppliers, catalogSkuKeys = {}, scanProducts, admin = false, showAmounts = true, showSupplier = true, showOnHand = false, coverByStock = false, supplierPaymentsEditable = false }: { batch: BatchCard; showOnHand?: boolean; coverByStock?: boolean; supplierPaymentsEditable?: boolean; stockItems: StockOpt[]; suppliers: Supplier[]; paymentTerms: PaymentTerm[]; poDefaultRemarks: string; catalogPrices: CatalogPrices; catalogSuppliers: CatalogSuppliers; catalogSkuKeys?: CatalogSkuKeys; scanProducts: ScanProduct[]; admin?: boolean; showAmounts?: boolean; showSupplier?: boolean }) {
   /** Name → item code, for the SKU beside each PO line ON SCREEN. The supplier's
    *  copy is built from `line.description` alone and never sees it. */
   const skuIndex = useMemo(() => buildSkuIndex({ stock: stockItems, products: scanProducts }), [stockItems, scanProducts]);
@@ -331,6 +387,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const awaiting = batch.actions.find((a) => !a.canAct);
   // The Purchaser and an admin, while in the Pending or Approved tab — lib/po-edit-access.
   const editable = batch.canManagePO && canEditCombinedPo({ admin, purchaser: true, status: batch.status });
+  // A combined PO in the Approved tab (not yet budgeted) — lib/stock-covered.
+  const batchCoverRule = coverByStock && showOnHand && statusBucket(batch.status) === "approved" && !isBudgetCommitted(batch.status);
 
   async function run(stepKey: string) {
     setBusy(stepKey); setErr(null);
@@ -435,6 +493,17 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
                   {l.description}
                   <ItemSku code={skuFor(l.description, skuIndex)} />
                   {showOnHand && <StockOnHand on={onHandFor(l.description, skuFor(l.description, skuIndex), onHandIndex)} />}
+                  {/* Already on a saved PO, so it is flagged rather than taken off: changing
+                      a PO's lines is the Purchaser's edit (and an amount change can send it
+                      back for approval) — never done behind their back. */}
+                  {batchCoverRule && (() => {
+                    const on = onHandFor(l.description, l.sku || skuFor(l.description, skuIndex), onHandIndex);
+                    return on && isCoveredByStock(Number(l.qty), l.unit, on) ? (
+                      <span className="ml-1 rounded bg-emerald-600/15 px-1 py-0.5 text-[10px] text-emerald-700" title="Free stock covers this line — remove it from the PO with Edit if it should not be bought">
+                        Covered by stock — {on.available}{on.unit ? ` ${on.unit}` : ""} free · consider removing
+                      </span>
+                    ) : null;
+                  })()}
                 </td>
                 <td className="py-1 px-1 text-right tabular-nums">{[l.qty, l.unit].filter(Boolean).join(" ")}</td>
                 {showAmounts && <td className="py-1 px-1 text-right tabular-nums">{l.unitPrice ? formatCurrency(Number(l.unitPrice), "PHP") : "—"}</td>}

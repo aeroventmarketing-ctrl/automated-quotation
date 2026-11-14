@@ -21,11 +21,11 @@ import { AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-m
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
-import { prMainIndex, type PRStatus } from "@/lib/purchasing";
+import { prMainIndex, statusBucket, isBudgetCommitted, type PRStatus } from "@/lib/purchasing";
 import { StockMatchPanel, type StockOpt } from "./stock-match-panel";
 import { PurchaseOrderPanel } from "./purchase-order-panel";
 import { canEditSinglePo } from "@/lib/po-edit-access";
-import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, poLineFromPRItem, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
+import { poTotals, poHasEwt, parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix, poLineFromPRItem, poLinesFromPRItems, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
 import { formatCurrency } from "@/lib/utils";
 import type { Supplier } from "@/lib/suppliers";
 import type { PaymentTerm } from "@/lib/payment-terms";
@@ -35,6 +35,7 @@ import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku, SkuMismatch } from "@/components/item-sku";
 import { effectiveLineSku } from "@/lib/item-sku-align";
 import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
+import { coverForItems, coveredLabel, withoutCovered } from "@/lib/stock-covered";
 import { StockOnHand } from "@/components/stock-on-hand";
 import { PoDateControl } from "../../purchasing/po-date-control";
 
@@ -162,6 +163,7 @@ export function PurchasingChain({
   showStockCheck = false,
   canIssueStock = false,
   showOnHand = false,
+  coverByStock = false,
   supplierPaymentsEditable = false,
   adminManage = false,
   highlightId,
@@ -233,6 +235,13 @@ export function PurchasingChain({
    * Approved and Budgeted tabs, which is where the owner asked for it.
    */
   showOnHand?: boolean;
+  /**
+   * Leave lines that free stock already covers off the PO (lib/stock-covered):
+   * on an Approved request, a line whose requested quantity is below the free
+   * stock is greyed "Covered by stock" and not drafted onto the PO. The
+   * Purchasing workspace only; needs `showOnHand` (it reads the same index).
+   */
+  coverByStock?: boolean;
   /** Purchasing's Budgeted tab, for the roles that record them: add / remove supplier payments. */
   supplierPaymentsEditable?: boolean;
   /** Admin manage: show per-row "Edit item lines" (Purchasing workspace only). */
@@ -386,6 +395,21 @@ export function PurchasingChain({
         // approval", leaving the requestor with nobody to chase (and no way to
         // tell that the role is unassigned, which would strand the request).
         const approverRoleLabel = r.actions.find((a) => a.key === "approve")?.roleLabel;
+        // Stock-covered lines (lib/stock-covered) — Approved requests only, where
+        // the PO is drafted. Budgeted and later are already bought or paid for.
+        const coverRule =
+          coverByStock && showOnHand &&
+          statusBucket(r.status as PRStatus, { isDept: !!r.isDept, poApproved: !!r.poApproved }) === "approved" &&
+          !isBudgetCommitted(r.status as PRStatus);
+        const cover = coverRule
+          ? coverForItems(r.items, r.items.map((it, i) => effectiveLineSku(it, (r.itemSkus?.[i] ?? "").trim(), skuIndex).code), onHandIndex)
+          : null;
+        const covered = cover?.covered ?? [];
+        const lineStock = cover?.stock ?? [];
+        const anyCovered = covered.some(Boolean);
+        const purchasable = cover?.purchasable ?? 0;
+        const kept = anyCovered ? withoutCovered(r.items, r.itemSkus, covered) : null;
+        const poDefaultLines = kept ? poLinesFromPRItems(kept.items, kept.skus) : r.poDefaultLines;
         return (
           <div
             key={r.id}
@@ -445,6 +469,16 @@ export function PurchasingChain({
                  */
                 const onHand = (desc: string, code: string | null) =>
                   showOnHand ? <StockOnHand on={onHandFor(desc, code, onHandIndex)} /> : null;
+                // Covered by free stock: kept on the request, greyed, off the PO.
+                if (covered[i] && lineStock[i]) {
+                  return (
+                    <li key={i} className="text-muted-foreground/70 marker:text-emerald-600">
+                      <span className="line-through">{stripToPurchasePrefix(it)}</span>
+                      <span className="ml-2 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] text-emerald-700">{coveredLabel(lineStock[i]!)}</span>
+                      <ItemSku code={eff.code} />{warn}
+                    </li>
+                  );
+                }
                 if (issued) {
                   const code = eff.code;
                   return (
@@ -476,6 +510,13 @@ export function PurchasingChain({
                 return <li key={i}>{it}<ItemSku code={code} />{warn}{onHand(desc, code)}</li>;
               })}
             </ul>
+            {anyCovered && !r.po && (
+              <p className="mt-1 text-xs text-emerald-700">
+                {purchasable === 0
+                  ? "Every line is covered by free stock — nothing to purchase; issue it from the warehouse."
+                  : "Lines covered by free stock are left off the Purchase Order — issue them from the warehouse. They come back here if stock runs short."}
+              </p>
+            )}
             {/* Admin: edit the item lines in place (delete lives in the actions row). */}
             {adminManage && admin && !readOnly && <AdminPrEditDelete prId={r.id} items={r.items} showDelete={false} />}
             {/* Split a multi-supplier requisition into a sibling with its own PO —
@@ -637,7 +678,7 @@ export function PurchasingChain({
                   prId={r.id}
                   orderId={orderId}
                   po={r.po}
-                  defaultLines={r.poDefaultLines}
+                  defaultLines={poDefaultLines}
                   defaultRemarks={poDefaultRemarks}
                   suppliers={suppliers}
                   paymentTerms={paymentTerms}
@@ -726,7 +767,8 @@ export function PurchasingChain({
                     </div>
                   )}
                 </div>
-              ) : !readOnly && r.canManagePO && r.canPreparePO ? (
+              ) : !readOnly && r.canManagePO && r.canPreparePO && !(anyCovered && purchasable === 0) ? (
+                // …and not when free stock covers every line: there is nothing to buy.
                 // Only once approved (out of the pending bucket) — never while pending.
                 <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setPoEditId(r.id)}>Create Purchase Order</Button>
               ) : (
