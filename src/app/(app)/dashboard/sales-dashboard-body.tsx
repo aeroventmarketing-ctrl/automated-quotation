@@ -12,11 +12,9 @@ import { Button } from "@/components/ui/button";
 import { InquiryStatusBadge } from "@/components/status-badge";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { Award } from "lucide-react";
-import { saleFromClassification, isSaleConfirmed } from "@/lib/sale";
 import { getProductionStatus } from "@/lib/production-status";
 import { ProductionStatusCard } from "@/components/production-status-card";
-import { payableTotal } from "@/lib/quote";
-import { saleRecognitionDate } from "@/lib/department-pnl";
+import { counterSaleEvent, quoteSaleEvent } from "@/lib/monthly-sales";
 import type { InquiryStatus } from "@prisma/client";
 
 const STATUSES: InquiryStatus[] = ["NEW", "DRAFTING", "QUOTED", "SENT", "WON", "LOST"];
@@ -27,18 +25,6 @@ const MONTHS = 6; // monthly trend window
 /** Local Y-M-D key so day buckets line up with the server's "today". */
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 const monthKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}`;
-
-/**
- * The date a confirmed sale is booked on — the SAME recognition date the P&L and
- * the WON sales report use (a Terms/PO client on the PO date, everyone else on the
- * first payment date), so "Sales this month" and the top-salesperson figures
- * reconcile with the WON report (Payment-date basis). Falls back to the quote's own
- * date only if a confirmed sale somehow carries no recognition date.
- */
-const saleBookDate = (sale: Parameters<typeof saleRecognitionDate>[0], fallback: Date): Date => {
-  const iso = saleRecognitionDate(sale);
-  return iso ? new Date(iso) : fallback;
-};
 
 /**
  * The Sales Dashboard content. Rendered as its own page for Sales / Engineers,
@@ -192,13 +178,11 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
     // payment date) — the same basis the P&L and the WON sales report use, so the
     // "Sales this month" KPI reconciles with that report. Feeds the top-salesperson
     // card, the salesperson-month map and the MTD KPI.
-    const sale = saleFromClassification(q.classification);
-    if (sale && isSaleConfirmed(sale)) {
-      // Credit the true deal value — the discounted, VAT-adjusted amount the
-      // client pays — so a revised (e.g. discounted) PO updates sales figures.
-      const deal = payableTotal(q);
-      const sd = saleBookDate(sale, at);
-      const smk = monthKey(sd);
+    // `quoteSaleEvent` is the one rule the monthly sales history uses too.
+    const ev = quoteSaleEvent(q);
+    if (ev) {
+      const deal = ev.amount;
+      const smk = monthKey(ev.at);
       const sms = monthSales.get(smk);
       if (sms) sms.set(name, (sms.get(name) ?? 0) + deal);
       if (smk === currentMK) salesMap.set(name, (salesMap.get(name) ?? 0) + deal);
@@ -211,10 +195,10 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
   // top-salesperson card and salesperson-month map as confirmed quotations, and
   // counts as a Won deal (see `won` below).
   for (const cs of counterSales) {
-    const deal = Number(cs.total) || 0;
-    const csName = cs.salespersonName || cs.soldByName || "—";
-    const sd = new Date(cs.completedAt ?? cs.createdAt);
-    const smk = monthKey(sd);
+    const ev = counterSaleEvent(cs);
+    const deal = ev.amount;
+    const csName = ev.person;
+    const smk = monthKey(ev.at);
     const sms = monthSales.get(smk);
     if (sms) sms.set(csName, (sms.get(csName) ?? 0) + deal);
     if (smk === currentMK) {
@@ -363,18 +347,29 @@ export async function SalesDashboardBody({ embedded = false }: { embedded?: bool
         {[
           { label: "Quotes this week", value: String(quotes7) },
           { label: "Quotes last 14 days", value: String(total14) },
-          { label: "Sales this month", value: formatCurrency(salesMTD) },
+          // Opens the month-by-month history behind this figure.
+          { label: "Sales this month", value: formatCurrency(salesMTD), href: "/dashboard/sales-history", hint: "View monthly history" },
           { label: "Win rate", value: winRate == null ? "—" : `${winRate}%` },
-        ].map((k) => (
-          <Card key={k.label}>
-            <CardHeader className="pb-1">
-              <CardTitle className="text-xs uppercase text-muted-foreground">{k.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{k.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+        ].map((k) => {
+          const card = (
+            <Card className={k.href ? "h-full transition-colors hover:border-primary/40 hover:bg-accent" : "h-full"}>
+              <CardHeader className="pb-1">
+                <CardTitle className="text-xs uppercase text-muted-foreground">{k.label}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{k.value}</div>
+                {k.hint && <div className="mt-1 text-xs text-primary">{k.hint} →</div>}
+              </CardContent>
+            </Card>
+          );
+          return k.href ? (
+            <Link key={k.label} href={k.href} className="rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
+              {card}
+            </Link>
+          ) : (
+            <div key={k.label}>{card}</div>
+          );
+        })}
       </div>
 
       {/* Top salesperson of the month (retained across the month boundary). */}

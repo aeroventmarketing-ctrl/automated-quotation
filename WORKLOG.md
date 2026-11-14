@@ -1,3 +1,25 @@
+## 2026-11-13 · Sales Dashboard: "Sales this month" opens the monthly sales history
+
+The owner: *"Make the sales this month tile clickable, once click it will show the monthly sales
+history with text and graph."*
+
+- The **Sales this month** tile is now a link (*View monthly history →*) to `/dashboard/sales-history`.
+- **In words:** this month so far (amount, number of sales, who leads); last month's close and the
+  share of it reached so far; the best month on record; the last 12 complete months' total and
+  monthly average; year to date against the same months last year.
+- **Graph:** sales per month as bars (12 months / 24 months / All), each labelled, the month in
+  progress lighter, a dashed line at the average of the months shown.
+- **Table:** every month from the first sale, newest first — sales, change vs the prior month (the
+  month in progress says *in progress* rather than a misleading drop), orders, counter sales, the
+  month's top salesperson, and **Deals →** opening the WON sales report for that month.
+- One rule for the tile and the page: `quoteSaleEvent` / `counterSaleEvent` in
+  `lib/monthly-sales.ts` (a confirmed quotation's payable total on its payment / PO date; a completed
+  counter sale on completion). The dashboard now uses them too, so this month's bar always equals the
+  tile. Test mode's cutoff applies as on the dashboard; shop-floor (client-restricted) roles are sent
+  back, as they don't see the tile either.
+
+Read-only — no workflow, figure or permission changes. `lib/monthly-sales.ts` tested.
+
 ## 2026-11-13 · An approved supplier price reaches the Inventory item: a Price movements row, unit cost = highest
 
 The owner, on Inventory · History · MS PLATE 3/16" (4.0mm) · Price movements: *"price movement is not
