@@ -15,6 +15,8 @@ import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { logActivity } from "@/lib/activity-log";
 import { logPriceChange } from "@/lib/inventory-history-data";
+import { applyStockChange } from "@/lib/inventory";
+import { isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 
 async function requireInventoryManager() {
   const user = await getCurrentUser();
@@ -856,12 +858,74 @@ export async function reserveStock(input: z.infer<typeof reserveSchema>): Promis
 /** Release an active reservation (frees the held quantity back to available). */
 export async function releaseReservation(id: string): Promise<void> {
   const user = await requireInventoryManager();
+  const r = await prisma.stockReservation.findUnique({ where: { id }, select: { forRef: true } });
+  if (r && isAwaitingRef(r.forRef)) {
+    throw new Error("This is bought stock awaiting the Warehouseman's Receive & Add Stock — use Delivered or Not delivered instead.");
+  }
   await prisma.stockReservation.update({
     where: { id },
     data: { active: false, releasedByName: user.name, releasedAt: new Date() },
   });
   revalidateStockCatalogue();
   revalidatePath("/inventory");
+}
+
+/**
+ * Bought stock held since Cash & Check Released (lib/awaiting-delivery) is made
+ * usable by the Warehouseman's Receive & Add Stock on the PO. What a short
+ * delivery left held is confirmed here once the rest arrives — the Warehouseman
+ * or an admin.
+ */
+export async function confirmAwaitingDelivery(reservationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouseman or an admin can confirm a delivery.");
+  }
+  const r = await prisma.stockReservation.findUnique({ where: { id: reservationId } });
+  if (!r || !r.active || !isAwaitingRef(r.forRef)) throw new Error("Nothing is awaiting delivery here any more.");
+  await prisma.stockReservation.update({ where: { id: reservationId }, data: { active: false, releasedByName: user.name, releasedAt: new Date() } });
+  await logActivity(user, {
+    action: "inventory.delivery_confirmed",
+    category: "inventory",
+    summary: `Delivery confirmed — ${Number(r.qty)} now usable (${poRefOfAwaiting(r.forRef)})`,
+    entity: "inventory",
+    entityId: r.stockItemId,
+    href: `/inventory/history?item=${r.stockItemId}`,
+  });
+  revalidateStockCatalogue();
+  revalidatePath("/inventory");
+  revalidatePath("/purchasing");
+}
+
+/**
+ * The held quantity is not coming (the supplier won't deliver the rest): take it
+ * back out of stock. Admin only — it lowers on hand.
+ */
+export async function removeUndeliveredStock(reservationId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) throw new Error("Only an admin can remove stock that was not delivered.");
+  const r = await prisma.stockReservation.findUnique({ where: { id: reservationId } });
+  if (!r || !r.active || !isAwaitingRef(r.forRef)) throw new Error("Nothing is awaiting delivery here any more.");
+  const ref = poRefOfAwaiting(r.forRef);
+  await prisma.$transaction(async (tx) => {
+    // Release first: the issue guard counts held stock, and this IS that stock.
+    await tx.stockReservation.update({ where: { id: reservationId }, data: { active: false, releasedByName: user.name, releasedAt: new Date() } });
+    const item = await tx.stockItem.findUnique({ where: { id: r.stockItemId }, select: { quantity: true } });
+    const qty = Math.min(Number(r.qty), Number(item?.quantity ?? 0));
+    if (qty > 0) await applyStockChange(tx, { stockItemId: r.stockItemId, kind: "ISSUE", qty, reason: `${ref} — not delivered; bought stock taken back out` }, user.name);
+  });
+  await logActivity(user, {
+    action: "inventory.undelivered_removed",
+    category: "inventory",
+    summary: `Not delivered — ${Number(r.qty)} taken back out of stock (${ref})`,
+    entity: "inventory",
+    entityId: r.stockItemId,
+    href: `/inventory/history?item=${r.stockItemId}`,
+  });
+  revalidateStockCatalogue();
+  revalidatePath("/inventory");
+  revalidatePath("/purchasing");
 }
 
 const adjustSchema = z.object({

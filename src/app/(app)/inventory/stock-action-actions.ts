@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
+import { isAwaitingRef } from "@/lib/awaiting-delivery";
 import { Prisma } from "@prisma/client";
 import type { StockActionKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -358,13 +359,18 @@ async function applyAction(
     // Reserved, typed straight in: a correction entry, never an overwrite —
     // the reservations are what tie stock to the orders holding it.
     if (d.reserved !== undefined) {
-      const active = await tx.stockReservation.findMany({
+      const allActive = await tx.stockReservation.findMany({
         where: { stockItemId: item.id, active: true },
         select: { id: true, qty: true, forRef: true, createdAt: true, note: true },
       });
+      // Bought stock awaiting the Warehouseman's Receive (lib/awaiting-delivery)
+      // is part of the reserved figure but not the item list's to correct: only
+      // Receive (or removing it as not delivered) may release it.
+      const active = allActive.filter((r) => !isAwaitingRef(r.forRef));
+      const heldForDelivery = allActive.filter((r) => isAwaitingRef(r.forRef)).reduce((a, r) => a + Number(r.qty), 0);
       const plan = planReservedCorrection(
         active.map((r) => ({ id: r.id, qty: Number(r.qty), forRef: r.forRef, createdAt: r.createdAt })),
-        d.reserved,
+        Math.max(0, Math.round((d.reserved - heldForDelivery) * 1000) / 1000),
       );
       const now = new Date();
       if (plan.add > 0) {
