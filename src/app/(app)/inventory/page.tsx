@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { AwaitingDeliveryPanel } from "./awaiting-delivery-panel";
+import { isAwaitingRef, isShortDeliveryLeftover, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 import { ShoppingCart, History, ScrollText } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
@@ -237,6 +239,16 @@ export default async function InventoryPage() {
           </div>
           {admin && dupeGroups.length > 0 && <DuplicateItemsPanel groups={dupeGroups} />}
 
+          <AwaitingDeliveryPanel
+            holds={items.flatMap((i) =>
+              i.reservations
+                .filter((r) => isAwaitingRef(r.forRef))
+                .map((r) => ({ id: r.id, itemId: i.id, itemName: i.name, sku: i.sku, unit: i.unit, qty: r.qty, poRef: poRefOfAwaiting(r.forRef), since: r.createdAt, leftover: isShortDeliveryLeftover(r.note) })),
+            )}
+            canConfirm={viewerIsWarehouse}
+            canRemove={admin}
+          />
+
           <Card id="inv-items" className="scroll-mt-20">
             <CardContent className="pt-6">
               <InventoryManager items={items} canManage={canManageItems} canProposeEdit={canProposeEdit} chainNote={chainNote} pendingFirst={pendingFirst} admin={admin} canDelete={canDeleteItems} canScan={canScan} canCreate={canCreateItems} canTransferFiles={viewerPriceOwner} locations={locations} showPrices={showPrices} showSellPrice={showSellPrice} canEditPrices={editPrices} canEditStockRecord={canEditStockRecord} pendingByItem={pendingByItem} />
@@ -285,6 +297,8 @@ async function loadItems() {
     const sellPrice = Number(i.sellPrice);
     const resv = byItem.get(i.id) ?? [];
     const reserved = Math.round(resv.reduce((a, r) => a + r.qty, 0) * 1000) / 1000;
+    // Bought stock held until the Warehouseman's Receive (lib/awaiting-delivery).
+    const awaiting = Math.round(resv.filter((r) => isAwaitingRef(r.forRef)).reduce((a, r) => a + r.qty, 0) * 1000) / 1000;
     // Shared with the edit panel's live preview — see lib/stock-figures.
     const available = stockAvailable(quantity, reserved);
     const status = stockStatus(quantity, reorderLevel);
@@ -303,6 +317,7 @@ async function loadItems() {
       value: stockValue(quantity, unitCost),
       reserved,
       available,
+      awaiting,
       reservations: resv,
       status,
     };

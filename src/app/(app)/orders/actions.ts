@@ -84,6 +84,8 @@ import { getDocCheckGateEnabled } from "@/lib/doc-check-gate";
 import { payableTotal, round2 } from "@/lib/quote";
 import { buildCommissionsFresh, allDeals, commissionHolds } from "@/lib/sales-commission";
 import { applyStockChange } from "@/lib/inventory";
+import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
+import { addAwaitingAtCashRelease, confirmAwaitingOnReceive, poRefOf, reverseAwaiting } from "@/lib/awaiting-delivery-data";
 import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
@@ -2562,7 +2564,18 @@ export async function advancePurchaseRequest(
       data.plantApprovedAt = now;
       break;
   }
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+  // Cash & Check Released puts the bought lines into stock, held — not usable
+  // until the Warehouseman's Receive & Add Stock (lib/awaiting-delivery). A
+  // combined PO's member is released through `advanceCombinedPO`, not here.
+  const addsAtRelease = stepKey === "release_cash" && poMemberIds(pr.po).length === 0;
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+    if (addsAtRelease) await addAwaitingAtCashRelease(tx, pr, [pr], user.name);
+  });
+  if (addsAtRelease) {
+    revalidateStockCatalogue();
+    revalidatePath("/inventory");
+  }
   await logActivity(user, {
     action: `purchase.${stepKey}`,
     category: "purchase",
@@ -3533,8 +3546,18 @@ export async function adminRollbackPurchase(purchaseRequestId: string, toStatus:
     }
   }
   data.chainLog = log as Prisma.InputJsonValue;
-  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+  // Rolled back to before Cash & Check Released: the stock it added (and that
+  // the Warehouseman hasn't confirmed) comes back out (lib/awaiting-delivery).
+  const undoesRelease = tgtIdx <= prMainIndex("VOUCHER_SIGNED");
+  await prisma.$transaction(async (tx) => {
+    await tx.purchaseRequest.update({ where: { id: purchaseRequestId }, data });
+    if (undoesRelease) await reverseAwaiting(tx, poRefOf(pr), user.name, "rolled back");
+  });
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  if (undoesRelease) {
+    revalidateStockCatalogue();
+    revalidatePath("/inventory");
+  }
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
 }
@@ -3626,11 +3649,15 @@ export async function cancelPurchaseRequest(purchaseRequestId: string): Promise<
   }
 
   const now = new Date();
-  await prisma.$transaction(
-    targetIds.map((id) =>
-      prisma.purchaseRequest.update({ where: { id }, data: { status: "CANCELLED", decidedByName: user.name, decidedAt: now } }),
-    ),
-  );
+  await prisma.$transaction(async (tx) => {
+    for (const id of targetIds) {
+      await tx.purchaseRequest.update({ where: { id }, data: { status: "CANCELLED", decidedByName: user.name, decidedAt: now } });
+    }
+    // Bought stock held since Cash & Check Released isn't coming — take it out.
+    for (const ref of new Set(members.map((m) => poRefOf(m)))) await reverseAwaiting(tx, ref, user.name, "cancelled");
+  });
+  revalidateStockCatalogue();
+  revalidatePath("/inventory");
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);
   }
@@ -3647,7 +3674,13 @@ export async function deletePurchaseRequest(purchaseRequestId: string): Promise<
   const ids = poMemberIds(pr.po);
   const targetIds = ids.length ? ids : [pr.id];
   const members = await prisma.purchaseRequest.findMany({ where: { id: { in: targetIds } } });
-  await prisma.purchaseRequest.deleteMany({ where: { id: { in: targetIds } } });
+  await prisma.$transaction(async (tx) => {
+    // Held stock from Cash & Check Released goes with the purchase.
+    for (const ref of new Set(members.map((m) => poRefOf(m)))) await reverseAwaiting(tx, ref, user.name, "deleted");
+    await tx.purchaseRequest.deleteMany({ where: { id: { in: targetIds } } });
+  });
+  revalidateStockCatalogue();
+  revalidatePath("/inventory");
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);
   }
@@ -4304,17 +4337,24 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
       data.plantApprovedAt = now;
       break;
   }
-  await prisma.$transaction(
-    members.map((m) => {
+  await prisma.$transaction(async (tx) => {
+    for (const m of members) {
       const log = (m.chainLog && typeof m.chainLog === "object" ? m.chainLog : {}) as Record<string, unknown>;
-      return prisma.purchaseRequest.update({
+      await tx.purchaseRequest.update({
         where: { id: m.id },
         data: chainLogStep
           ? { ...data, chainLog: { ...log, [chainLogStep]: { byName: user.name, at: now.toISOString() } } as Prisma.InputJsonValue }
           : data,
       });
-    }),
-  );
+    }
+    // Cash & Check Released: the combined PO's lines go into stock, held until
+    // the Warehouseman's Receive & Add Stock (lib/awaiting-delivery).
+    if (stepKey === "release_cash") await addAwaitingAtCashRelease(tx, anchor, members, user.name);
+  });
+  if (stepKey === "release_cash") {
+    revalidateStockCatalogue();
+    revalidatePath("/inventory");
+  }
   for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
     revalidatePath(`/orders/${qid}`);
   }
@@ -4339,8 +4379,11 @@ export async function receiveCombinedPO(anchorPurchaseRequestId: string, matches
 
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
   await prisma.$transaction(async (tx) => {
-    for (const m of clean) {
-      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: Number(m.qty), reason: "Purchase received (combined PO)" }, user.name);
+    // What was added at Cash & Check Released is confirmed (made usable), not
+    // added again; only the rest goes in now (lib/awaiting-delivery).
+    const adds = await confirmAwaitingOnReceive(tx, poRefOf(anchor), clean.map((m) => ({ stockItemId: m.stockItemId, qty: Number(m.qty) })), user.name);
+    for (const m of adds) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: m.qty, reason: "Purchase received (combined PO)" }, user.name);
     }
     for (const id of ids) {
       await tx.purchaseRequest.update({ where: { id }, data: { status: "COMPLETED", receivedByName: user.name, receivedAt: new Date() } });
@@ -5490,8 +5533,10 @@ export async function receivePurchaseRequest(
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
 
   await prisma.$transaction(async (tx) => {
-    for (const m of clean) {
-      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: Number(m.qty), reason: "Purchase received" }, user.name);
+    // Confirms what Cash & Check Released already added; adds only the rest.
+    const adds = await confirmAwaitingOnReceive(tx, poRefOf(pr), clean.map((m) => ({ stockItemId: m.stockItemId, qty: Number(m.qty) })), user.name);
+    for (const m of adds) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: m.qty, reason: "Purchase received" }, user.name);
     }
     await tx.purchaseRequest.update({
       where: { id: purchaseRequestId },

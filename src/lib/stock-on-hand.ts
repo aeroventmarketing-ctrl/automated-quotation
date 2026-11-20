@@ -41,6 +41,8 @@ export interface StockLevelSource {
   unit?: string | null;
   /** Free to issue (on hand − active reservations). Absent ⇒ unknown, not zero. */
   available?: number | null;
+  /** Bought, on hand, not usable until the Warehouseman's Receive (lib/awaiting-delivery). */
+  awaiting?: number | null;
 }
 
 /** What one item adds up to across every location that carries it. */
@@ -49,6 +51,8 @@ export interface OnHand {
   unit: string;
   /** How many stock records were summed — >1 means more than one location. */
   places: number;
+  /** Bought stock in on hand but not usable yet — not part of `available`. */
+  awaiting?: number;
 }
 
 /** SKU → quantity. Build it with {@link buildOnHandIndex}. */
@@ -62,18 +66,19 @@ const normCode = (s: string | null | undefined): string => String(s ?? "").trim(
 
 export function buildOnHandIndex(stock: readonly StockLevelSource[]): OnHandIndex {
   const byCode = new Map<string, OnHand>();
-  const add = (map: Map<string, OnHand>, key: string, qty: number, unit: string) => {
+  const add = (map: Map<string, OnHand>, key: string, qty: number, unit: string, awaiting: number) => {
     if (!key) return;
     const prev = map.get(key);
     if (prev) {
       prev.available = Math.round((prev.available + qty) * 1000) / 1000;
+      if (awaiting > 0) prev.awaiting = Math.round(((prev.awaiting ?? 0) + awaiting) * 1000) / 1000;
       prev.places += 1;
       // Keep the first non-empty unit: the bins agree in practice, and a blank
       // one on a second location should not erase the one we can show.
       if (!prev.unit) prev.unit = unit;
       return;
     }
-    map.set(key, { available: qty, unit, places: 1 });
+    map.set(key, { available: qty, unit, places: 1, ...(awaiting > 0 ? { awaiting } : {}) });
   };
   for (const s of stock) {
     // An item whose availability was not computed is UNKNOWN, and unknown must
@@ -81,7 +86,7 @@ export function buildOnHandIndex(stock: readonly StockLevelSource[]): OnHandInde
     if (s.available == null || !Number.isFinite(Number(s.available))) continue;
     const qty = Number(s.available);
     const unit = String(s.unit ?? "").trim();
-    add(byCode, normCode(s.sku), qty, unit);
+    add(byCode, normCode(s.sku), qty, unit, Number(s.awaiting ?? 0) || 0);
   }
   return { byCode };
 }

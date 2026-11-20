@@ -17,6 +17,8 @@ interface Hit {
   location: string | null;
   onHand: number;
   available: number;
+  /** Bought, on hand, not usable until the Warehouseman's Receive (lib/awaiting-delivery). */
+  awaiting?: number;
 }
 interface StockOpt { id: string; name: string; sku?: string | null; unit?: string | null; location?: string | null; available?: number }
 
@@ -276,7 +278,7 @@ export function RequisitionStockCheck({
                       {h.available <= 0 ? "Out of stock" : `${fmt(h.available)} ${h.unit}`}
                     </div>
                     <div className="text-[10px] text-muted-foreground">
-                      {h.available > 0 && h.available < h.onHand ? `${fmt(h.onHand)} on hand · some reserved` : "available"}
+                      {(h.awaiting ?? 0) > 0 ? `${fmt(h.onHand)} on hand · ${fmt(h.awaiting!)} not usable yet — awaiting the Warehouseman's Receive & Add Stock` : h.available > 0 && h.available < h.onHand ? `${fmt(h.onHand)} on hand · some reserved` : "available"}
                     </div>
                   </div>
                 </li>

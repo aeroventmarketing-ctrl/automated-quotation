@@ -25,6 +25,8 @@ export interface StockOpt {
   location?: string | null;
   /** Free to issue right now (on hand − active reservations); absent ⇒ unknown. */
   available?: number;
+  /** Of on hand, bought stock not usable until the Warehouseman's Receive (lib/awaiting-delivery). */
+  awaiting?: number;
 }
 
 /** Match request/purchase lines to stock items + quantities before issuing/receiving. */

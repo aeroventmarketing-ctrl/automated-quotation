@@ -38,6 +38,13 @@ export function StockOnHand({ on }: { on: OnHand | null }) {
       }
     >
       {fmtQty(on.available)}{on.unit ? ` ${on.unit}` : ""} in stock
+      {(on.awaiting ?? 0) > 0 && (
+        // Bought and on hand, but not usable until the Warehouseman's Receive
+        // (lib/awaiting-delivery) — so it is not in the figure before it.
+        <span className="ml-1 text-amber-700 dark:text-amber-400" title="Bought and added to stock at Cash & Check Released — not usable until the Warehouseman presses Receive & Add Stock on the PO.">
+          · {fmtQty(on.awaiting!)} not usable yet
+        </span>
+      )}
     </span>
   );
 }

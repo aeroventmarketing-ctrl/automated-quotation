@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { AWAITING_SUFFIX } from "@/lib/awaiting-delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,14 @@ export async function GET(req: Request) {
       _sum: { qty: true },
     });
     const reservedByItem = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+    // Of that, bought stock awaiting the Warehouseman's Receive (lib/awaiting-delivery) —
+    // already not "free to sell"; returned so the lookup can say why.
+    const held = await prisma.stockReservation.groupBy({
+      by: ["stockItemId"],
+      where: { active: true, stockItemId: { in: list.map((i) => i.id) }, forRef: { endsWith: AWAITING_SUFFIX } },
+      _sum: { qty: true },
+    });
+    const heldByItem = new Map(held.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
 
     const items = list.map((i) => {
       const onHand = Number(i.quantity);
@@ -53,6 +62,7 @@ export async function GET(req: Request) {
         location: i.location,
         onHand,
         available,
+        awaiting: Math.round((heldByItem.get(i.id) ?? 0) * 1000) / 1000,
         sellPrice: Number(i.sellPrice),
       };
     });

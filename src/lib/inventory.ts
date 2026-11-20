@@ -9,6 +9,7 @@ import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getStockCatalogue, type StockCatalogueItem } from "@/lib/stock-catalogue";
+import { AWAITING_SUFFIX, awaitingMessage } from "@/lib/awaiting-delivery";
 
 export type StockKind = "RECEIPT" | "ISSUE" | "ADJUSTMENT";
 
@@ -22,6 +23,8 @@ export interface StockOptWithAvail {
   location: string | null;
   /** Free to issue right now (on hand − active reservations). */
   available: number;
+  /** Of on hand, bought stock not usable until the Warehouseman's Receive (lib/awaiting-delivery). */
+  awaiting?: number;
 }
 
 /**
@@ -50,6 +53,13 @@ export const listStockItemsWithAvailability = cache(async function listStockItem
     .groupBy({ by: ["stockItemId"], where: { active: true, stockItemId: { in: items.map((i) => i.id) } }, _sum: { qty: true } })
     .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[]);
   const reservedById = new Map(resv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+  // The share of those reservations that is bought stock awaiting the
+  // Warehouseman's Receive — already out of `available`; carried so a screen
+  // can say why (lib/awaiting-delivery). Small: only items with such a hold.
+  const held = await prisma.stockReservation
+    .groupBy({ by: ["stockItemId"], where: { active: true, forRef: { endsWith: AWAITING_SUFFIX } }, _sum: { qty: true } })
+    .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[]);
+  const heldById = new Map(held.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
   return items.map((i) => ({
     id: i.id,
     sku: i.sku,
@@ -57,6 +67,7 @@ export const listStockItemsWithAvailability = cache(async function listStockItem
     unit: i.unit,
     location: i.location,
     available: Math.round((i.quantity - (reservedById.get(i.id) ?? 0)) * 1000) / 1000,
+    ...(heldById.get(i.id) ? { awaiting: heldById.get(i.id) } : {}),
   }));
 });
 
@@ -80,6 +91,14 @@ export async function applyStockChange(
   if (change.kind === "RECEIPT") delta = change.qty;
   else if (change.kind === "ISSUE") {
     if (change.qty > current) throw new Error(`Not enough ${item.name} — only ${current} ${item.unit} on hand.`);
+    // Bought stock the Warehouseman hasn't confirmed yet is on hand but not
+    // usable (lib/awaiting-delivery) — nothing may be issued out of it.
+    const held = await tx.stockReservation.aggregate({ where: { stockItemId: item.id, active: true, forRef: { endsWith: AWAITING_SUFFIX } }, _sum: { qty: true } });
+    const awaiting = Number(held._sum.qty ?? 0);
+    if (awaiting > 0 && change.qty > Math.round((current - awaiting) * 1000) / 1000) {
+      const usable = Math.max(0, Math.round((current - awaiting) * 1000) / 1000);
+      throw new Error(`Only ${usable} ${item.unit} of ${item.name} is usable — ${awaitingMessage(awaiting, item.unit, [])}.`);
+    }
     delta = -change.qty;
   } else {
     delta = change.qty - current;

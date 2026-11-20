@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { awaitingMessage, isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ScanLine, Search, X, Eye, Upload, Tag, Bookmark, Pencil, SlidersHorizontal, ChevronRight, BellRing, History } from "lucide-react";
@@ -48,6 +49,8 @@ interface Item {
   value: number;
   reserved: number;
   available: number;
+  /** Bought, in on hand, not usable until the Warehouseman's Receive (lib/awaiting-delivery). */
+  awaiting?: number;
   reservations: Reservation[];
   status: "ok" | "low" | "out";
 }
@@ -277,6 +280,14 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
               <Badge variant="warning" className="font-normal">No sell price</Badge>
             )}
             <PendingChip pending={pending} />
+            {(item.awaiting ?? 0) > 0 && (
+              <span
+                className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300"
+                title={awaitingMessage(item.awaiting!, item.unit, item.reservations.filter((r) => isAwaitingRef(r.forRef)).map((r) => poRefOfAwaiting(r.forRef)))}
+              >
+                {fmt(item.awaiting!)} {item.unit} not usable yet — awaiting Receive &amp; Add Stock
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground">{[item.sku ? `SKU ${item.sku}` : null, item.category].filter(Boolean).join(" · ")}</div>
         </TableCell>
@@ -419,7 +430,13 @@ function StockRow({ item, canManage, canProposeEdit, chainNote, showPrices, show
                           · Valid until {new Date(r.validUntil).toLocaleDateString("en-PH", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" })}{expired ? " (expired)" : ""}
                         </span>
                       )}
-                      <button type="button" className="ml-auto rounded border px-2 py-0.5 text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => releaseReservation(r.id), true)}>Release</button>
+                      {isAwaitingRef(r.forRef) ? (
+                        // Bought stock awaiting the Warehouseman's Receive — released by
+                        // that Receive (or Delivered / Not delivered above), never here.
+                        <span className="ml-auto text-amber-700">Not usable until Receive &amp; Add Stock</span>
+                      ) : (
+                        <button type="button" className="ml-auto rounded border px-2 py-0.5 text-muted-foreground hover:text-destructive" disabled={busy} onClick={() => run(() => releaseReservation(r.id), true)}>Release</button>
+                      )}
                     </li>
                     );
                   })}

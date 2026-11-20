@@ -1,3 +1,54 @@
+## 2026-11-20 · Bought items go into stock at Cash & Check Released — not usable until the Warehouseman's Receive
+
+The owner, after PO-1075 needed an admin to press every role before its items reached inventory:
+*"Is it possible that once I pressed the Cash & Check Released button purchased item will be added to
+inventory but warehouseman should press the Receive & Add to stock button to confirm the delivery of
+the item?"* — chose **Option B** (in stock straight away) *"but there must be a message in the bought
+and added item that it can only be usable once warehouseman press the received … button. By this
+everyone will see the notification and can notify the warehouseman."* Clarified (approving this
+change to the frozen Phases 3 & 4): usable on **Receive & Add Stock**; a **short delivery** keeps the
+missing quantity in stock, still not usable; a line with **no inventory item for its SKU** is added on
+Receive as before; until confirmed it is blocked from **MRF issue / release, counter sales, Check
+availability and the covered-by-stock rule**.
+
+**What happens now**
+- **Cash & Check Released** (single or combined PO) adds each PO line to its inventory item's on hand
+  — matched by SKU only (the line's, or the request line it was drafted from), the location picked
+  the way Receive pre-selects it, units agreeing. The ledger reads *Bought — PO-… (Cash & Check
+  Released) · not usable until Receive & Add Stock*. Office bought-in requisitions (they go to the
+  client) and anything uncertain are left for Receive.
+- That quantity is **held** — an active reservation tagged *PO-… · awaiting delivery confirmation* —
+  so every "free" figure already excludes it: MRF / requisition pickers, the Sales "Check
+  availability" search, counter sales, the storefront, and the Purchasing covered-by-stock rule. The
+  stock ledger itself refuses to issue out of it (*Only 3 pc … is usable — 10 pc not usable yet …*).
+- **Everyone sees it:** an amber **"Bought — in stock but not usable yet"** panel on the Inventory tab
+  (item, quantity, PO, since), a chip on the item's row, and *· 10 not usable yet* beside the stock
+  figure in Purchasing, the MRF / requisition stock checks and Check availability.
+- **Receive & Add Stock** confirms instead of adding again: what arrived releases the hold; only
+  extra quantity, or lines that weren't added at cash release, are added. **Short delivery** (8 of 10):
+  the 2 stay in stock, still held, marked *short delivery — the rest still to arrive*; the Warehouseman
+  (or admin) presses **Delivered** on the Inventory panel when they come, or an admin presses **Not
+  delivered** to take them back out.
+- **Rolled back** to before cash release, **cancelled** or **deleted**: whatever is still held comes
+  back out of stock. A hold can't be released or edited away from the reservation list.
+- POs already past cash release before this shipped have nothing held — their Receive adds stock
+  exactly as before.
+
+**Worth knowing:** held stock is in on hand, so the inventory value includes it from cash release. A
+physical count typed in as an adjustment while goods are still held would remove them from on hand —
+confirm or remove the holds first.
+
+No database change: the hold is a `StockReservation`. `lib/awaiting-delivery.ts` (rules, tested),
+`lib/awaiting-delivery-data.ts` (tested against Postgres), wired into `advancePurchaseRequest`,
+`advanceCombinedPO`, `receivePurchaseRequest`, `receiveCombinedPO`, `adminRollbackPurchase`,
+`cancelPurchaseRequest`, `deletePurchaseRequest`; the issue guard in `applyStockChange`; Inventory
+`confirmAwaitingDelivery` / `removeUndeliveredStock` and `AwaitingDeliveryPanel`.
+
+Verified on the role harness: Payment Approver released cash on a 10 pc PO (3 already on hand) → on
+hand 13, 10 held; the Inventory panel showed it to Sales, Purchaser and admin; Check availability
+answered 3 available · 10 not usable; the Warehouseman received 8 → PO completed, on hand still 13,
+2 held as a short delivery; **Delivered** released them.
+
 ## 2026-11-14 · Purchasing · Approved: lines free stock already covers are left off the PO
 
 The owner (approving this change to the frozen Phase 4): *"In approved purchasing tab, if requested
