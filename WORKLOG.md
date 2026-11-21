@@ -1,3 +1,32 @@
+## 2026-11-21 · Admin → Catalogue: Motor controller prices, editable
+
+The owner, on Admin → Catalogue and a quotation's Motor Controller line (DOL · 3-phase · 220 V · 1.5 HP
+→ ₱11,653.60): *"add an option in 1st picture so I can update the motor controller price in 2nd
+picture"*.
+
+The starter / VFD prices were tables inside the quotation builder, so changing one needed a deploy.
+They now follow the motors:
+- **New card on Admin → Catalogue — "Motor controller prices".** **Add 80 motor controller prices**
+  copies them in: DOL by phase/voltage (1-phase 220 V; 3-phase 220 V, 380/400 V, 440 V) × 0.25–7.5 HP,
+  Y-Delta 220 / 440 V and Y-Double Y 380/400 V × 5–50 HP, and VFD 1–150 HP. **Show controller prices**
+  filters the list to them; each is edited with **Edit** (or in bulk with the Excel / CSV round trip).
+- Prices are **net, before VAT**, as the tables were — the quotation adds VAT (₱10,405 → ₱11,653.60).
+- **Safe to press again:** creates only, never overwrites an edited price.
+- The quotation reads the catalogue first and falls back to the old table for any row that is missing
+  or zeroed, so nothing changes until a price is edited. Sizes / voltages that aren't sold still have
+  no price, whatever the catalogue holds.
+- Codes are `MTR-CTRL-…` (e.g. `MTR-CTRL-DOL-3PH-220V-001.50HP`), inside the motors' `MTR-` prefix, so
+  they ride the motor price map and stay out of the shop and the website price list exactly as motors
+  do. Family MOTOR (no migration). The "Motor prices" counter now leaves controllers out.
+
+`lib/motor-controller-prices.ts` (tables moved out of the builder, catalogue rows, catalogue-first
+prices — tested to the peso against every table entry); `seedMotorControllerCatalogue` (sharing the
+motor seed's create-only logic); `ControllerSeedButton`.
+
+Verified on the role harness (admin): the card read *0 of 80*; **Add** → 80 rows; **Show controller
+prices** listed them; **Edit** on DOL 3-phase 220 V 1.5 HP saved ₱11,000 on the active default price
+row the quotation's motor price map reads.
+
 ## 2026-11-21 · The Warehouseman receives as soon as the goods arrive — "Goods arrived — Receive now" and Delivered
 
 The owner: *"Is there a way where warehouseman can bypass all approvers and press receive and add to
