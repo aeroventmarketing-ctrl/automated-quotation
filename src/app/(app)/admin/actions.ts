@@ -33,6 +33,7 @@ import { setThankYouSettings, buildThankYouEmail, buildThankYouSms, type ThankYo
 import { setUserWorkflowRoles } from "@/lib/workflow-roles";
 import { setUserSalesPersonnel } from "@/lib/sales-personnel";
 import { setFanMotorBrand } from "@/lib/fan-motor-brand";
+import { controllerCatalogueRows } from "@/lib/motor-controller-prices";
 import { motorCatalogueRows } from "@/lib/motor-catalogue";
 import { saveAiUsageLimit } from "@/lib/ai/usage";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -186,6 +187,18 @@ export async function seedMotorCatalogue(): Promise<MotorSeedResult> {
     );
   }
 
+  const res = await seedPriceRows(rows);
+  revalidatePath("/admin/catalogue");
+  revalidateQuoteCatalogue();
+  return res;
+}
+
+/**
+ * Create the catalogue rows a code table describes — creates only, never
+ * overwrites (see `seedMotorCatalogue`). Shared by the motor and the motor-
+ * controller prices; both are family MOTOR (their codes start `MTR-`).
+ */
+async function seedPriceRows(rows: { modelCode: string; name: string; basePrice: number; specs: Record<string, unknown> }[]): Promise<MotorSeedResult> {
   const existing = await prisma.catalogueItem.findMany({
     where: { modelCode: { in: rows.map((r) => r.modelCode) } },
     select: { id: true, modelCode: true, priceList: { where: { variantKey: "default" }, select: { id: true } } },
@@ -228,6 +241,29 @@ export async function seedMotorCatalogue(): Promise<MotorSeedResult> {
     res.pricesCreated++;
   }
 
+  return res;
+}
+
+/**
+ * Put the motor-controller prices (DOL / Y-Δ / Y-YY starters, VFDs) into the
+ * catalogue — the owner: *"add an option … so I can update the motor controller
+ * price"*. Same rules as the motors: creates only, safe to press again, the code
+ * table stays the fallback (lib/motor-controller-prices).
+ */
+export async function seedMotorControllerCatalogue(): Promise<MotorSeedResult> {
+  await assertAdmin();
+  const familyReady = await prisma
+    .$queryRaw<{ ok: boolean }[]>`
+      select exists (
+        select 1 from pg_enum e join pg_type t on t.oid = e.enumtypid
+        where t.typname = 'Family' and e.enumlabel = 'MOTOR'
+      ) as ok`
+    .then((r) => r[0]?.ok === true)
+    .catch(() => true);
+  if (!familyReady) {
+    throw new Error("The database does not have the MOTOR catalogue family yet — migration 0057 has not run.");
+  }
+  const res = await seedPriceRows(controllerCatalogueRows());
   revalidatePath("/admin/catalogue");
   revalidateQuoteCatalogue();
   return res;

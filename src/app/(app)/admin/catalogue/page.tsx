@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { motorCatalogueRows, MOTOR_CODE_PREFIX } from "@/lib/motor-catalogue";
 import { CatalogueManager } from "./catalogue-manager";
 import { MotorSeedButton } from "./motor-seed-button";
+import { CONTROLLER_CODE_PREFIX, controllerCatalogueRows } from "@/lib/motor-controller-prices";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,9 @@ export default async function AdminCataloguePage() {
    * minutes before the value existed and every query naming it threw. Counting
    * over rows already in hand cannot fail that way — and it is one query fewer.
    */
-  const motorsPresent = items.filter((i) => i.modelCode.startsWith(MOTOR_CODE_PREFIX)).length;
+  // Motor controllers share the `MTR-` prefix (lib/motor-controller-prices) — counted apart.
+  const controllersPresent = items.filter((i) => i.modelCode.startsWith(CONTROLLER_CODE_PREFIX)).length;
+  const motorsPresent = items.filter((i) => i.modelCode.startsWith(MOTOR_CODE_PREFIX)).length - controllersPresent;
 
   return (
     <CatalogueManager
@@ -37,6 +40,7 @@ export default async function AdminCataloguePage() {
         basePrice: i.priceList[0] ? Number(i.priceList[0].basePrice) : 0,
       }))}
       motorSeed={<MotorSeedButton present={motorsPresent} expected={motorCatalogueRows().length} />}
+      controllers={{ present: controllersPresent, expected: controllerCatalogueRows().length }}
     />
   );
 }

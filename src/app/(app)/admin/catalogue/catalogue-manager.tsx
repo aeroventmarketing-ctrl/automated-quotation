@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ControllerSeedButton } from "./controller-seed-button";
+import { CONTROLLER_CODE_PREFIX } from "@/lib/motor-controller-prices";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +58,7 @@ const blank: Item = {
   basePrice: 0,
 };
 
-export function CatalogueManager({ items, motorSeed }: { items: Item[]; motorSeed?: React.ReactNode }) {
+export function CatalogueManager({ items, motorSeed, controllers }: { items: Item[]; motorSeed?: React.ReactNode; controllers?: { present: number; expected: number } }) {
   const router = useRouter();
   const [editing, setEditing] = useState<Item | null>(null);
   const [busy, setBusy] = useState(false);
@@ -129,6 +131,20 @@ export function CatalogueManager({ items, motorSeed }: { items: Item[]; motorSee
 
       {motorSeed}
 
+      {/* Motor Controller prices (lib/motor-controller-prices) — "Show" filters the list to them. */}
+      {controllers && (
+        <ControllerSeedButton
+          present={controllers.present}
+          expected={controllers.expected}
+          onShow={() => {
+            setQuery(CONTROLLER_CODE_PREFIX);
+            setFamily("");
+            setShowAll(true);
+            document.getElementById("catalogue-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
+      )}
+
       {editing && (
         <Card className="border-primary/40">
           <CardHeader><CardTitle>{editing.id ? "Edit" : "New"} catalogue item</CardTitle></CardHeader>
@@ -183,7 +199,7 @@ export function CatalogueManager({ items, motorSeed }: { items: Item[]; motorSee
       )}
 
       <Card>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent id="catalogue-list" className="scroll-mt-20 space-y-3 pt-6">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               className="w-full sm:w-72"
