@@ -16,6 +16,7 @@ const { PrismaClient } = await import("@prisma/client");
 const prisma = new (PrismaClient as unknown as new () => import("@prisma/client").PrismaClient)();
 const { addAwaitingAtCashRelease, confirmAwaitingOnReceive, reverseAwaiting } = await import("./awaiting-delivery-data");
 const { applyStockChange } = await import("./inventory");
+const { DELIVERED_MARK } = await import("./awaiting-delivery");
 
 const PO = {
   poNumber: "PO-TEST0001",
@@ -71,5 +72,21 @@ run("bought stock: in at cash release, usable at Receive", () => {
     await prisma.$transaction((tx) => reverseAwaiting(tx, "PO-TEST0001", "Admin", "cancelled"));
     expect(await qty()).toBe(3);
     expect(await holds()).toHaveLength(0);
+  });
+
+  it("Delivered from the Inventory page first: the PO's later Receive adds nothing again", async () => {
+    await prisma.$transaction((tx) => addAwaitingAtCashRelease(tx, pr, [pr], "Rey Gil"));
+    const [h] = await holds();
+    // What confirmAwaitingDelivery writes.
+    await prisma.stockReservation.update({ where: { id: h.id }, data: { active: false, releasedByName: "Willy", releasedAt: new Date(), note: `${h.note} · ${DELIVERED_MARK} by Willy on 2026-11-21` } });
+    const adds = await prisma.$transaction((tx) => confirmAwaitingOnReceive(tx, "PO-TEST0001", [{ stockItemId: "plate", qty: 10 }], "Willy"));
+    expect(adds).toEqual([]);
+    expect(await qty()).toBe(13);
+  });
+
+  it("received early: Cash & Check Released again (after a roll-back) adds nothing", async () => {
+    const early = { ...pr, chainLog: { early_receive: { byName: "Willy", at: "2026-11-21T01:00:00Z" } } };
+    expect(await prisma.$transaction((tx) => addAwaitingAtCashRelease(tx, early, [early], "Rey Gil"))).toBe(0);
+    expect(await qty()).toBe(3);
   });
 });

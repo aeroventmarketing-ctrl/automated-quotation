@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Printer, Pencil, Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { advancePurchaseRequest, receivePurchaseRequest, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
+import { advancePurchaseRequest, receivePurchaseRequest, receivePurchaseRequestEarly, cancelPurchaseRequest, deletePurchaseRequest } from "../actions";
 import { ApproverHighlight } from "@/components/approver-highlight";
 import { PurchaseReturnsPanel } from "../../purchasing/purchase-returns-panel";
 import { PurchaseReconcilePanel } from "../../purchasing/purchase-reconcile-panel";
@@ -100,6 +100,10 @@ interface PRRow {
   /** Payments made to the supplier against this PO (migration 0061). */
   supplierPayments?: SupplierPayment[];
   poApproved?: boolean;
+  /** Received early by the Warehouseman (lib/early-receive). */
+  earlyReceived?: { byName: string; at: string } | null;
+  /** The viewer may press "Goods arrived — Receive now". */
+  canReceiveEarly?: boolean;
   canPurchaserReject?: boolean;
   canPreparePO?: boolean;
 }
@@ -271,6 +275,8 @@ export function PurchasingChain({
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receivingId, setReceivingId] = useState<string | null>(null);
+  // "Goods arrived — Receive now" (lib/early-receive): the same panel, the early action.
+  const [earlyId, setEarlyId] = useState<string | null>(null);
   const [poEditId, setPoEditId] = useState<string | null>(null);
   // Selection for summing PO amounts (tick the MRFs to total). Controlled by the
   // parent when `selectedIds` is passed (the Purchasing workspace sums/approves
@@ -568,7 +574,7 @@ export function PurchasingChain({
               ) : r.status !== "REJECTED" && r.status !== "COMPLETED" && r.actions[0] ? (
                 <div className="mt-2"><ApproverHighlight role={r.actions[0].roleLabel} detail="— process in Purchasing" /></div>
               ) : null
-            ) : receivingId === r.id ? (
+            ) : receivingId === r.id || earlyId === r.id ? (
               <StockMatchPanel
                 lines={r.items.map((it, i) => {
                   // Default the received qty to the good quantity: ordered minus any
@@ -579,11 +585,13 @@ export function PurchasingChain({
                   return { label: it, qtyDefault: returned > 0 && qty > 0 ? String(Math.max(0, qty - returned)) : "", sku: effectiveLineSku(it, r.itemSkus?.[i], skuIndex).code };
                 })}
                 stockItems={stockItems}
-                submitLabel="Receive & add to stock"
-                onCancel={() => setReceivingId(null)}
+                submitLabel={earlyId === r.id ? "Goods arrived — receive into stock" : "Receive & add to stock"}
+                onCancel={() => { setReceivingId(null); setEarlyId(null); }}
                 onSubmit={async (matches) => {
-                  await receivePurchaseRequest(r.id, matches);
+                  if (earlyId === r.id) await receivePurchaseRequestEarly(r.id, matches);
+                  else await receivePurchaseRequest(r.id, matches);
                   setReceivingId(null);
+                  setEarlyId(null);
                   router.refresh();
                 }}
               />
@@ -618,6 +626,23 @@ export function PurchasingChain({
             ) : awaitingPlantApproval ? (
               <div className="mt-2"><ApproverHighlight role={approverRoleLabel} detail={"— on the order’s Materials tab"} /></div>
             ) : null}
+
+            {/* Goods already here before the paperwork: the Warehouseman receives now
+                (lib/early-receive). The PO's other steps carry on; the Plant
+                Manager's approval completes it. */}
+            {!readOnly && r.canReceiveEarly && earlyId !== r.id && receivingId !== r.id && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-2 py-1.5 text-xs">
+                <Button size="sm" variant="outline" className="h-7 border-emerald-600/50 text-xs text-emerald-700 hover:bg-emerald-600/10" onClick={() => setEarlyId(r.id)}>
+                  Goods arrived — Receive now
+                </Button>
+                <span className="text-muted-foreground">The items become usable now; the remaining steps carry on for the payment side, and the Plant Manager&apos;s approval completes the PO.</span>
+              </div>
+            )}
+            {r.earlyReceived && r.status !== "COMPLETED" && (
+              <div className="mt-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-2 py-1 text-xs text-emerald-800 dark:text-emerald-300">
+                Goods received into stock early by {r.earlyReceived.byName} — the remaining steps carry on; this PO completes at the Plant Manager&apos;s final approval.
+              </div>
+            )}
 
             {/* The Purchaser can reject a still-pending request they can't source —
                 separate from the approving role's own Approve/Reject above (shown

@@ -18,7 +18,7 @@ import type { PaymentTerm } from "@/lib/payment-terms";
 import { statusBucket, isBudgetCommitted, type PRStatus } from "@/lib/purchasing";
 import { effectiveLineSku } from "@/lib/item-sku-align";
 import { coverForItems, coveredLabel, isCoveredByStock, withoutCovered, type LineCover } from "@/lib/stock-covered";
-import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
+import { createCombinedPO, advanceCombinedPO, receiveCombinedPO, receiveCombinedPOEarly, updateCombinedPO, cancelPurchaseRequest, deletePurchaseRequest } from "../orders/actions";
 import { PurchaseReturnsPanel } from "./purchase-returns-panel";
 import { PurchaseReconcilePanel } from "./purchase-reconcile-panel";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
@@ -91,6 +91,10 @@ export interface BatchCard {
   lines: POLine[];
   members: BatchMember[];
   trail: string[];
+  /** Goods arrived early and the Warehouseman received them (lib/early-receive). */
+  earlyReceived?: { byName: string; at: string } | null;
+  /** The viewer may press "Goods arrived — Receive now" on this combined PO. */
+  canReceiveEarly?: boolean;
   actions: BatchAction[];
   canManagePO: boolean;
   canCancel: boolean;
@@ -381,6 +385,8 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [receiving, setReceiving] = useState(false);
+  // "Goods arrived — Receive now" (lib/early-receive): the same panel, the early action.
+  const [early, setEarly] = useState(false);
   const [editing, setEditing] = useState(false);
   const totals = poTotals({ lines: batch.lines, ewtPct: batch.ewtPct, ewtMode: batch.ewtMode, ewtAmount: batch.ewtAmount });
   const actionable = batch.actions.filter((a) => a.canAct);
@@ -520,14 +526,20 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
         </div>
       )}
 
-      {receiving ? (
+      {receiving || early ? (
         <div className="mt-2">
           <StockMatchPanel
             lines={batch.lines.map((l) => ({ label: `${l.description}${l.qty ? ` (${l.qty} ${l.unit})` : ""}`, qtyDefault: l.qty }))}
             stockItems={stockItems}
-            submitLabel="Receive & add to stock"
-            onCancel={() => setReceiving(false)}
-            onSubmit={async (matches) => { await receiveCombinedPO(batch.anchorId, matches); setReceiving(false); router.refresh(); }}
+            submitLabel={early ? "Goods arrived — receive into stock" : "Receive & add to stock"}
+            onCancel={() => { setReceiving(false); setEarly(false); }}
+            onSubmit={async (matches) => {
+              if (early) await receiveCombinedPOEarly(batch.anchorId, matches);
+              else await receiveCombinedPO(batch.anchorId, matches);
+              setReceiving(false);
+              setEarly(false);
+              router.refresh();
+            }}
           />
         </div>
       ) : actionable.length > 0 ? (
@@ -545,6 +557,21 @@ function BatchCardView({ batch, stockItems, suppliers, paymentTerms, poDefaultRe
       ) : awaiting ? (
         <div className="mt-2"><ApproverHighlight role={awaiting.roleLabel} /></div>
       ) : null}
+
+      {/* Goods already here before the paperwork (lib/early-receive). */}
+      {batch.canReceiveEarly && !early && !receiving && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-2 py-1.5 text-xs">
+          <Button size="sm" variant="outline" className="h-7 border-emerald-600/50 text-xs text-emerald-700 hover:bg-emerald-600/10" onClick={() => setEarly(true)}>
+            Goods arrived — Receive now
+          </Button>
+          <span className="text-muted-foreground">The items become usable now; the remaining steps carry on for the payment side, and the Plant Manager&apos;s approval completes the PO.</span>
+        </div>
+      )}
+      {batch.earlyReceived && batch.status !== "COMPLETED" && (
+        <div className="mt-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-2 py-1 text-xs text-emerald-800 dark:text-emerald-300">
+          Goods received into stock early by {batch.earlyReceived.byName} — the remaining steps carry on; this PO completes at the Plant Manager&apos;s final approval.
+        </div>
+      )}
 
       {/* Supplier returns — disapproved items in this PO sent back for replacement. */}
       <PurchaseReturnsPanel

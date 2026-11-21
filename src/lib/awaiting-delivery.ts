@@ -35,6 +35,13 @@ export const AWAITING_NOTE = "Bought — added at Cash & Check Released. Not usa
 /** Stamped on a hold a short delivery left behind (the PO is already received). */
 export const SHORT_DELIVERY_MARK = "Short delivery:";
 export const isShortDeliveryLeftover = (note: string | null | undefined): boolean => String(note ?? "").includes(SHORT_DELIVERY_MARK);
+/**
+ * Stamped on a hold the Warehouseman confirmed from the Inventory page
+ * (**Delivered**) before the PO itself was received. The PO's Receive later
+ * counts it as already in stock, so nothing is added twice.
+ */
+export const DELIVERED_MARK = "Delivered — confirmed from Inventory";
+export const isDeliveredFromInventory = (note: string | null | undefined): boolean => String(note ?? "").includes(DELIVERED_MARK);
 
 /** The reservation's "for" text: "PO-AFBM20260001114 · awaiting delivery confirmation". */
 export const awaitingRef = (poRef: string) => `${poRef.trim()}${AWAITING_SUFFIX}`;
@@ -127,6 +134,11 @@ export interface AwaitingHold {
   stockItemId: string;
   qty: number;
   createdAt: Date | string;
+  /**
+   * Already confirmed (Delivered from the Inventory page) — counts as received
+   * and in stock, but is no longer a hold to release.
+   */
+  confirmed?: boolean;
 }
 export interface ConfirmPlan {
   /** What Receive still adds to stock — the part that was not already added at cash release. */
@@ -148,7 +160,9 @@ export function planConfirm(matches: readonly { stockItemId: string; qty: number
   const at = (h: AwaitingHold) => new Date(h.createdAt).getTime();
   const left = new Map(holds.map((h) => [h.id, h.qty]));
   const byItem = new Map<string, AwaitingHold[]>();
-  for (const h of [...holds].sort((a, b) => at(a) - at(b))) (byItem.get(h.stockItemId) ?? byItem.set(h.stockItemId, []).get(h.stockItemId)!).push(h);
+  // What the Warehouseman already confirmed is counted first, then the live holds, oldest first.
+  const order = (h: AwaitingHold) => (h.confirmed ? 0 : 1);
+  for (const h of [...holds].sort((a, b) => order(a) - order(b) || at(a) - at(b))) (byItem.get(h.stockItemId) ?? byItem.set(h.stockItemId, []).get(h.stockItemId)!).push(h);
   const adds = new Map<string, number>();
   const confirmed = new Map<string, number>();
   const r3 = (n: number) => Math.round(n * 1000) / 1000;
@@ -169,6 +183,7 @@ export function planConfirm(matches: readonly { stockItemId: string; qty: number
   const release: string[] = [];
   const reduce: { id: string; to: number }[] = [];
   for (const h of holds) {
+    if (h.confirmed) continue; // nothing left to release on it
     const l = left.get(h.id) ?? h.qty;
     if (l <= 0) release.push(h.id);
     else if (l < h.qty) reduce.push({ id: h.id, to: l });

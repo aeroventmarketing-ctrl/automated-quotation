@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
 import { readClientDue } from "@/lib/order-client-due";
 import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
 import { listStockItemsWithAvailability } from "@/lib/inventory";
@@ -464,6 +465,9 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
       const dues = [...new Set(members.map((m) => (m.purchaseDueAt ? m.purchaseDueAt.toISOString().slice(0, 10) : "")))];
       const setDues = dues.filter(Boolean).sort();
       return {
+        // Goods arrived early (lib/early-receive): stamped on every member.
+        earlyReceived: readEarlyReceive(anchor.chainLog),
+        canReceiveEarly: members.every((m) => canReceiveEarly(m, canAct("warehouse"))),
         memberIds: members.map((m) => m.id),
         purchaseDueAt: setDues[0] ?? null,
         purchaseDueMixed: dues.length > 1,
