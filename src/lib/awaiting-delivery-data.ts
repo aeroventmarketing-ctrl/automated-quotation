@@ -6,12 +6,14 @@ import type { Prisma } from "@prisma/client";
 import { applyStockChange } from "@/lib/inventory";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { OFFICE_DEPT_KEY } from "@/lib/order-workflow";
-import { AWAITING_NOTE, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, type CashReleaseMember } from "@/lib/awaiting-delivery";
+import { readEarlyReceive } from "@/lib/early-receive";
+import { AWAITING_NOTE, DELIVERED_MARK, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, type CashReleaseMember } from "@/lib/awaiting-delivery";
 
 type Tx = Prisma.TransactionClient;
 
 interface PrLike {
   id: string;
+  chainLog?: unknown;
   kind?: string | null;
   dept: string | null;
   quotationId: string | null;
@@ -45,6 +47,9 @@ export async function addAwaitingAtCashRelease(tx: Tx, poHolder: PrLike, members
   const po = coercePurchaseOrder(poHolder.po);
   if (!po || po.lines.length === 0) return 0;
   const ref = poRefOf(poHolder);
+  // Its goods were already received early (lib/early-receive) — a rollback and
+  // Cash & Check Released again must not put them in a second time.
+  if (readEarlyReceive(poHolder.chainLog)) return 0;
   // Pressed twice (a rollback and forward again) — never add the same PO twice.
   const already = await tx.stockReservation.count({ where: { forRef: awaitingRef(ref), active: true } });
   if (already > 0) return 0;
@@ -73,8 +78,17 @@ export async function confirmAwaitingOnReceive(
     where: { forRef: awaitingRef(poRef), active: true },
     select: { id: true, stockItemId: true, qty: true, createdAt: true, note: true },
   });
-  if (holds.length === 0) return matches;
-  const plan = planConfirm(matches, holds.map((h) => ({ ...h, qty: Number(h.qty) })));
+  // Confirmed from the Inventory page before this Receive — already usable
+  // stock; it absorbs what arrived instead of being added again.
+  const delivered = await tx.stockReservation.findMany({
+    where: { forRef: awaitingRef(poRef), active: false, note: { contains: DELIVERED_MARK } },
+    select: { id: true, stockItemId: true, qty: true, createdAt: true },
+  });
+  if (holds.length === 0 && delivered.length === 0) return matches;
+  const plan = planConfirm(matches, [
+    ...holds.map((h) => ({ ...h, qty: Number(h.qty) })),
+    ...delivered.map((h) => ({ ...h, qty: Number(h.qty), confirmed: true })),
+  ]);
   const now = new Date();
   if (plan.release.length) {
     await tx.stockReservation.updateMany({ where: { id: { in: plan.release } }, data: { active: false, releasedByName: byName, releasedAt: now } });

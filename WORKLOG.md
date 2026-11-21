@@ -1,3 +1,64 @@
+## 2026-11-21 · The Warehouseman receives as soon as the goods arrive — "Goods arrived — Receive now" and Delivered
+
+The owner: *"Is there a way where warehouseman can bypass all approvers and press receive and add to
+stock button?"* — then chose *"option 1, optionally with option 2 as a shortcut on the Inventory
+page"*: confirm the delivery early while the PO's other steps carry on, plus **Delivered** on the
+Inventory page. (A change to the frozen Phase 4 chain, approved by the owner.)
+
+**On the PO — Goods arrived — Receive now** (single and combined POs)
+- Offered to the Warehouseman (and admin) from **Cash & Check Released** until the Plant Manager's
+  final approval (at Plant Manager approved the ordinary Receive is already open). Never for an Office
+  bought-in requisition — those go to the client, not the shelf.
+- It is the ordinary receive panel: the stock held since cash release becomes usable, anything that
+  wasn't added then goes in now, and the quantities can be corrected (a short delivery stays held).
+- **The PO does not jump ahead.** Hand-off, logistics, Item bought, the checks and the voucher
+  reconciliation still happen; nobody's sign-off is faked. The card and trail say *Goods arrived —
+  received into stock early (the remaining steps carry on) — Willy Ho*.
+- **At the Plant Manager's final approval the PO completes on its own** — received by the Warehouseman,
+  on the early date. No second Receive to press.
+
+**On the Inventory page — Delivered** now on every "not usable yet" line, not only short-delivery
+leftovers. The confirmed hold is marked, and the PO's own Receive later counts it as already in stock —
+nothing is added twice.
+
+Guards: the early stamp (`chainLog.early_receive`) is not a chain step, so an admin roll-back keeps it;
+Cash & Check Released pressed again after a roll-back adds nothing for goods already received.
+
+`lib/early-receive.ts` (tested); `receivePurchaseRequestEarly` / `receiveCombinedPOEarly`; the `plant`
+step completes an early-received PO; `DELIVERED_MARK` + `planConfirm` counting confirmed holds
+(`lib/awaiting-delivery`, tested, incl. against Postgres).
+
+Verified on the role harness: PO A (10 pc, 3 on hand) — cash released → 13 on hand, 10 held; the
+Warehouseman pressed **Goods arrived — Receive now** → held 0, PO still at *Cash released*; jumped to
+*Warehouseman received*, the Plant Manager's final approval → **Completed**, received by Willy Ho, on
+hand still 13. PO B (20 pc) — **Delivered** on the Inventory page → usable; the PO's ordinary Receive
+later → Completed, on hand still 20.
+
+## 2026-11-21 · Stock availability & issue: Office / Plant Warehouse chosen automatically
+
+The owner, on an MRF's *Stock availability & issue* with every line reading "Office" while the
+stock came from the Plant Warehouse: *"what is the meaning of office and plant warehouse
+dropdown?"* — then *"can we do this automatically to show where the stock is available and choose
+the location only when both plant and office has available stock?"*
+
+For Motor Controller and Office requests (the departments that may take from either place):
+- Stock in **one** place → that place is used and shown on the line; **no dropdown**.
+- Stock in **both** places → the dropdown, Office by default, as before.
+- Neither → no dropdown; the line reads out of stock.
+
+It also fixes a quiet miss: an item with an **empty Office row** and stock in the plant used to read
+*out of stock* (the default Office row was the one looked at) and could be sent to purchasing. It
+now finds the plant's stock. Fans & Blower, Duct and Accessories are unchanged — Plant Warehouse
+only, never Office, no dropdown.
+
+UI only: the screen chooses which stock row an Issue deducts; the issue actions, who may issue and
+the location guard on the server are unchanged. `issueLocationChoice` in `lib/stock-location.ts`
+(tested), used by `orders/[id]/mrf-stock-check.tsx` and `requisitions/requisition-stock-check.tsx`.
+
+Verified on the role harness (a Motor Controller requisition): pulley stocked only in the plant →
+*Plant Warehouse · 18 pc available*, no dropdown; motor in both → dropdown on Office; bearing with
+Office 0 / plant 4 → *Plant Warehouse · 4 pc available*, no dropdown.
+
 ## 2026-11-20 · Bought items go into stock at Cash & Check Released — not usable until the Warehouseman's Receive
 
 The owner, after PO-1075 needed an admin to press every role before its items reached inventory:

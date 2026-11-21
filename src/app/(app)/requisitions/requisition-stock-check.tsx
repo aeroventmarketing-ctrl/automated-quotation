@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueRequisitionLineFromStock, sendRequisitionLineToPurchasing } from "../orders/actions";
 import { parseIssuedFromStockLine, isToPurchaseLine, stripToPurchasePrefix } from "@/lib/purchase-order";
-import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
+import { stockLocationPolicy, issueLocationChoice } from "@/lib/stock-location";
 import { stockRowsForLine } from "@/lib/stock-line-match";
 
 interface Hit {
@@ -77,7 +77,11 @@ export function RequisitionStockCheck({
   // bracket-blind name used to treat "NIHONBOND #16 (1.3mm)" and "(1.2mm)" as
   // one item and pick whichever came first.
   const matchStock = (_desc: string, lineIndex: number) =>
-    pickIssueRow(stockRowsForLine(skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default);
+    issueLocationChoice(stockRowsForLine(skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default).row;
+  // The Office / Plant Warehouse dropdown only when both places have stock
+  // (lib/stock-location — issueLocationChoice); otherwise it is chosen for you.
+  const canChooseLocation = (_desc: string, lineIndex: number) =>
+    issueLocationChoice(stockRowsForLine(skus[lineIndex], stockItems), dept, lineLoc[lineIndex] ?? policy.default).choose;
 
   const lines = items.map((raw, index) => {
     const issued = parseIssuedFromStockLine(raw);
@@ -201,7 +205,7 @@ export function RequisitionStockCheck({
                     <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">· {fmt(matched.available ?? 0)}{matched.unit ? ` ${matched.unit}` : ""} available</span>
                   )}
                 </span>
-                {policy.mode === "choose" && (
+                {canChooseLocation(l.desc, l.index) && (
                   <select
                     value={lineLoc[l.index] ?? policy.default}
                     onChange={(e) => setLineLoc((s) => ({ ...s, [l.index]: e.target.value }))}

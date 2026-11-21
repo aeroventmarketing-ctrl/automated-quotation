@@ -25,6 +25,8 @@ import { workflowRoleLabel, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { requisitionDeptLabel } from "@/lib/order-workflow";
 import { formatDateTime } from "@/lib/utils";
 import { readSentBack } from "@/lib/po-edit-access";
+import { canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
+import { poMemberIds } from "@/lib/purchase-batch";
 
 export interface PurchaseActionOpt {
   key: string;
@@ -246,12 +248,21 @@ export interface PurchaseChainRow {
   // The Approver has approved the raised PO (chainLog.approve_po). For a dept
   // requisition this is what moves it from "pending" to "approved".
   poApproved: boolean;
+  /**
+   * Goods arrived early and the Warehouseman received them (lib/early-receive):
+   * the PO's other steps carry on; the Plant Manager's approval completes it.
+   */
+  earlyReceived?: { byName: string; at: string } | null;
+  /** The viewer may press "Goods arrived — Receive now" on this (single) request. */
+  canReceiveEarly?: boolean;
 }
 
 /** The PurchaseRequest fields the builder reads (subset of the Prisma row). */
 export interface PurchaseRequestLike {
   id: string;
   kind?: string | null;
+  /** Optional, so callers that don't select it still compile. */
+  quotationId?: string | null;
   mrfId?: string | null;
   dept: string | null;
   items: unknown;
@@ -379,6 +390,13 @@ export function isBoughtInRequest(pr: { kind?: string | null; dept?: string | nu
  * An amount change at Voucher ready sent this PO back to the Payment Approver
  * (lib/po-edit-access). Its line sits before the PO approval it now awaits.
  */
+/** "Goods arrived — received into stock early — Willy Ho (Warehouseman) · …", until the PO completes. */
+function earlyReceiveLine(chainLog: unknown, warehouse: string, completed: boolean): string | null {
+  const e = readEarlyReceive(chainLog);
+  if (!e) return null;
+  return `Goods arrived — received into stock early${completed ? "" : " (the remaining steps carry on)"} — ${e.byName} (${warehouse}) · ${formatDateTime(new Date(e.at))}`;
+}
+
 function sentBackLine(chainLog: unknown): string | null {
   const s = readSentBack(chainLog);
   if (!s) return null;
@@ -440,6 +458,7 @@ export function buildPurchaseTrail(pr: PurchaseRequestLike): string[] {
     lstamp("Delivered to Warehouseman", logistics, "deliver"),
     lstamp("Warehouseman received & approved", warehouse, "warehouse_approve"),
     stamp("Plant Manager final approval", plant, pr.plantApprovedByName, pr.plantApprovedAt),
+    earlyReceiveLine(pr.chainLog, warehouse, !!pr.receivedByName),
     stamp("Received & added to stock", warehouse, pr.receivedByName, pr.receivedAt),
   ].filter((s): s is string => s !== null);
 }
@@ -559,5 +578,8 @@ export function buildPurchaseChainRow(
     // still at APPROVED — before the voucher. Keeps Create-PO / Split off pending.
     canPreparePO: status === "APPROVED" && statusBucket(status, { isDept, poApproved }) === "approved",
     poApproved,
+    earlyReceived: readEarlyReceive(pr.chainLog),
+    // A combined PO's member is received from its batch card, not here.
+    canReceiveEarly: poMemberIds(pr.po).length === 0 && canReceiveEarly({ ...pr, quotationId: pr.quotationId ?? null }, ctx.canAct("warehouse")),
   };
 }

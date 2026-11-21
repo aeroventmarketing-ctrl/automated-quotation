@@ -86,6 +86,7 @@ import { buildCommissionsFresh, allDeals, commissionHolds } from "@/lib/sales-co
 import { applyStockChange } from "@/lib/inventory";
 import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { addAwaitingAtCashRelease, confirmAwaitingOnReceive, poRefOf, reverseAwaiting } from "@/lib/awaiting-delivery-data";
+import { EARLY_RECEIVE_KEY, canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
 import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
@@ -2559,10 +2560,19 @@ export async function advancePurchaseRequest(
       data.receivedByName = user.name;
       data.receivedAt = now;
       break;
-    case "plant":
+    case "plant": {
       data.plantApprovedByName = user.name;
       data.plantApprovedAt = now;
+      // The goods were received early (lib/early-receive): the PO completes here —
+      // there is no second Receive & Add Stock to press.
+      const early = readEarlyReceive(pr.chainLog);
+      if (early) {
+        data.status = "COMPLETED";
+        data.receivedByName = early.byName;
+        data.receivedAt = new Date(early.at);
+      }
       break;
+    }
   }
   // Cash & Check Released puts the bought lines into stock, held — not usable
   // until the Warehouseman's Receive & Add Stock (lib/awaiting-delivery). A
@@ -4332,10 +4342,18 @@ export async function advanceCombinedPO(anchorPurchaseRequestId: string, stepKey
       data.checkedByName = user.name;
       data.checkedAt = now;
       break;
-    case "plant":
+    case "plant": {
       data.plantApprovedByName = user.name;
       data.plantApprovedAt = now;
+      // Received early (lib/early-receive) — the combined PO completes here.
+      const early = readEarlyReceive(anchor.chainLog);
+      if (early) {
+        data.status = "COMPLETED";
+        data.receivedByName = early.byName;
+        data.receivedAt = new Date(early.at);
+      }
       break;
+    }
   }
   await prisma.$transaction(async (tx) => {
     for (const m of members) {
@@ -5515,6 +5533,99 @@ export async function fileSignedCommissionVoucher(quotationId: string, doc: { pa
  * Warehouse receives a purchased order into stock — adding the matched stock
  * items and advancing the purchase request to RECEIVED (awaiting Plant Manager).
  */
+/**
+ * Goods arrived before the paperwork (lib/early-receive): the Warehouseman
+ * receives into stock now — anywhere from Cash & Check Released until the Plant
+ * Manager's final approval. Stock held since cash release becomes usable and
+ * anything not added then goes in now; the PO's other steps carry on, and the
+ * Plant Manager's approval completes it.
+ */
+export async function receivePurchaseRequestEarly(purchaseRequestId: string, matches: StockMatch[]): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can receive purchases.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (poMemberIds(pr.po).length > 0) throw new Error("Receive this from its combined purchase order.");
+  if (!canReceiveEarly(pr, true)) {
+    throw new Error(readEarlyReceive(pr.chainLog) ? "Already received." : "This purchase can be received early only between Cash & Check Released and the Plant Manager's final approval.");
+  }
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+  const ref = poRefOf(pr);
+  const log = (pr.chainLog && typeof pr.chainLog === "object" ? pr.chainLog : {}) as Record<string, unknown>;
+  await prisma.$transaction(async (tx) => {
+    const adds = await confirmAwaitingOnReceive(tx, ref, clean.map((m) => ({ stockItemId: m.stockItemId, qty: Number(m.qty) })), user.name);
+    for (const m of adds) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: m.qty, reason: `Purchase received early (goods arrived) — ${ref}` }, user.name);
+    }
+    await tx.purchaseRequest.update({
+      where: { id: purchaseRequestId },
+      data: { chainLog: { ...log, [EARLY_RECEIVE_KEY]: { byName: user.name, at: new Date().toISOString() } } as Prisma.InputJsonValue },
+    });
+  });
+  await logActivity(user, {
+    action: "purchase.receive_early",
+    category: "purchase",
+    summary: `Goods received early — ${ref}`,
+    entity: "purchase",
+    entityId: purchaseRequestId,
+    href: `/purchasing?req=${purchaseRequestId}`,
+  });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidateStockCatalogue();
+  revalidatePath("/purchasing");
+  revalidatePath("/inventory");
+}
+
+/** The combined-PO form of {@link receivePurchaseRequestEarly}: every member is stamped. */
+export async function receiveCombinedPOEarly(anchorPurchaseRequestId: string, matches: StockMatch[]): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
+    throw new Error("Only the Warehouse or an admin can receive purchases.");
+  }
+  const anchor = await prisma.purchaseRequest.findUnique({ where: { id: anchorPurchaseRequestId } });
+  if (!anchor) throw new Error("Purchase request not found");
+  const ids = poMemberIds(anchor.po);
+  if (ids.length === 0) throw new Error("This is not a combined purchase order.");
+  const members = await prisma.purchaseRequest.findMany({ where: { id: { in: ids } } });
+  if (!members.every((m) => canReceiveEarly(m, true))) {
+    throw new Error(members.some((m) => readEarlyReceive(m.chainLog)) ? "Already received." : "This purchase can be received early only between Cash & Check Released and the Plant Manager's final approval.");
+  }
+  const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+  const ref = poRefOf(anchor);
+  const stampAt = new Date().toISOString();
+  await prisma.$transaction(async (tx) => {
+    const adds = await confirmAwaitingOnReceive(tx, ref, clean.map((m) => ({ stockItemId: m.stockItemId, qty: Number(m.qty) })), user.name);
+    for (const m of adds) {
+      await applyStockChange(tx, { stockItemId: m.stockItemId, kind: "RECEIPT", qty: m.qty, reason: `Purchase received early (goods arrived, combined PO) — ${ref}` }, user.name);
+    }
+    for (const m of members) {
+      const log = (m.chainLog && typeof m.chainLog === "object" ? m.chainLog : {}) as Record<string, unknown>;
+      await tx.purchaseRequest.update({
+        where: { id: m.id },
+        data: { chainLog: { ...log, [EARLY_RECEIVE_KEY]: { byName: user.name, at: stampAt } } as Prisma.InputJsonValue },
+      });
+    }
+  });
+  await logActivity(user, {
+    action: "purchase.receive_early",
+    category: "purchase",
+    summary: `Goods received early — combined ${ref} (${members.length} requests)`,
+    entity: "purchase",
+    entityId: anchor.id,
+    href: `/purchasing?req=${anchor.id}`,
+  });
+  for (const qid of [...new Set(members.map((m) => m.quotationId).filter((q): q is string => !!q))]) {
+    revalidatePath(`/orders/${qid}`);
+  }
+  revalidateStockCatalogue();
+  revalidatePath("/purchasing");
+  revalidatePath("/inventory");
+}
+
 export async function receivePurchaseRequest(
   purchaseRequestId: string,
   matches: StockMatch[],

@@ -56,7 +56,7 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
       </div>
       <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
         Added when the cash &amp; check were released. They can&apos;t be issued, released to an MRF, sold or requested until the
-        Warehouseman presses <b>Receive &amp; Add Stock</b> on the PO to confirm the delivery — remind the Warehouseman if the goods are already here.
+        Warehouseman confirms the delivery — <b>Delivered</b> here, or <b>Goods arrived — Receive now</b> on the PO. Remind the Warehouseman if the goods are already here.
       </p>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[520px] text-xs">
@@ -85,9 +85,10 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
                 </td>
                 <td className="whitespace-nowrap py-1 pr-2 text-muted-foreground">{when(h.since)}</td>
                 <td className="whitespace-nowrap py-1 text-right">
-                  {/* The PO's own Receive confirms a delivery; only what a short
-                      delivery left behind is confirmed here. */}
-                  {canConfirm && h.leftover && (
+                  {/* The shortcut for the Warehouseman: the goods are here, make
+                      them usable. The PO's own Receive later counts them as in
+                      stock already — nothing is added twice. */}
+                  {canConfirm && (
                     <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy === h.id}
                       onClick={() => run(h.id, () => confirmAwaitingDelivery(h.id), `Confirm the rest of ${h.itemName} arrived? ${fmt(h.qty)} ${h.unit} become usable.`)}>
                       Delivered

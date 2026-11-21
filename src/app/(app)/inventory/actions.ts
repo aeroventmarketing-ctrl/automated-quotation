@@ -16,7 +16,7 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { logActivity } from "@/lib/activity-log";
 import { logPriceChange } from "@/lib/inventory-history-data";
 import { applyStockChange } from "@/lib/inventory";
-import { isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
+import { DELIVERED_MARK, isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 
 async function requireInventoryManager() {
   const user = await getCurrentUser();
@@ -884,7 +884,13 @@ export async function confirmAwaitingDelivery(reservationId: string): Promise<vo
   }
   const r = await prisma.stockReservation.findUnique({ where: { id: reservationId } });
   if (!r || !r.active || !isAwaitingRef(r.forRef)) throw new Error("Nothing is awaiting delivery here any more.");
-  await prisma.stockReservation.update({ where: { id: reservationId }, data: { active: false, releasedByName: user.name, releasedAt: new Date() } });
+  // Marked, so the PO's own Receive later counts it as in stock already and
+  // doesn't add it a second time (lib/awaiting-delivery — DELIVERED_MARK).
+  const day = new Date().toISOString().slice(0, 10);
+  await prisma.stockReservation.update({
+    where: { id: reservationId },
+    data: { active: false, releasedByName: user.name, releasedAt: new Date(), note: `${r.note ?? ""} · ${DELIVERED_MARK} by ${user.name} on ${day}`.replace(/^ · /, "") },
+  });
   await logActivity(user, {
     action: "inventory.delivery_confirmed",
     category: "inventory",
