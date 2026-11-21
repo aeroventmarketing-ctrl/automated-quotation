@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageSearch, Search, X } from "lucide-react";
 import { issueMrfLineFromStock, sendMrfLineToPurchasing } from "../actions";
-import { stockLocationPolicy, pickIssueRow } from "@/lib/stock-location";
+import { stockLocationPolicy, issueLocationChoice } from "@/lib/stock-location";
 import { stockRowsForLine } from "@/lib/stock-line-match";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 
@@ -87,7 +87,11 @@ export function MrfStockCheck({
   // The stock row a line issues from: by its SKU and nothing else (the owner:
   // *"Match by SKU only"*), honouring the department's location policy.
   const matchStock = (desc: string, lineIndex: number) =>
-    pickIssueRow(stockRowsForLine(skuOf(desc), stockItems), dept, lineLoc[lineIndex] ?? policy.default);
+    issueLocationChoice(stockRowsForLine(skuOf(desc), stockItems), dept, lineLoc[lineIndex] ?? policy.default).row;
+  // The Office / Plant Warehouse dropdown only when both places have stock
+  // (lib/stock-location — issueLocationChoice); otherwise it is chosen for you.
+  const canChooseLocation = (desc: string, lineIndex: number) =>
+    issueLocationChoice(stockRowsForLine(skuOf(desc), stockItems), dept, lineLoc[lineIndex] ?? policy.default).choose;
 
   const pending = lines.filter((l) => !l.disposition);
   const chips = Array.from(new Set(lines.map((l) => cleanTerm(l.description)).filter((t) => t.length >= 2)));
@@ -189,7 +193,7 @@ export function MrfStockCheck({
                     <span className="ml-1 font-medium text-emerald-700 dark:text-emerald-400">· {fmt(matched.available ?? 0)}{matched.unit ? ` ${matched.unit}` : ""} available</span>
                   )}
                 </span>
-                {policy.mode === "choose" && (
+                {canChooseLocation(l.description, l.index) && (
                   <select
                     value={lineLoc[l.index] ?? policy.default}
                     onChange={(e) => setLineLoc((s) => ({ ...s, [l.index]: e.target.value }))}

@@ -108,3 +108,45 @@ export function pickIssueRow<T extends { location?: string | null }>(
   }
   return rows[0];
 }
+
+export interface IssueLocationChoice<T> {
+  /** The stock row an Issue would deduct. */
+  row: T | undefined;
+  /**
+   * Offer the Office / Plant Warehouse dropdown: only when the department may
+   * choose AND both places have stock available. Otherwise the location is
+   * decided for the user and simply shown.
+   */
+  choose: boolean;
+}
+
+/**
+ * Which location an Issue takes from — automatically, unless there is a real
+ * choice. The owner: *"show where the stock is available and choose the location
+ * only when both plant and office has available stock"*.
+ *
+ *  - Plant-only departments: as {@link pickIssueRow} — never Office, no choice.
+ *  - Motor Controller / Office, stock in **both** places: the dropdown, default
+ *    Office (or the user's pick).
+ *  - Stock in **one** place: that place, no dropdown — so the line no longer reads
+ *    "Office" while deducting from the Plant Warehouse, nor shows "out of stock"
+ *    for an empty Office row when the plant has it.
+ *  - Neither: the usual row (it reads "out of stock").
+ */
+export function issueLocationChoice<T extends { location?: string | null; available?: number | null }>(
+  rows: T[],
+  dept: string | null | undefined,
+  chosen?: string | null,
+): IssueLocationChoice<T> {
+  const policy = stockLocationPolicy(dept);
+  if (policy.mode === "plant") return { row: pickIssueRow(rows, dept, chosen), choose: false };
+  const has = (r: T | undefined): r is T => !!r && Number(r.available ?? 0) > 0;
+  const office = rowAtLocation(rows, OFFICE_LOCATION);
+  const plant = rowAtLocation(rows, PLANT_LOCATION);
+  if (has(office) && has(plant)) return { row: pickIssueRow(rows, dept, chosen), choose: true };
+  if (has(office)) return { row: office, choose: false };
+  if (has(plant)) return { row: plant, choose: false };
+  // Neither of the two has any: a row elsewhere that does, else the usual pick.
+  const other = rows.find((r) => has(r));
+  return { row: other ?? pickIssueRow(rows, dept, chosen), choose: false };
+}
