@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { UnreleaseButton } from "./unrelease-button";
 import { ChevronLeft, Download } from "lucide-react";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles } from "@/lib/workflow-roles";
 import { inventoryAccess } from "@/lib/catalogue-access";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,7 +163,7 @@ export default async function InventoryHistoryPage({ searchParams }: { searchPar
         </a>
       </form>
 
-      {stock && <StockTable rows={stock.rows} truncated={stock.truncated} perItem={!!item} unit={item?.unit} />}
+      {stock && <StockTable rows={stock.rows} truncated={stock.truncated} perItem={!!item} unit={item?.unit} admin={isAdmin(viewer)} />}
       {price && <PriceTable rows={price.rows} truncated={price.truncated} logMissing={price.logMissing} see={see} perItem={!!item} />}
     </div>
   );
@@ -176,7 +177,7 @@ function TabLink({ href, active, children }: { href: string; active: boolean; ch
   );
 }
 
-function StockTable({ rows, truncated, perItem, unit }: { rows: StockHistoryRow[]; truncated: boolean; perItem: boolean; unit?: string }) {
+function StockTable({ rows, truncated, perItem, unit, admin = false }: { rows: StockHistoryRow[]; truncated: boolean; perItem: boolean; unit?: string; admin?: boolean }) {
   const moves = rows.filter((r) => r.category !== "reserve");
   const added = moves.filter((r) => r.qty > 0).reduce((s, r) => s + r.qty, 0);
   const deducted = moves.filter((r) => r.qty < 0).reduce((s, r) => s - r.qty, 0);
@@ -231,6 +232,10 @@ function StockTable({ rows, truncated, perItem, unit }: { rows: StockHistoryRow[
                       <TableCell className="text-right tabular-nums">{r.balanceAfter == null ? <span className="text-muted-foreground">—</span> : fmtQty(r.balanceAfter)}</TableCell>
                       <TableCell className="text-sm">
                         {r.ref ? (r.ref.href ? <Link href={r.ref.href} className="text-primary hover:underline">{r.ref.label}</Link> : r.ref.label) : <span className="text-muted-foreground">—</span>}
+                        {/* Admin: return an MRF issue / release to stock (lib/mrf-unrelease). */}
+                        {admin && r.unreleasable != null && (
+                          <UnreleaseButton movementId={r.id} left={r.unreleasable} unit={r.unit} mrfLabel={r.ref?.label ?? "the MRF"} />
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm">{r.byName || "—"}</TableCell>
                     </TableRow>
