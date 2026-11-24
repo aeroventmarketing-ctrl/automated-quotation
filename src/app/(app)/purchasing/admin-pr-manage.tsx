@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Pencil, Trash2, Plus, X, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { adminEditPurchaseRequestItems, adminCreateReplenishment, createDepartmentRequisition, deletePurchaseRequest, splitPurchaseRequest } from "../orders/actions";
+import { REQUISITION_DEPTS } from "@/lib/order-workflow";
+import { adminChangePurchaseDepartment, adminEditPurchaseRequestItems, adminCreateReplenishment, createDepartmentRequisition, deletePurchaseRequest, splitPurchaseRequest } from "../orders/actions";
 
 /**
  * Admin-only manage controls for purchasing requests. Edit a request's item
@@ -274,5 +275,47 @@ export function AdminAddDeptRequest({ depts }: { depts: { key: string; label: st
         {err && <span className="text-[11px] text-destructive">{err}</span>}
       </div>
     </div>
+  );
+}
+
+/**
+ * Admin: move a request to another department (Pending / Approved / Budgeted) —
+ * an order's MRF on its Materials tab moves with it (`adminChangePurchaseDepartment`).
+ */
+export function AdminDeptChange({ prId, dept }: { prId: string; dept: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function change(next: string) {
+    if (next === dept) return;
+    const label = REQUISITION_DEPTS.find((d) => d.key === next)?.label ?? next;
+    if (!window.confirm(`Move this request to ${label}? An order's MRF on the Materials tab moves with it.`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await adminChangePurchaseDepartment(prId, next);
+      router.refresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not change the department");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <select
+        value={dept}
+        disabled={busy}
+        onChange={(e) => change(e.target.value)}
+        className="h-6 rounded border bg-background px-1 text-[11px] font-normal"
+        aria-label="Change department (admin)"
+        title="Admin: change the department"
+      >
+        {REQUISITION_DEPTS.map((d) => (<option key={d.key} value={d.key}>{d.label}</option>))}
+      </select>
+      {err && <span className="text-[11px] font-normal text-destructive">{err}</span>}
+    </span>
   );
 }

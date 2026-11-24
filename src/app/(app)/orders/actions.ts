@@ -3731,6 +3731,56 @@ export async function deletePurchaseRequests(purchaseRequestIds: string[]): Prom
 }
 
 /**
+ * Admin: move a purchase request to another department — the owner: *"allow
+ * admin to change the department in pending, approved, budgeted tab"*. Any
+ * request that is still live (not rejected / cancelled); a replenishment top-up
+ * has no department and isn't offered.
+ *
+ * An order's MRF carries its department twice — on this request and on the MRF
+ * in the order's workflow (the Materials tab). The owner chose to change both,
+ * so the department head, the stock-location rule and the job-order costs all
+ * follow the new department.
+ */
+export async function adminChangePurchaseDepartment(purchaseRequestId: string, dept: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can change a request's department.");
+  if (!REQUISITION_DEPT_KEYS.has(dept)) throw new Error("Choose a department.");
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (pr.kind === "replenishment") throw new Error("A stock top-up has no department.");
+  if (pr.status === "REJECTED" || pr.status === "CANCELLED") throw new Error("This request is closed.");
+  if (pr.dept === dept) return;
+  const from = pr.dept;
+
+  await prisma.purchaseRequest.update({ where: { id: purchaseRequestId }, data: { dept } });
+  // …and the MRF it came from, on the order.
+  let formNo: string | null = null;
+  if (pr.quotationId && pr.mrfId) {
+    const { cls, wf } = await loadWorkflow(pr.quotationId);
+    const idx = wf.materialRequests.findIndex((m) => m.id === pr.mrfId);
+    if (idx >= 0) {
+      const materialRequests = wf.materialRequests.slice();
+      formNo = materialRequests[idx].formNo;
+      materialRequests[idx] = { ...materialRequests[idx], dept: dept as MrfDeptKey };
+      await saveWorkflow(pr.quotationId, cls, { ...wf, materialRequests });
+    }
+  }
+  await logActivity(user, {
+    action: "purchase.change_dept",
+    category: "purchase",
+    summary: `Department changed ${requisitionDeptLabel(from)} → ${requisitionDeptLabel(dept)}${formNo ? ` — MRF #${formNo}` : ""}${pr.quotationId ? ` — ${await orderRefLabel(pr.quotationId)}` : ""}`,
+    entity: "purchase",
+    entityId: purchaseRequestId,
+    href: `/purchasing?req=${purchaseRequestId}`,
+  });
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
+  revalidatePath("/requisitions");
+  revalidatePath("/my-dashboard");
+}
+
+/**
  * Admin: replace a purchase request's item lines (and note). Works on any
  * status/tab. Note: this edits the request lines only — a Purchase Order that
  * was already issued keeps its own priced lines (edit those in the PO editor).
