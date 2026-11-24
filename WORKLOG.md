@@ -1,3 +1,26 @@
+## 2026-11-24 · Purchasing: the admin can change a request's department
+
+The owner, with an MRF raised under **Office** that belongs to **Motor Controller**: *"allow admin to
+change the department in pending, approved, budgeted tab"* — and, asked, chose to **change both** the
+purchase request and the MRF on the order's Materials tab. (Owner-approved change touching the frozen
+Phases 3 & 4 data.)
+
+- On a request card in Purchasing (Pending / Approved / Budgeted), the department name is a dropdown
+  for the **admin** (Fans & Blower, Duct, Accessories, Motor Controller, Office). Picking one asks to
+  confirm, then moves the request.
+- An order's MRF moves with it — the request's `dept` and the MRF's `dept` in the order workflow — so
+  the department head who sees it, the stock-location rule and the job-order costs follow the new
+  department.
+- Not offered on stock top-ups (no department) or on rejected, cancelled or completed requests; the
+  server refuses non-admins and closed requests. Each change is logged (*Department changed Office →
+  Motor Controller — MRF #0675 — order*).
+
+`adminChangePurchaseDepartment` (orders/actions), `AdminDeptChange` (purchasing/admin-pr-manage).
+
+Verified on the role harness: an Office MRF #0675 (Approved) — the admin picked Motor Controller →
+the request and the order's MRF both read `motor`; the card header now shows Motor Controller; the
+Purchaser sees no dropdown.
+
 ## 2026-11-21 · Admin → Catalogue: Motor controller prices, editable
 
 The owner, on Admin → Catalogue and a quotation's Motor Controller line (DOL · 3-phase · 220 V · 1.5 HP

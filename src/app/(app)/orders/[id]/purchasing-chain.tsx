@@ -17,7 +17,7 @@ import { SupplierPaymentsPanel } from "../../purchasing/supplier-payments-panel"
 import type { SupplierPayment } from "@/lib/supplier-payments";
 import { StockAvailabilityLookup } from "@/components/stock-availability-lookup";
 import { RequisitionStockCheck } from "../../requisitions/requisition-stock-check";
-import { AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-manage";
+import { AdminDeptChange, AdminPrEditDelete, SplitRequisition } from "../../purchasing/admin-pr-manage";
 import type { PurchaseReturnView, PurchaseReconcileView } from "@/lib/purchase-chain-row";
 import type { CheckDoc } from "@/lib/voucher-check";
 import { canReconcileAt } from "@/lib/purchase-reconcile";
@@ -444,7 +444,10 @@ export function PurchasingChain({
                     />
                   );
                 })()}
-                {r.deptLabel}
+                {/* Admin: change the department (Pending / Approved / Budgeted) — not a top-up, not a closed or completed request. */}
+                {adminManage && admin && !readOnly && r.dept && r.kind !== "replenishment" && r.status !== "REJECTED" && r.status !== "CANCELLED" && r.status !== "COMPLETED"
+                  ? <AdminDeptChange prId={r.id} dept={r.dept} />
+                  : r.deptLabel}
                 {r.mrfNo && <span className="font-normal text-muted-foreground">MRF #{r.mrfNo}</span>}
               </span>
               <Badge variant={r.variant}>{statusLabel}</Badge>
