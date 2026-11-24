@@ -6,8 +6,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { resolveItemSkus, skusForLines, buildCatalogueSkuIndex } from "@/lib/pr-item-skus";
+import { planMrfUnrelease, readMrfMovement, statusAfterUnrelease, undoToken, unreleaseReason } from "@/lib/mrf-unrelease";
 import { realignSkus } from "@/lib/item-sku-align";
-import type { SkuIndex } from "@/lib/item-sku";
+import { skuFor, type SkuIndex } from "@/lib/item-sku";
 import { COMPANY } from "@/lib/config";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { coercePurchaseOrder, formatPoNumber, isIssuedFromStockLine, issuedFromStockLine, isToPurchaseLine, toPurchaseLine, poLineFromPRItem, poTotals, type POLine, type PurchaseOrder } from "@/lib/purchase-order";
@@ -2010,6 +2011,109 @@ export async function resetMaterialReceipt(quotationId: string, requestId: strin
     summary: `Reset receipt confirmation on MRF #${mrf.formNo} — ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
+}
+
+/**
+ * Admin: un-release an item that went out on an MRF (lib/mrf-unrelease) — from
+ * its Inventory history row. The quantity comes back to stock; the MRF line goes
+ * back to waiting (issued → waiting for the warehouse; released → awaiting
+ * release), the MRF's status follows, and a department's receipt confirmation is
+ * cleared. A Fans → department transfer booked on the issue is reversed too.
+ */
+export async function adminUnreleaseMrfMovement(movementId: string, qty: number): Promise<{ returned: number; formNo: string }> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  if (!isAdmin(user)) throw new Error("Only an admin can unrelease an item.");
+  const want = Number(qty);
+  if (!Number.isFinite(want) || want <= 0) throw new Error("Enter how many to return.");
+  const mv = await prisma.stockMovement.findUnique({
+    where: { id: movementId },
+    include: { stockItem: { select: { id: true, name: true, sku: true, unit: true } } },
+  });
+  if (!mv || mv.kind !== "ISSUE") throw new Error("That stock movement can't be unreleased.");
+  const info = readMrfMovement(mv.reason);
+  if (!info) throw new Error("Only an item issued or released on an MRF can be unreleased here.");
+  // Never return more than went out on this movement, across repeated unreleases.
+  const back = await prisma.stockMovement.findMany({
+    where: { stockItemId: mv.stockItemId, kind: "RECEIPT", reason: { contains: undoToken(mv.id) } },
+    select: { delta: true },
+  });
+  const out = Math.abs(Number(mv.delta));
+  const left = Math.round((out - back.reduce((a, b) => a + Number(b.delta), 0)) * 1000) / 1000;
+  if (left <= 0) throw new Error("All of it has been returned already.");
+  if (want > left) throw new Error(`Only ${left} ${mv.stockItem.unit} of this movement is still out.`);
+
+  // The order whose MRF this was — MRF form numbers run across every order.
+  const hit = await prisma.$queryRaw<{ id: string }[]>`
+    select q.id from "Quotation" q,
+      jsonb_array_elements(
+        case when jsonb_typeof(q.classification->'workflow'->'materialRequests') = 'array'
+             then q.classification->'workflow'->'materialRequests' else '[]'::jsonb end
+      ) m
+    where m->>'formNo' = ${info.formNo}
+    limit 1`;
+  const quotationId = hit[0]?.id;
+  if (!quotationId) throw new Error(`MRF #${info.formNo} wasn't found on any order.`);
+  const { cls, wf } = await loadWorkflow(quotationId);
+  const idx = wf.materialRequests.findIndex((m) => m.formNo === info.formNo);
+  if (idx < 0) throw new Error(`MRF #${info.formNo} wasn't found on the order.`);
+  const mrf = wf.materialRequests[idx];
+  if (mrf.status === "cancelled") throw new Error("This MRF is cancelled.");
+
+  const skuIndex = await buildCatalogueSkuIndex();
+  const released = !!info.releasedTo;
+  const plan = planMrfUnrelease(mrf.items, {
+    released,
+    qty: want,
+    stockName: mv.stockItem.name,
+    stockSku: mv.stockItem.sku,
+    skuOf: (d) => skuFor(d, skuIndex),
+  });
+  if ("error" in plan) throw new Error(plan.error);
+  const materialRequests = wf.materialRequests.slice();
+  materialRequests[idx] = {
+    ...mrf,
+    items: plan.items,
+    status: statusAfterUnrelease(plan.items, mrf.status),
+    // The department confirms again once it is handed over again.
+    confirmedAt: undefined,
+    confirmedByName: undefined,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    await applyStockChange(tx, { stockItemId: mv.stockItemId, kind: "RECEIPT", qty: want, reason: unreleaseReason(info.formNo, info.releasedTo, mv.id) }, user.name);
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: { classification: { ...cls, workflow: { ...wf, materialRequests } } as unknown as Prisma.InputJsonObject },
+    });
+    // An issue from Fans stock to another department booked a transfer — book it back.
+    if (!released) {
+      const t = await tx.deptStockTransfer.findFirst({
+        where: { quotationId, stockItemId: mv.stockItemId, toDept: mrf.dept, qty: { gt: 0 } },
+        orderBy: { createdAt: "desc" },
+      });
+      if (t) {
+        const unitCost = Number(t.unitCost);
+        await tx.deptStockTransfer.create({
+          data: {
+            quotationId, fromDept: t.fromDept, toDept: t.toDept, stockItemId: t.stockItemId, description: `${t.description} (unreleased)`,
+            qty: -want, unitCost, value: -Math.round(unitCost * want * 100) / 100, byName: user.name,
+          },
+        });
+      }
+    }
+  });
+  await logActivity(user, {
+    action: "mrf.unreleased", category: "order",
+    summary: `Unreleased ${want} ${mv.stockItem.unit} ${mv.stockItem.name} from MRF #${info.formNo} — back to stock — ${await orderRefLabel(quotationId)}`,
+    entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
+  });
+  revalidatePath("/orders");
+  revalidatePath(`/orders/${quotationId}`);
+  revalidatePath("/inventory");
+  revalidatePath("/inventory/history");
+  revalidatePath("/my-dashboard");
+  return { returned: want, formNo: info.formNo };
 }
 
 /** Render one MRF item as a single display line for the purchasing chain. */

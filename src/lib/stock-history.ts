@@ -46,6 +46,10 @@ export function classifyMovement(kind: string, delta: number, reason: string | n
   }
   if (/^Reorder received/i.test(r)) return { category: "in", label: "Reorder received", where: "From supplier (reorder)" };
 
+  // Admin unrelease (lib/mrf-unrelease): back from the department, into stock.
+  if ((m = r.match(/^MRF #(\S+) unreleased(?: from (.+?))? — returned to stock/i))) {
+    return { category: "in", label: "Unreleased — returned", where: `Back from ${m[2] ?? "production"} (admin)`, mrfNo: m[1] };
+  }
   if ((m = r.match(/^MRF #(\S+)(?: released to (.+))?$/i))) {
     return { category: "out", label: m[2] ? "Released on MRF" : "Issued on MRF", where: m[2] ? m[2] : "Production (MRF)", mrfNo: m[1] };
   }

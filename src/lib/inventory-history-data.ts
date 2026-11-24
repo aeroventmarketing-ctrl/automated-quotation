@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { classifyMovement, matchPurchaseReceipt, type MovementCategory } from "@/lib/stock-history";
+import { undoneMovementId } from "@/lib/mrf-unrelease";
 import {
   coercePriceSource,
   maskPriceEntry,
@@ -119,6 +120,11 @@ export interface StockHistoryRow {
   byName: string;
   /** The document it moved on — order, MRF, PO, counter sale. */
   ref: { label: string; href?: string } | null;
+  /**
+   * An item issued / released on an MRF: how much of it is still out — what the
+   * admin may unrelease (lib/mrf-unrelease). Absent on every other row.
+   */
+  unreleasable?: number;
 }
 
 export interface StockHistoryResult {
@@ -228,6 +234,22 @@ export async function loadStockHistory(f: HistoryFilter, limit = 500): Promise<S
     .filter((r) => r.receivedAt)
     .map((r) => ({ receivedAt: r.receivedAt as Date, receivedByName: r.receivedByName, id: r.id, poNumber: coercePurchaseOrder(r.po)?.poNumber ?? null }));
 
+  // How much of each MRF issue / release has already come back (admin unrelease).
+  const mrfOutIds = kept.filter(({ m, c }) => c.mrfNo && m.kind === "ISSUE").map(({ m }) => m.id);
+  const returnedBy = new Map<string, number>();
+  if (mrfOutIds.length) {
+    const backs = await prisma.stockMovement
+      .findMany({
+        where: { kind: "RECEIPT", stockItemId: { in: [...new Set(kept.map(({ m }) => m.stockItemId))] }, reason: { contains: "[undo:" } },
+        select: { reason: true, delta: true },
+      })
+      .catch(() => []);
+    for (const b of backs) {
+      const id = undoneMovementId(b.reason);
+      if (id) returnedBy.set(id, (returnedBy.get(id) ?? 0) + Number(b.delta));
+    }
+  }
+
   for (const { m, c } of kept) {
     let ref: StockHistoryRow["ref"] = null;
     let where = c.where;
@@ -264,6 +286,9 @@ export async function loadStockHistory(f: HistoryFilter, limit = 500): Promise<S
       reason: m.reason,
       byName: m.byName,
       ref,
+      ...(c.mrfNo && m.kind === "ISSUE"
+        ? { unreleasable: Math.max(0, Math.round((Math.abs(Number(m.delta)) - (returnedBy.get(m.id) ?? 0)) * 1000) / 1000) }
+        : {}),
     });
   }
 

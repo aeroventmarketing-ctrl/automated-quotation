@@ -1,3 +1,33 @@
+## 2026-11-24 · Inventory history: the admin can unrelease an item issued / released on an MRF
+
+The owner, on an item's Stock movements: *"For admin only, add an option to unrelease the released
+item. Once unreleased button is pressed, item count will be updated and returned to inventory count.
+Mrf, order number and workflow will also be updated."* Clarified (approving this change to the frozen
+Phase 3 MRF data): the button on the **Inventory history row**; the admin **chooses the quantity**; the
+MRF line goes **back to waiting**; a department's **receipt confirmation is cleared**.
+
+- On every **Issued on MRF** / **Released on MRF** row, the admin sees **Unrelease** → a quantity (default:
+  what is still out of that movement) → **Return to stock**.
+- **Stock:** the quantity comes back in — a row *Unreleased — returned · Back from Duct (admin)* with the
+  same MRF / order reference. Never more than went out: repeated unreleases are counted against the
+  movement, and the row reads *Returned to stock* once all of it is back.
+- **MRF on the order:** an item **issued from stock** goes back to *waiting for the warehouse* (part of
+  it → the rest stays issued, the returned part waits; identical waiting lines merge); a **released**
+  (bought) item has its released count lowered — *awaiting release* again. The MRF status follows
+  (Issued / Completed → Partial) and the "<Dept> Request Received" confirmation is cleared, so the
+  department confirms again when it is handed over again.
+- A Fans → department **stock transfer** booked on the issue is reversed with an offsetting entry.
+- The MRF line is matched by the item's name, then its SKU; when it can't tell between different
+  articles it refuses rather than guess. Logged in the activity log. Admin only (server-checked).
+
+`lib/mrf-unrelease.ts` (tested), `adminUnreleaseMrfMovement` (orders/actions), `UnreleaseButton`
+(inventory/history); `classifyMovement` reads the return; `loadStockHistory` carries what is still out.
+
+Verified on the role harness: MRF #0901 (2 pc issued, completed, confirmed by the Fans head) — unrelease
+1 → stock 10 → 11, MRF *partial*, confirmation cleared, 1 issued + 1 waiting; unrelease the other →
+stock 12, row reads *Returned to stock*. MRF #0902 (1 pc released to Duct) → stock 5 → 6, line awaiting
+release, MRF *partial*. The Warehouseman sees no Unrelease.
+
 ## 2026-11-24 · Purchasing: the admin can change a request's department
 
 The owner, with an MRF raised under **Office** that belongs to **Motor Controller**: *"allow admin to
