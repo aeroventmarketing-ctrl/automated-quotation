@@ -24,3 +24,12 @@ export function stockRowsForLine<T extends { sku?: string | null }>(code: string
   const c = normCode(code);
   return c ? stock.filter((s) => normCode(s.sku) === c) : [];
 }
+
+/**
+ * "3 pc · CONTROL BOX 300 X 250 X 150" → "CONTROL BOX 300 X 250 X 150": the
+ * quantity (and unit) in front of the first " · " is not part of the item.
+ */
+export function itemNameOfLabel(label: string): string {
+  const m = String(label ?? "").match(/^\s*[\d.,]+(?:\s+[^·]{0,24}?)?\s*·\s*(.+)$/);
+  return (m ? m[1] : String(label ?? "")).trim();
+}
