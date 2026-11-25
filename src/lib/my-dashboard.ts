@@ -10,6 +10,7 @@
  * missing table can't break the page.
  */
 import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
+import { openDuplicates } from "@/lib/duplicate-requests-data";
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
@@ -606,6 +607,26 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
       });
     }
   } catch { /* ignore */ }
+
+  // 2a) Possible duplicate requests (lib/duplicate-requests) — an item asked for
+  //     again on the same order. The owner: for the Purchaser, the Payment
+  //     Approver and the admin, until one of them presses "Not a duplicate".
+  if (has("purchaser") || has("payment_approver")) {
+    try {
+      for (const d of await openDuplicates()) {
+        const first = d.hits[0];
+        tasks.push({
+          key: `dup-req:${d.prId}`, area: "purchase", areaLabel: AREA_LABEL.purchase,
+          title: d.code,
+          action: `Possible duplicate request — ${first.item} (${first.qty}) first requested on ${first.firstRef}${d.hits.length > 1 ? ` (+${d.hits.length - 1} more)` : ""}`,
+          client: maskClient(d.company), amount: null, currency: "PHP",
+          href: `/orders/${d.quotationId}#req-${d.prId}`,
+          since: d.since,
+          createdAt: d.since,
+        });
+      }
+    } catch { /* ignore */ }
+  }
 
   // 2b) Supplier returns — the return-to-supplier lifecycle. Every handling role
   //     sees the live status of each return; when the next step is theirs it also

@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/db";
+import { DUPLICATE_REVIEW_ROLES } from "@/lib/duplicate-requests";
+import { openDuplicates } from "@/lib/duplicate-requests-data";
 import { canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
 import { readClientDue } from "@/lib/order-client-due";
 import { isRushActive, rushDaysLeft } from "@/lib/rush-order";
@@ -97,6 +99,13 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
     admin,
     workflowRoles: (["accounting", "payment_approver"] as WorkflowRoleKey[]).filter((r) => viewer != null && userHasWorkflowRole(assignments, viewer.id, r)),
   });
+  // Possible duplicate requests (lib/duplicate-requests) — the Purchaser, the
+  // Payment Approver and the admin only. Cached (the dashboard and the alarm
+  // read the same list) and dropped the moment someone confirms.
+  const reviewsDuplicates = admin || (viewer != null && DUPLICATE_REVIEW_ROLES.some((r) => userHasWorkflowRole(assignments, viewer.id, r as WorkflowRoleKey)));
+  const duplicates = reviewsDuplicates
+    ? Object.fromEntries((await openDuplicates().catch(() => [])).map((d) => [d.prId, d.hits]))
+    : undefined;
   // Printed cash-voucher number covering each purchase request (if any).
   const voucherNoByPr = await getVoucherNoByPr().catch(() => new Map<string, string>());
   // Who may cancel — the rule is `canCancelPurchase` in `lib/purchasing`, shared
@@ -690,6 +699,7 @@ export default async function PurchasingPage({ searchParams }: { searchParams?: 
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Order material requests</h2>
             <BoughtInToRequestPanel orders={toRequest} canRequest={admin || isPurchaser} autoRaisedAwaiting={autoRaisedAwaiting} admin={admin} />
             <PurchasingWorkspace
+              duplicates={duplicates}
               canChangePoDate={canChangePoDate(viewer, assignments)}
               poDateChanges={poDateChanges}
               batches={batches}

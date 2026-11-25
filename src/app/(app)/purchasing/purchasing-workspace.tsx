@@ -1,5 +1,6 @@
 "use client";
 
+import type { DuplicateHit } from "@/lib/duplicate-requests";
 import { RushBadge } from "@/components/rush-badge";
 import { rushFirst } from "@/lib/rush-order";
 import { useEffect, useMemo, useState } from "react";
@@ -129,6 +130,7 @@ export function PurchasingWorkspace({
   highlightReq,
   canChangePoDate = false,
   poDateChanges = {},
+  duplicates,
 }: {
   batches: BatchCard[];
   combinable: CombinableItem[];
@@ -180,6 +182,8 @@ export function PurchasingWorkspace({
   canChangePoDate?: boolean;
   /** Each request's last PO-date change, for the line under the date. */
   poDateChanges?: Record<string, PoDateChange>;
+  /** Possible duplicate requests by id (lib/duplicate-requests) — Purchaser / Payment Approver / admin only. */
+  duplicates?: Record<string, DuplicateHit[]>;
 }) {
   const router = useRouter();
   // A material/MRF requisition stays "pending" until its Purchase Order exists.
@@ -570,6 +574,7 @@ export function PurchasingWorkspace({
           supplierPaymentsEditable={tab === "budgeted" && canRecordSupplierPayments}
                       adminManage={admin}
                       highlightId={highlightId}
+                      duplicates={duplicates}
                     />
                   </CardContent>
                 </Card>

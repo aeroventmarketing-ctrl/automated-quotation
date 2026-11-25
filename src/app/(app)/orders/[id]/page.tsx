@@ -33,6 +33,8 @@ import {
   type FulfillmentMode,
 } from "@/lib/order-workflow";
 import { purchaseStepsFrom, isPoApproved, effectiveStepRole, PR_STATUS_LABEL, isDeptRequisition, prMainIndex, type PRStatus } from "@/lib/purchasing";
+import { DUPLICATE_REVIEW_ROLES } from "@/lib/duplicate-requests";
+import { duplicateFlagsFor } from "@/lib/duplicate-requests-data";
 import { buildPurchaseTrail, buildReturnViews, buildReconcileView, isAutoRaisedBoughtIn, isBoughtInRequest } from "@/lib/purchase-chain-row";
 import { supplierPaymentsFor } from "@/lib/supplier-payments-data";
 import type { SupplierPayment } from "@/lib/supplier-payments";
@@ -867,6 +869,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     adminViewer || (viewer != null && userHasWorkflowRole(assignments, viewer.id, "payment_approver" as WorkflowRoleKey))
       ? orderMaterialPurchase(purchaseRequests)
       : null;
+  // Possible duplicate requests (lib/duplicate-requests) — the owner: shown to
+  // the Purchaser, the Payment Approver and the admin, who may press "Not a
+  // duplicate". A warning only.
+  const canReviewDuplicates =
+    adminViewer || (viewer != null && DUPLICATE_REVIEW_ROLES.some((r) => userHasWorkflowRole(assignments, viewer.id, r as WorkflowRoleKey)));
+  const duplicateFlags = canReviewDuplicates
+    ? await duplicateFlagsFor([{ id: quote.id, mrfs: wf.materialRequests }], purchaseRequests.map((p) => ({ ...p, status: String(p.status) }))).catch(() => ({}))
+    : undefined;
   const purchaseRows = purchaseRequests.map((pr) => {
     const status = pr.status as PRStatus;
     // Fold the quotation's specification into the stored lines. Requisitions
@@ -1241,13 +1251,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
       {/* Phase 3 — purchasing chain (monitoring only; processed in Purchasing) */}
       {(showMaterials || purchaseRows.length > 0) && (
-        <Card className={rushCard}>
+        <Card id="phase-4" className={`scroll-mt-24 ${rushCard}`}>
           <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-sm">Phase 4 · Purchasing{rushTitle}</CardTitle>
             <Link href="/purchasing" className="text-xs font-medium text-primary hover:underline">Process in Purchasing →</Link>
           </CardHeader>
           <CardContent>
-            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} showAmounts={showAmounts} showSupplier={showSupplier} readOnly />
+            <PurchasingChain requests={purchaseRows} stockItems={stockItems} orderId={quote.id} poDefaultRemarks={COMPANY.poDefaultRemarks} suppliers={suppliers} paymentTerms={paymentTerms} canManagePO={canManagePO} admin={adminViewer} showAmounts={showAmounts} showSupplier={showSupplier} readOnly duplicates={duplicateFlags} />
           </CardContent>
         </Card>
       )}

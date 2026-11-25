@@ -1,3 +1,40 @@
+## 2026-11-25 · Orders: "Possible duplicate request" notice, with a Not a duplicate button
+
+The owner: *"In Orders workflow add a notification for duplicate material request. Notification will
+show the original MRF or Purchase Order number, date and time of first request. Show this … to
+purchaser, payment approver and admin. Once user has checked, the user has the option to press the
+button to confirm that it is not a duplicate order."* Clarified (approving this addition to the frozen
+Phase 4 purchasing card): **same item, same order** (by SKU, else by name; any department; cancelled
+and rejected requests don't count); **any quantity**, both shown; on the **order's Phase 4 card, the
+Purchasing workspace, My Dashboard and the alarm**; **warning only**.
+
+- An open purchase request that asks again for an item an earlier MRF / request on the same order
+  already asked for shows an orange box: *"BOLT M10 × 40 (10 pc here) — first requested on MRF #0911 ·
+  PO-DUP0001 · Nov 21, 2026, 9:15 AM (4 pc, Fans & Blower)"* — the earliest request, its PO number(s)
+  when it has one, its date and time, its quantity and department.
+- **Not a duplicate** (Purchaser / Payment Approver / admin, server-checked) stamps who and when on the
+  request (`chainLog.not_duplicate`), logs it, and the notice goes away everywhere. Nothing is blocked.
+- Requests of the same MRF (a requisition split across suppliers) are one request, never duplicates of
+  each other. Completed / rejected / cancelled requests are not flagged; a cancelled MRF or a
+  rejected / cancelled request is never "the first request".
+- My Dashboard: a Purchasing task per flagged request, opening the request on the order. The alarm:
+  "Possible duplicate request — check and confirm", joined to the order's entry when it already rings,
+  opening Phase 4 (the card now has `id="phase-4"`). Both follow the go-live and notification-baseline
+  gates.
+- Only those three roles see it. The Purchasing workspace, the dashboard and the alarm read one cached
+  list (2 min; cleared the moment someone confirms) — so a brand-new duplicate can take up to two
+  minutes to show there; the order page checks live. Combined-PO cards don't show the box.
+
+`lib/duplicate-requests.ts` (tested), `lib/duplicate-requests-data.ts` (`duplicateFlagsFor`,
+`openDuplicates`), `confirmNotDuplicate` (orders/actions), `DuplicateNotice` (orders/[id]),
+`PurchasingChain` `duplicates` prop.
+
+Verified on the role harness: MRF #0911 (Fans, 4 pc BOLT M10 × 40, PO-DUP0001) then MRF #0912 (Duct,
+10 pc of the same + a washer) — the Purchaser saw the box on #0912 only (the washer not flagged), on the
+order and in Purchasing, a dashboard task and the alarm; the Warehouseman and Sales saw nothing. The
+Payment Approver pressed **Not a duplicate** → stamped "Rey Gil", activity logged, the box, the task and
+the alarm all gone.
+
 ## 2026-11-25 · Inventory: Delivered / Not delivered on several lines at once
 
 The owner, on the "Bought — in stock but not usable yet" box (63 lines): *"add an option to press
