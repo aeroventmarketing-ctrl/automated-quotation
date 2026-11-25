@@ -38,6 +38,8 @@ import { buildOnHandIndex, onHandFor } from "@/lib/stock-on-hand";
 import { coverForItems, coveredLabel, withoutCovered } from "@/lib/stock-covered";
 import { StockOnHand } from "@/components/stock-on-hand";
 import { PoDateControl } from "../../purchasing/po-date-control";
+import { DuplicateNotice } from "./duplicate-notice";
+import type { DuplicateHit } from "@/lib/duplicate-requests";
 
 interface ActionOpt {
   key: string;
@@ -172,6 +174,7 @@ export function PurchasingChain({
   adminManage = false,
   highlightId,
   todayYMD,
+  duplicates,
 }: {
   requests: PRRow[];
   stockItems: StockOpt[];
@@ -252,6 +255,12 @@ export function PurchasingChain({
   adminManage?: boolean;
   /** A request id to scroll to / highlight (deep-link from a notification). */
   highlightId?: string;
+  /**
+   * Possible duplicate requests (lib/duplicate-requests), by request id — passed
+   * only to the Purchaser, Payment Approver and admin, who may press "Not a
+   * duplicate". Shown even on the read-only order page.
+   */
+  duplicates?: Record<string, DuplicateHit[]>;
 }) {
   const printHref = (prId: string) =>
     poRoute === "purchasing" ? `/purchasing/po/${prId}/xlsx` : `/orders/${orderId}/po/${prId}/xlsx`;
@@ -452,6 +461,7 @@ export function PurchasingChain({
               </span>
               <Badge variant={r.variant}>{statusLabel}</Badge>
             </div>
+            {duplicates?.[r.id] && <DuplicateNotice prId={r.id} hits={duplicates[r.id]} canConfirm />}
             <ul className="ml-4 list-disc text-sm text-muted-foreground">
               {r.items.map((it, i) => {
                 // The item's code, beside the item. The line is free text, so it

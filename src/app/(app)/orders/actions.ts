@@ -1,7 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
@@ -88,6 +88,8 @@ import { applyStockChange } from "@/lib/inventory";
 import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { addAwaitingAtCashRelease, confirmAwaitingOnReceive, poRefOf, reverseAwaiting } from "@/lib/awaiting-delivery-data";
 import { EARLY_RECEIVE_KEY, canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
+import { NOT_DUPLICATE_KEY, DUPLICATE_REVIEW_ROLES, readNotDuplicate } from "@/lib/duplicate-requests";
+import { DUPLICATE_FLAGS_TAG } from "@/lib/duplicate-requests-data";
 import { refuse, done, type ActionResult } from "@/lib/action-result";
 import { isLocationAllowedForDept, PLANT_LOCATION } from "@/lib/stock-location";
 import { recordDeptStockTransfer, isDuctHardwareStockName } from "@/lib/dept-stock-transfer";
@@ -3881,6 +3883,46 @@ export async function adminChangePurchaseDepartment(purchaseRequestId: string, d
   if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
   revalidatePath("/purchasing");
   revalidatePath("/requisitions");
+  revalidatePath("/my-dashboard");
+}
+
+/**
+ * "Not a duplicate" — the Purchaser, Payment Approver or admin checked a request
+ * flagged as asking again for an item already requested on the order
+ * (lib/duplicate-requests), and it is meant. A warning only: this records who
+ * and when on the request's chainLog and the notice goes away.
+ */
+export async function confirmNotDuplicate(purchaseRequestId: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("Unauthorized");
+  const roles = await getWorkflowRoles();
+  if (!(isAdmin(user) || DUPLICATE_REVIEW_ROLES.some((r) => userHasWorkflowRole(roles, user.id, r as WorkflowRoleKey)))) {
+    throw new Error("Only the Purchaser, the Payment Approver or an admin can confirm this.");
+  }
+  const pr = await prisma.purchaseRequest.findUnique({ where: { id: purchaseRequestId }, select: { id: true, chainLog: true, quotationId: true, mrfId: true } });
+  if (!pr) throw new Error("Purchase request not found");
+  if (readNotDuplicate(pr.chainLog)) return;
+  const log = (pr.chainLog && typeof pr.chainLog === "object" && !Array.isArray(pr.chainLog) ? pr.chainLog : {}) as Record<string, unknown>;
+  await prisma.purchaseRequest.update({
+    where: { id: purchaseRequestId },
+    data: { chainLog: { ...log, [NOT_DUPLICATE_KEY]: { byName: user.name, at: new Date().toISOString() } } as Prisma.InputJsonValue },
+  });
+  let formNo: string | null = null;
+  if (pr.quotationId && pr.mrfId) {
+    const { wf } = await loadWorkflow(pr.quotationId);
+    formNo = wf.materialRequests.find((m) => m.id === pr.mrfId)?.formNo ?? null;
+  }
+  await logActivity(user, {
+    action: "purchase.not_duplicate",
+    category: "purchase",
+    summary: `Confirmed not a duplicate${formNo ? ` — MRF #${formNo}` : ""}${pr.quotationId ? ` — ${await orderRefLabel(pr.quotationId)}` : ""}`,
+    entity: "purchase",
+    entityId: purchaseRequestId,
+    href: `/purchasing?req=${purchaseRequestId}`,
+  });
+  revalidateTag(DUPLICATE_FLAGS_TAG);
+  if (pr.quotationId) revalidatePath(`/orders/${pr.quotationId}`);
+  revalidatePath("/purchasing");
   revalidatePath("/my-dashboard");
 }
 

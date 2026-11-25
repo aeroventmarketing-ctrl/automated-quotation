@@ -4,6 +4,8 @@
  * role the viewer holds (or a Sales step they own), it shows up here.
  */
 import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
+import { openDuplicates } from "@/lib/duplicate-requests-data";
+import { DUPLICATE_REVIEW_ROLES } from "@/lib/duplicate-requests";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
@@ -252,6 +254,30 @@ export async function pendingApprovalsForUser(user: Viewer): Promise<PendingAppr
       action: actions.join(" · "),
       anchor: orderAction ? phaseAnchor(wf.stage) : "phase-2",
     });
+  }
+
+  // Possible duplicate requests (lib/duplicate-requests) — the Purchaser, the
+  // Payment Approver and the admin, until one of them presses "Not a duplicate".
+  // Joined to the order's entry when it already rings, so the alarm still opens
+  // one order once. The list is cached (`openDuplicates`), so this costs the
+  // poll nothing new most of the time.
+  const reviewsDuplicates =
+    user.role === "ADMIN" || DUPLICATE_REVIEW_ROLES.some((r) => userHasWorkflowRole(assignments, user.id, r as WorkflowRoleKey));
+  if (reviewsDuplicates) {
+    const dups = (await openDuplicates().catch(() => [])).filter((d) => passesNotificationBaseline(d.since, baseline) && alertPasses(d.since, golive));
+    const byOrder = new Map<string, typeof dups>();
+    for (const d of dups) (byOrder.get(d.quotationId) ?? byOrder.set(d.quotationId, []).get(d.quotationId)!).push(d);
+    for (const [qid, list] of byOrder) {
+      const action = `Possible duplicate request${list.length > 1 ? `s (${list.length})` : ""} — check and confirm`;
+      const dupKey = `dup:${list.map((d) => d.prId).join(",")}`;
+      const entry = out.find((e) => e.id === qid);
+      if (entry) {
+        entry.action = `${entry.action} · ${action}`;
+        entry.key = `${entry.key}|${dupKey}`;
+      } else {
+        out.push({ id: qid, key: `${qid}:${dupKey}`, code: list[0].code, company: list[0].company, action, anchor: "phase-4" });
+      }
+    }
   }
   return out;
 }
