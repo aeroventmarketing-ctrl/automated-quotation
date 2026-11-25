@@ -1,3 +1,24 @@
+## 2026-11-25 · Inventory: Delivered / Not delivered on several lines at once
+
+The owner, on the "Bought — in stock but not usable yet" box (63 lines): *"add an option to press
+multiple delivered button and not delivered button"*.
+
+- A tick box on every line, a **select-all** box in the header, and clicking a **PO number** ticks (or
+  unticks) every line of that PO.
+- With lines ticked: **Delivered (N)** (Warehouseman / admin) and **Not delivered (N)** (admin), each
+  confirmed once, then *"N lines marked delivered"*. Lines someone else handled in the meantime are
+  skipped and counted.
+- Same rules as the single buttons (lib/awaiting-delivery): Delivered marks each hold so the PO's own
+  Receive won't add it again; Not delivered takes the quantity back out of stock. One activity-log
+  entry per batch, naming the POs. The single per-line buttons stay.
+
+`confirmAwaitingDeliveries` / `removeUndeliveredStocks` (inventory/actions — the single actions now
+call them), `AwaitingDeliveryPanel`.
+
+Verified on the role harness: three lines on PO-BULK1 / PO-BULK2 — the Warehouseman clicked PO-BULK1 →
+2 ticked → **Delivered (2)** → both released, stock unchanged; the admin ticked all → **Not delivered** →
+the last line taken back out (3 → 0).
+
 ## 2026-11-24 · Inventory history: the admin can unrelease an item issued / released on an MRF
 
 The owner, on an item's Stock movements: *"For admin only, add an option to unrelease the released

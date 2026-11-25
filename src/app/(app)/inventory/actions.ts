@@ -877,31 +877,54 @@ export async function releaseReservation(id: string): Promise<void> {
  * or an admin.
  */
 export async function confirmAwaitingDelivery(reservationId: string): Promise<void> {
+  const r = await confirmAwaitingDeliveries([reservationId]);
+  if (r.done === 0) throw new Error("Nothing is awaiting delivery here any more.");
+}
+
+/**
+ * Delivered, for several lines at once — the owner: *"add an option to press
+ * multiple delivered button and not delivered button"*. Lines no longer
+ * awaiting delivery (someone got there first) are skipped and counted.
+ */
+export async function confirmAwaitingDeliveries(reservationIds: string[]): Promise<{ done: number; skipped: number }> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
     throw new Error("Only the Warehouseman or an admin can confirm a delivery.");
   }
-  const r = await prisma.stockReservation.findUnique({ where: { id: reservationId } });
-  if (!r || !r.active || !isAwaitingRef(r.forRef)) throw new Error("Nothing is awaiting delivery here any more.");
+  const ids = [...new Set((reservationIds ?? []).filter((x) => typeof x === "string" && x))];
+  const holds = await prisma.stockReservation.findMany({ where: { id: { in: ids } } });
+  const live = holds.filter((r) => r.active && isAwaitingRef(r.forRef));
   // Marked, so the PO's own Receive later counts it as in stock already and
   // doesn't add it a second time (lib/awaiting-delivery — DELIVERED_MARK).
-  const day = new Date().toISOString().slice(0, 10);
-  await prisma.stockReservation.update({
-    where: { id: reservationId },
-    data: { active: false, releasedByName: user.name, releasedAt: new Date(), note: `${r.note ?? ""} · ${DELIVERED_MARK} by ${user.name} on ${day}`.replace(/^ · /, "") },
-  });
-  await logActivity(user, {
-    action: "inventory.delivery_confirmed",
-    category: "inventory",
-    summary: `Delivery confirmed — ${Number(r.qty)} now usable (${poRefOfAwaiting(r.forRef)})`,
-    entity: "inventory",
-    entityId: r.stockItemId,
-    href: `/inventory/history?item=${r.stockItemId}`,
-  });
+  const now = new Date();
+  const day = now.toISOString().slice(0, 10);
+  await prisma.$transaction(
+    live.map((r) =>
+      prisma.stockReservation.update({
+        where: { id: r.id },
+        data: { active: false, releasedByName: user.name, releasedAt: now, note: `${r.note ?? ""} · ${DELIVERED_MARK} by ${user.name} on ${day}`.replace(/^ · /, "") },
+      }),
+    ),
+  );
+  if (live.length > 0) {
+    const pos = [...new Set(live.map((r) => poRefOfAwaiting(r.forRef)))];
+    await logActivity(user, {
+      action: "inventory.delivery_confirmed",
+      category: "inventory",
+      summary:
+        live.length === 1
+          ? `Delivery confirmed — ${Number(live[0].qty)} now usable (${pos[0]})`
+          : `Delivery confirmed — ${live.length} lines now usable (${pos.join(", ")})`,
+      entity: "inventory",
+      entityId: live.length === 1 ? live[0].stockItemId : undefined,
+      href: live.length === 1 ? `/inventory/history?item=${live[0].stockItemId}` : "/inventory",
+    });
+  }
   revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/purchasing");
+  return { done: live.length, skipped: ids.length - live.length };
 }
 
 /**
@@ -909,29 +932,46 @@ export async function confirmAwaitingDelivery(reservationId: string): Promise<vo
  * back out of stock. Admin only — it lowers on hand.
  */
 export async function removeUndeliveredStock(reservationId: string): Promise<void> {
+  const r = await removeUndeliveredStocks([reservationId]);
+  if (r.done === 0) throw new Error("Nothing is awaiting delivery here any more.");
+}
+
+/** Not delivered, for several lines at once. Admin only. */
+export async function removeUndeliveredStocks(reservationIds: string[]): Promise<{ done: number; skipped: number }> {
   const user = await getCurrentUser();
   if (!user || !isAdmin(user)) throw new Error("Only an admin can remove stock that was not delivered.");
-  const r = await prisma.stockReservation.findUnique({ where: { id: reservationId } });
-  if (!r || !r.active || !isAwaitingRef(r.forRef)) throw new Error("Nothing is awaiting delivery here any more.");
-  const ref = poRefOfAwaiting(r.forRef);
+  const ids = [...new Set((reservationIds ?? []).filter((x) => typeof x === "string" && x))];
+  const holds = await prisma.stockReservation.findMany({ where: { id: { in: ids } } });
+  const live = holds.filter((r) => r.active && isAwaitingRef(r.forRef));
+  const now = new Date();
   await prisma.$transaction(async (tx) => {
-    // Release first: the issue guard counts held stock, and this IS that stock.
-    await tx.stockReservation.update({ where: { id: reservationId }, data: { active: false, releasedByName: user.name, releasedAt: new Date() } });
-    const item = await tx.stockItem.findUnique({ where: { id: r.stockItemId }, select: { quantity: true } });
-    const qty = Math.min(Number(r.qty), Number(item?.quantity ?? 0));
-    if (qty > 0) await applyStockChange(tx, { stockItemId: r.stockItemId, kind: "ISSUE", qty, reason: `${ref} — not delivered; bought stock taken back out` }, user.name);
+    for (const r of live) {
+      const ref = poRefOfAwaiting(r.forRef);
+      // Release first: the issue guard counts held stock, and this IS that stock.
+      await tx.stockReservation.update({ where: { id: r.id }, data: { active: false, releasedByName: user.name, releasedAt: now } });
+      const item = await tx.stockItem.findUnique({ where: { id: r.stockItemId }, select: { quantity: true } });
+      const qty = Math.min(Number(r.qty), Number(item?.quantity ?? 0));
+      if (qty > 0) await applyStockChange(tx, { stockItemId: r.stockItemId, kind: "ISSUE", qty, reason: `${ref} — not delivered; bought stock taken back out` }, user.name);
+    }
   });
-  await logActivity(user, {
-    action: "inventory.undelivered_removed",
-    category: "inventory",
-    summary: `Not delivered — ${Number(r.qty)} taken back out of stock (${ref})`,
-    entity: "inventory",
-    entityId: r.stockItemId,
-    href: `/inventory/history?item=${r.stockItemId}`,
-  });
+  if (live.length > 0) {
+    const pos = [...new Set(live.map((r) => poRefOfAwaiting(r.forRef)))];
+    await logActivity(user, {
+      action: "inventory.undelivered_removed",
+      category: "inventory",
+      summary:
+        live.length === 1
+          ? `Not delivered — ${Number(live[0].qty)} taken back out of stock (${pos[0]})`
+          : `Not delivered — ${live.length} lines taken back out of stock (${pos.join(", ")})`,
+      entity: "inventory",
+      entityId: live.length === 1 ? live[0].stockItemId : undefined,
+      href: live.length === 1 ? `/inventory/history?item=${live[0].stockItemId}` : "/inventory",
+    });
+  }
   revalidateStockCatalogue();
   revalidatePath("/inventory");
   revalidatePath("/purchasing");
+  return { done: live.length, skipped: ids.length - live.length };
 }
 
 const adjustSchema = z.object({
