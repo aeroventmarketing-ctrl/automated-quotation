@@ -1,3 +1,21 @@
+## 2026-11-25 · A split MRF no longer reads "Cancelled" because one of its requests was cancelled
+
+The owner, on MRF #0624 (Motor Controller): *"MRF is cancelled but PO is completed. Please check"* —
+the MRF card's badge read **Cancelled** while Phase 4 showed its POs **Completed**.
+
+- Cause: the MRF was split across suppliers into three purchase requests. The card's badge follows
+  ONE linked request, and the order page took the last one raised — here a cancelled split. The MRF
+  itself was never cancelled (its Release To Requestor button was still showing, which a cancelled MRF
+  hides).
+- Now a split MRF follows its newest **live** request; a cancelled / rejected one is used only when
+  every request of the MRF was dropped (`linkedPrByMrf`, lib/mrf-linked-pr, tested). The same fix in
+  My Dashboard's Materials feed, which read the same last request ("Purchased — received into stock").
+- No data changed: the MRF, its requests and stock are as they were — only which request the badge
+  follows.
+
+Verified on the role harness: MRF #0624 with two Completed splits and a newer Cancelled one — the card
+reads **Completed**.
+
 ## 2026-11-25 · Release to requestor: a readable reason when bought stock isn't usable yet
 
 The owner, pressing **Release & Deduct From Stock** for SPIRAL WRAP CS-08 (WHITE) on an MRF whose PO was

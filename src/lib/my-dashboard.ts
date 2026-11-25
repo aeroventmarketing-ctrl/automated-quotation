@@ -11,6 +11,7 @@
  */
 import { boughtInPendingLookup } from "@/lib/bought-in-pending-data";
 import { openDuplicates } from "@/lib/duplicate-requests-data";
+import { linkedPrByMrf } from "@/lib/mrf-linked-pr";
 import { Prisma, type User } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isAdmin, canApprove } from "@/lib/auth";
@@ -276,10 +277,11 @@ export async function buildMyDashboard(user: User): Promise<MyDashboard> {
   try {
     const linkedPrs = await prisma.purchaseRequest.findMany({
       where: { mrfId: { not: null } },
-      select: { mrfId: true, status: true },
+      select: { mrfId: true, status: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     });
-    for (const p of linkedPrs) if (p.mrfId) mrfPrStatus.set(p.mrfId, p.status);
+    // A split MRF follows its newest live request, not a cancelled sibling (lib/mrf-linked-pr).
+    for (const [mrfId, p] of linkedPrByMrf(linkedPrs)) mrfPrStatus.set(mrfId, p.status);
   } catch { /* ignore */ }
 
   // Plain-words status for the requestor's Materials feed (null = don't show).
