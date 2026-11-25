@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { linkedPrByMrf } from "@/lib/mrf-linked-pr";
 import { AWAITING_SUFFIX } from "@/lib/awaiting-delivery";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Store } from "lucide-react";
@@ -772,8 +773,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   if (canRaiseOfficeMrf) raisableDepts.push({ key: OFFICE_DEPT_KEY, label: "Office" });
   // Link each MRF to the purchase request it was escalated into, so the MRF card
   // reflects the live purchasing-chain stage (approved → voucher → purchased → …).
-  const prByMrf = new Map<string, (typeof purchaseRequests)[number]>();
-  for (const pr of purchaseRequests) if (pr.mrfId) prByMrf.set(pr.mrfId, pr);
+  // A split MRF follows its newest LIVE request — not a cancelled sibling
+  // (lib/mrf-linked-pr; the owner's MRF #0624 read "Cancelled" with its PO completed).
+  const prByMrf = linkedPrByMrf(purchaseRequests);
   const prBadge = (s: PRStatus): "secondary" | "warning" | "success" | "destructive" =>
     s === "PENDING_APPROVAL" ? "secondary" : s === "REJECTED" || s === "CANCELLED" ? "destructive" : s === "COMPLETED" ? "success" : "warning";
   // A material requisition is approved (or rejected) by the Plant Manager — the
