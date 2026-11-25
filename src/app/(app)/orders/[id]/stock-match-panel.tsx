@@ -152,7 +152,21 @@ export function StockMatchPanel({
             {(!selectable || rows[i].checked) && (
               <span className="w-full pl-6 text-[11px]">
                 {rows[i].stockItemId && Number(rows[i].qty) > 0 ? (
-                  <span className="text-muted-foreground">→ {rows[i].qty} {verb} <span className="font-medium text-foreground">{nameOf(rows[i].stockItemId)}</span>{locOf(rows[i].stockItemId) ? ` · ${locOf(rows[i].stockItemId)}` : ""}</span>
+                  <>
+                    <span className="text-muted-foreground">→ {rows[i].qty} {verb} <span className="font-medium text-foreground">{nameOf(rows[i].stockItemId)}</span>{locOf(rows[i].stockItemId) ? ` · ${locOf(rows[i].stockItemId)}` : ""}</span>
+                    {(() => {
+                      // Releasing: bought stock that is in but not usable yet
+                      // can't go out (lib/awaiting-delivery) — say so before the press.
+                      const s = selectable ? stockItems.find((x) => x.id === rows[i].stockItemId) : undefined;
+                      if (!s?.awaiting || s.available == null || Number(rows[i].qty) <= s.available) return null;
+                      return (
+                        <span className="block text-amber-700">
+                          ⚠ {s.awaiting} {s.unit} of this is bought but not usable yet — awaiting the Warehouseman&apos;s Receive &amp; Add Stock
+                          {s.available > 0 ? ` (only ${s.available} ${s.unit} free now)` : ""}. Release it once the goods are received.
+                        </span>
+                      );
+                    })()}
+                  </>
                 ) : (
                   <span className="text-amber-600">
                     → {lineSku(l) ? `no stock item has SKU ${lineSku(l)}` : "no SKU on this line"} — choose the item, or nothing will be posted for this line

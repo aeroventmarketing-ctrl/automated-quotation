@@ -1,5 +1,6 @@
 "use client";
 
+import { actionError } from "@/lib/action-result";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -483,7 +484,10 @@ export function MaterialRequests({
                       const released = matches
                         .map((m) => ({ description: releasable[m.lineIndex]?.description ?? "", qty: m.qty }))
                         .filter((x) => x.description);
-                      await releaseMaterialToRequestor(orderId, r.id, matches, released);
+                      // A refusal (e.g. bought stock not usable yet) comes back as a
+                      // sentence; thrown here, the panel shows it under the button.
+                      const refusal = actionError(await releaseMaterialToRequestor(orderId, r.id, matches, released));
+                      if (refusal) throw new Error(refusal);
                       setReleasingId(null);
                       router.refresh();
                     }}

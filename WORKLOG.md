@@ -1,3 +1,26 @@
+## 2026-11-25 · Release to requestor: a readable reason when bought stock isn't usable yet
+
+The owner, pressing **Release & Deduct From Stock** for SPIRAL WRAP CS-08 (WHITE) on an MRF whose PO was
+still *Awaiting approval · Logistics*: *"error when release and deduct from stock button is pressed"* —
+the screen showed Next's production paragraph ("An error occurred in the Server Components render…").
+
+- Cause: the bought quantity went into stock at Cash & Check Released, held as **not usable** until the
+  Warehouseman's Receive & Add Stock (#632, the owner's rule: no MRF release from it). The issue guard
+  refused, correctly — but it THREW, and production redacts a thrown message.
+- `releaseMaterialToRequestor` now checks first and RETURNS the refusal (lib/action-result): *"SPIRAL
+  WRAP CS-08 (WHITE): 1 pc in stock is not usable yet — bought on PO-…, still awaiting the Warehouseman's
+  Receive & Add Stock. Release it once the goods are received (or untick this line)."* Nothing is
+  written; the panel stays open with the reason under the button.
+- The Release panel warns on the line before anyone presses: *"⚠ 1 pc of this is bought but not usable
+  yet — awaiting the Warehouseman's Receive & Add Stock."* (the order page now carries each item's held
+  quantity).
+- The rule itself is unchanged: other lines release as before, and once the PO is received (or the
+  goods confirmed **Delivered** on the Inventory page) the line releases normally.
+
+Verified on the role harness: CONTROL BOX (3 pc, all held on PO-AFBM20260001200) + IDEC PUSH BUTTON (6 pc
+free) on MRF #0921 — the panel warned on the control box; Release refused with the sentence above,
+stock and MRF untouched; unticking it released the push button (6 → 3), MRF *partial*.
+
 ## 2026-11-25 · Release to requestor: each line's stock item is chosen automatically
 
 The owner, on an MRF's **Release to requestor** panel (every line on "— skip —", *"no SKU on this

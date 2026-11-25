@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AWAITING_SUFFIX } from "@/lib/awaiting-delivery";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Store } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -159,6 +160,14 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[])
     : [];
   const reservedById = new Map(stockResv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
+  // …and how much of that is bought stock not usable yet (lib/awaiting-delivery),
+  // so the Release panel can say why before anyone presses the button.
+  const awaitingResv = stockResv.length
+    ? await prisma.stockReservation
+        .groupBy({ by: ["stockItemId"], where: { active: true, forRef: { endsWith: AWAITING_SUFFIX }, stockItemId: { in: stockResv.map((r) => r.stockItemId) } }, _sum: { qty: true } })
+        .catch(() => [] as { stockItemId: string; _sum: { qty: number | null } }[])
+    : [];
+  const awaitingById = new Map(awaitingResv.map((r) => [r.stockItemId, Number(r._sum.qty ?? 0)]));
   const stockItems = stockItemsRaw.map((s) => ({
     id: s.id,
     sku: s.sku,
@@ -166,6 +175,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     unit: s.unit,
     location: s.location,
     available: Math.round((Number(s.quantity) - (reservedById.get(s.id) ?? 0)) * 1000) / 1000,
+    ...(awaitingById.get(s.id) ? { awaiting: awaitingById.get(s.id) } : {}),
   }));
   // Catalogue of purchasable products (for the MRF autocomplete); may be empty
   // before the product table is migrated.

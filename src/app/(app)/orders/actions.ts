@@ -87,6 +87,7 @@ import { buildCommissionsFresh, allDeals, commissionHolds } from "@/lib/sales-co
 import { applyStockChange } from "@/lib/inventory";
 import { revalidateStockCatalogue } from "@/lib/stock-catalogue";
 import { addAwaitingAtCashRelease, confirmAwaitingOnReceive, poRefOf, reverseAwaiting } from "@/lib/awaiting-delivery-data";
+import { AWAITING_SUFFIX, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 import { EARLY_RECEIVE_KEY, canReceiveEarly, readEarlyReceive } from "@/lib/early-receive";
 import { NOT_DUPLICATE_KEY, DUPLICATE_REVIEW_ROLES, readNotDuplicate } from "@/lib/duplicate-requests";
 import { DUPLICATE_FLAGS_TAG } from "@/lib/duplicate-requests-data";
@@ -1872,7 +1873,7 @@ export async function releaseMaterialToRequestor(
   requestId: string,
   matches: StockMatch[] = [],
   released: { description: string; qty: number }[] = [],
-): Promise<void> {
+): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
   const roles = await getWorkflowRoles();
@@ -1910,6 +1911,12 @@ export async function releaseMaterialToRequestor(
   // them into stock; releasing to the department issues them out). Lines left
   // unmatched are skipped — nothing is deducted for them.
   const clean = (matches ?? []).filter((m) => m.stockItemId && Number(m.qty) > 0);
+  // Bought stock still awaiting the Warehouseman's Receive (lib/awaiting-delivery)
+  // can't go out yet — the issue guard refuses it. Say so in words the user can
+  // act on, RETURNED (production redacts a thrown message — lib/action-result),
+  // instead of the redaction paragraph the owner was shown.
+  const blocked = await releaseBlockedByAwaiting(clean);
+  if (blocked) return refuse(blocked);
   const materialRequests = wf.materialRequests.slice();
   materialRequests[idx] = { ...mrf, items, status, releasedAt: new Date().toISOString(), releasedByName: user.name };
   await prisma.$transaction(async (tx) => {
@@ -1941,6 +1948,43 @@ export async function releaseMaterialToRequestor(
     summary: `Released MRF #${mrf.formNo} materials to ${requisitionDeptLabel(mrf.dept)} — ${await orderRefLabel(quotationId)}`,
     entity: "order", entityId: quotationId, href: `/orders/${quotationId}#pending`,
   });
+  return done;
+}
+
+/**
+ * The first released line that would take bought stock not usable yet — held
+ * until the Warehouseman's Receive & Add Stock — as a sentence, or null. The
+ * same arithmetic as the issue guard in `applyStockChange`, per stock item
+ * (two lines on one item add up), checked before anything is written.
+ */
+async function releaseBlockedByAwaiting(matches: StockMatch[]): Promise<string | null> {
+  if (matches.length === 0) return null;
+  const want = new Map<string, number>();
+  for (const m of matches) want.set(m.stockItemId, (want.get(m.stockItemId) ?? 0) + Number(m.qty));
+  const holds = await prisma.stockReservation.findMany({
+    where: { stockItemId: { in: [...want.keys()] }, active: true, forRef: { endsWith: AWAITING_SUFFIX } },
+    select: { stockItemId: true, qty: true, forRef: true },
+  });
+  if (holds.length === 0) return null;
+  const items = await prisma.stockItem.findMany({ where: { id: { in: [...want.keys()] } }, select: { id: true, name: true, unit: true, quantity: true } });
+  for (const it of items) {
+    const mine = holds.filter((h) => h.stockItemId === it.id);
+    const held = mine.reduce((a, h) => a + Number(h.qty), 0);
+    if (held <= 0) continue;
+    const onHand = Number(it.quantity);
+    const usable = Math.max(0, Math.round((onHand - held) * 1000) / 1000);
+    const asked = Math.min(want.get(it.id) ?? 0, Math.max(0, onHand)); // the release deducts at most what is on hand
+    if (asked > usable) {
+      const pos = [...new Set(mine.map((h) => poRefOfAwaiting(h.forRef ?? "")))].join(", ");
+      const n = (x: number) => String(Math.round(x * 1000) / 1000);
+      return (
+        `${it.name}: ${n(held)} ${it.unit} in stock is not usable yet — bought on ${pos}, still awaiting the Warehouseman's ` +
+        `Receive & Add Stock. ${usable > 0 ? `Only ${n(usable)} ${it.unit} can be released now. ` : ""}` +
+        `Release it once the goods are received (or untick this line).`
+      );
+    }
+  }
+  return null;
 }
 
 /**
