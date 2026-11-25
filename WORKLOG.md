@@ -1,3 +1,25 @@
+## 2026-11-25 · Release to requestor: each line's stock item is chosen automatically
+
+The owner, on an MRF's **Release to requestor** panel (every line on "— skip —", *"no SKU on this
+line"*): *"automatically show control box 300 x 250 x 150 in the dropdown instead of manually choosing
+in the dropdown list. Do this to all the item to be released and add to stock."* (Approving this change
+to the frozen Phase 3 release panel.)
+
+- Cause: the panel looked the SKU up on the whole line, `3 pc · CONTROL BOX 300 X 250 X 150`. With the
+  quantity still on the front no item name could ever match, so no line had a SKU and nothing was
+  pre-selected.
+- Now the quantity and unit are taken off first (`itemNameOfLabel`, lib/stock-line-match): the item's
+  name finds its SKU, the SKU picks the stock row (Plant / Office by the department, as before). Still
+  **SKU only** — an item no inventory row carries, or one with no SKU, stays on "skip" and says so.
+- The same panel serves every "add to stock" flow (Receive & Add Stock on a PO, a combined PO, the
+  order's stock release), so all of them use the same lookup. Receive already passed the request
+  line's recorded SKU; this adds the name lookup where none was recorded.
+
+Verified on the role harness: MRF #0921 with CONTROL BOX 300 X 250 X 150 and IDEC PUSH BUTTON … RED
+(both in the Plant Warehouse with a SKU) plus a hand-typed line — the Warehouseman's Release panel
+opened with both items chosen (SKU ELE000123 / ELE000124 · Plant Warehouse); the hand-typed line on
+"skip".
+
 ## 2026-11-25 · Orders: "Possible duplicate request" notice, with a Not a duplicate button
 
 The owner: *"In Orders workflow add a notification for duplicate material request. Notification will

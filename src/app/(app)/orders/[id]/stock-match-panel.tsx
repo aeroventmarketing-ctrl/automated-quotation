@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { pickIssueRow } from "@/lib/stock-location";
 import { buildSkuIndex, skuFor } from "@/lib/item-sku";
 import { ItemSku } from "@/components/item-sku";
-import { stockRowsForLine } from "@/lib/stock-line-match";
+import { stockRowsForLine, itemNameOfLabel } from "@/lib/stock-line-match";
 
 export interface MatchLine {
   label: string;
@@ -59,8 +59,18 @@ export function StockMatchPanel({
     if (dot >= 0) return (noRemark.slice(0, dot).trim().match(/^[\d.]+/) ?? [""])[0];
     return (noRemark.match(/^([\d.]+)\s+\S+\s+/) ?? ["", ""])[1];
   };
-  /** The SKU printed beside the line: its recorded code, else the SKU chip's. */
-  const lineSku = (l: MatchLine): string | null => (l.sku ?? "").trim() || skuFor(l.label, skuIndex);
+  /**
+   * The SKU printed beside the line: its recorded code, else the code of the
+   * item it names. Looked up on the item's name, not the whole label — the owner:
+   * *"when release to requestor button is pressed, automatically show control box
+   * 300 x 250 x 150 in the dropdown instead of manually choosing"*. The release
+   * panel's label is "3 pc · CONTROL BOX 300 X 250 X 150", and with the quantity
+   * still on the front no catalogue name could ever match it, so every line read
+   * "no SKU on this line" and nothing was pre-selected. Still SKU only: the name
+   * finds the item's code, and the code picks the stock row.
+   */
+  const lineSku = (l: MatchLine): string | null =>
+    (l.sku ?? "").trim() || skuFor(l.label, skuIndex) || skuFor(itemNameOfLabel(l.label), skuIndex);
   /**
    * Pre-select the stock item with exactly the line's SKU — and nothing else.
    * The owner: *"Match by SKU only, do not use anything else"*, then *"switch
