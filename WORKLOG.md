@@ -1,3 +1,18 @@
+## 2026-11-26 · Receive & Add Stock: a held Office line is added to stock only once
+
+From the owner's Stock value check (the jump itself was a THHN wire's cost; the owner found it):
+*"add to stock only once"*.
+
+- Cash & Check Released files a Motor Controller / Office line under the **Office** row; Receive & Add
+  Stock (no department to go on) picked the **Plant Warehouse** row of the same SKU. That row had no
+  hold, so Receive added the goods again while the Office hold stayed — the PO in stock twice.
+- Receive now confirms the held row of the same SKU instead of adding to the other row
+  (`remapToHeldRows`, lib/awaiting-delivery; unit- and DB-tested). Rows without a SKU, and SKUs with no
+  held row, are left as the Warehouseman chose. Earlier double counts are not undone automatically.
+
+Verified (DB test): a Motor line held on the Office row (10 pc), received onto the Plant row — nothing
+added on the Plant row (3 stays 3), the Office hold confirmed, Office 10.
+
 ## 2026-11-25 · A split MRF no longer reads "Cancelled" because one of its requests was cancelled
 
 The owner, on MRF #0624 (Motor Controller): *"MRF is cancelled but PO is completed. Please check"* —

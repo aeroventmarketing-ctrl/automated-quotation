@@ -196,3 +196,23 @@ export function planConfirm(matches: readonly { stockItemId: string; qty: number
   };
 }
 
+/**
+ * Receive matched a line to a row with no hold, but a held row of this PO
+ * carries the same SKU (another location of the same item) — move the match
+ * onto the held row, so it confirms what is already in stock rather than adding
+ * it a second time. Rows without a SKU, or SKUs with no held row, are left alone.
+ */
+export function remapToHeldRows<M extends { stockItemId: string }>(
+  matches: readonly M[],
+  heldIds: readonly string[],
+  rows: readonly { id: string; sku: string | null }[],
+): M[] {
+  const code = (id: string) => (rows.find((r) => r.id === id)?.sku ?? "").trim().toUpperCase();
+  return matches.map((m) => {
+    if (heldIds.includes(m.stockItemId)) return m;
+    const c = code(m.stockItemId);
+    if (!c) return m;
+    const held = heldIds.find((h) => code(h) === c);
+    return held ? { ...m, stockItemId: held } : m;
+  });
+}

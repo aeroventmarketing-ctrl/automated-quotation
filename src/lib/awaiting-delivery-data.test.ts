@@ -57,6 +57,19 @@ run("bought stock: in at cash release, usable at Receive", () => {
     expect(await qty()).toBe(10);
   });
 
+  it("a Motor line held on the Office row, received onto the Plant row: confirmed, not added twice", async () => {
+    await prisma.stockItem.create({ data: { id: "plate-office", sku: "CON000755", name: 'MS PLATE 3/16" (4.0mm)', unit: "pc", quantity: 0, location: "Office" } });
+    const motor = { ...pr, dept: "motor" };
+    await prisma.$transaction((tx) => addAwaitingAtCashRelease(tx, motor, [motor], "Rey Gil"));
+    const office = async () => Number((await prisma.stockItem.findUnique({ where: { id: "plate-office" } }))!.quantity);
+    expect(await office()).toBe(10); // Motor files under the Office row
+    const adds = await prisma.$transaction((tx) => confirmAwaitingOnReceive(tx, "PO-TEST0001", [{ stockItemId: "plate", qty: 10 }], "WH"));
+    expect(adds).toEqual([]); // nothing to add on the Plant row
+    expect(await holds()).toHaveLength(0); // the Office hold is confirmed
+    expect(await qty()).toBe(3);
+    expect(await office()).toBe(10);
+  });
+
   it("Receive confirms instead of adding again; a short delivery keeps the rest held", async () => {
     await prisma.$transaction((tx) => addAwaitingAtCashRelease(tx, pr, [pr], "Rey Gil"));
     const adds = await prisma.$transaction((tx) => confirmAwaitingOnReceive(tx, "PO-TEST0001", [{ stockItemId: "plate", qty: 8 }], "Warehouse Wil"));
