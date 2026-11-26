@@ -7,7 +7,7 @@ import { applyStockChange } from "@/lib/inventory";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { OFFICE_DEPT_KEY } from "@/lib/order-workflow";
 import { readEarlyReceive } from "@/lib/early-receive";
-import { AWAITING_NOTE, DELIVERED_MARK, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, type CashReleaseMember } from "@/lib/awaiting-delivery";
+import { AWAITING_NOTE, DELIVERED_MARK, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, remapToHeldRows, type CashReleaseMember } from "@/lib/awaiting-delivery";
 
 type Tx = Prisma.TransactionClient;
 
@@ -85,6 +85,17 @@ export async function confirmAwaitingOnReceive(
     select: { id: true, stockItemId: true, qty: true, createdAt: true },
   });
   if (holds.length === 0 && delivered.length === 0) return matches;
+  // The same goods on another location's row: cash release filed a Motor /
+  // Office line under the Office row, and Receive picked the Plant Warehouse row
+  // of the same SKU. That row has no hold, so it would ADD the goods again while
+  // the Office hold stayed — the PO counted twice in stock (and in its value).
+  // Receive confirms the held row instead.
+  const heldIds = [...new Set([...holds, ...delivered].map((h) => h.stockItemId))];
+  const strays = [...new Set(matches.map((m) => m.stockItemId))].filter((id) => !heldIds.includes(id));
+  if (strays.length) {
+    const rows = await tx.stockItem.findMany({ where: { id: { in: [...heldIds, ...strays] } }, select: { id: true, sku: true } });
+    matches = remapToHeldRows(matches, heldIds, rows);
+  }
   const plan = planConfirm(matches, [
     ...holds.map((h) => ({ ...h, qty: Number(h.qty) })),
     ...delivered.map((h) => ({ ...h, qty: Number(h.qty), confirmed: true })),

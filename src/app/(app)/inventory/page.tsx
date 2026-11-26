@@ -177,13 +177,18 @@ export default async function InventoryPage() {
   const stockValue = Math.round(items.reduce((a, i) => a + i.value, 0) * 100) / 100;
   const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
-  const tiles: { label: string; value: string; href?: string }[] = [
+  // Of the stock value, the bought stock not usable yet (lib/awaiting-delivery) —
+  // in the count since Cash & Check Released, not yet delivered.
+  const awaitingValue = Math.round(items.reduce((a, i) => a + i.awaiting * i.unitCost, 0) * 100) / 100;
+  const tiles: { label: string; value: string; href?: string; sub?: string }[] = [
     { label: "Items", value: String(items.length) },
     // Low / out tiles drill into the item list, filtered to that status.
     { label: "Low stock", value: String(lowCount), href: lowCount > 0 ? "/inventory?status=low#inv-items" : undefined },
     { label: "Out of stock", value: String(outCount), href: outCount > 0 ? "/inventory?status=out#inv-items" : undefined },
     // Stock value is a money figure — only shown to price-authorized viewers.
-    ...(showPrices ? [{ label: "Stock value", value: peso(stockValue) }] : []),
+    // Opens the breakdown of what moved it (lib/stock-value-change) — the owner's
+    // "from 5 million plus yesterday it become 9 million plus … please check".
+    ...(showPrices ? [{ label: "Stock value", value: peso(stockValue), href: "/inventory/value-change", sub: awaitingValue > 0 ? `incl. ${peso(awaitingValue)} bought, not usable yet` : undefined }] : []),
   ];
 
   return (
@@ -231,7 +236,7 @@ export default async function InventoryPage() {
               const card = (
                 <Card className={t.href ? "h-full transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md" : ""}>
                   <CardHeader className="pb-1"><CardTitle className="text-xs uppercase text-muted-foreground">{t.label}</CardTitle></CardHeader>
-                  <CardContent><div className="text-2xl font-bold tabular-nums">{t.value}</div></CardContent>
+                  <CardContent><div className="text-2xl font-bold tabular-nums">{t.value}</div>{t.sub && <div className="mt-0.5 text-[11px] text-amber-700">{t.sub}</div>}</CardContent>
                 </Card>
               );
               return t.href ? <Link key={t.label} href={t.href} className="block">{card}</Link> : <div key={t.label}>{card}</div>;

@@ -1,3 +1,27 @@
+## 2026-11-26 · Stock value — what changed (breakdown) · Receive no longer double-counts a held Office line
+
+The owner, on Inventory (Stock value ₱9,419,741.19): *"from 5 million plus yesterday it become 9 million
+plus in inventory today. Please check"*.
+
+- **Stock value — what changed** (`/inventory/value-change`, opened from the Stock value tile; those who
+  see unit costs only). Pick a day (default yesterday): the value at its start is rebuilt from the
+  recorded stock movements and price movements, against now, with the change **by cause** (bought at
+  Cash & Check Released, purchases received, MRF issues, adjustments, new items …) plus **unit cost
+  changed**, and the items that moved most, each with qty then → now, unit cost then → now and why.
+  `lib/stock-value-change.ts` (tested).
+- The Stock value tile now says how much of it is **bought, not usable yet** (in stock since Cash &
+  Check Released, not yet delivered — #632 counts it from then).
+- **Fixed a double count.** Cash & Check Released files a Motor Controller / Office line under the
+  **Office** row; Receive & Add Stock (no department to go on) picked the **Plant Warehouse** row of the
+  same SKU. That row had no hold, so Receive added the goods again while the Office hold stayed — the PO
+  in stock twice. Receive now confirms the held row of the same SKU instead (`remapToHeldRows`,
+  lib/awaiting-delivery; DB-tested). Earlier double counts are not undone automatically — the
+  breakdown shows them (the same item received on two rows).
+
+Verified on the role harness: a 12 pc motor bought at Cash & Check Released (+₱384,000) and a wire whose
+unit cost went ₱52 → ₱5,200 on a supplier price (+₱5,148,000) — the page split the change exactly so;
+Sales can't open it.
+
 ## 2026-11-25 · A split MRF no longer reads "Cancelled" because one of its requests was cancelled
 
 The owner, on MRF #0624 (Motor Controller): *"MRF is cancelled but PO is completed. Please check"* —
