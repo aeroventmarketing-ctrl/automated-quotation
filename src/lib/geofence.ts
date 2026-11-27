@@ -65,3 +65,61 @@ export function distanceMeters(aLat: number, aLng: number, bLat: number, bLng: n
     Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+
+// --- Per-user locations ---------------------------------------------------------
+//
+// The owner: *"add a geolocation in each user so I can limit in a specific
+// location the usage of the app. Once no coordinate is set user can use it
+// anywhere, once coordinate is set user can use it in the specific location."*
+// Clarified: a radius per user (default 300 m), several locations per user, the
+// whole app blocked outside them (or with location off), admins always exempt.
+//
+// Stored beside the company geofence, in AppSetting — no new column:
+// `{ [userId]: GeofenceLocation[] }`.
+
+export const USER_GEOFENCE_KEY = "user-geofence";
+export const USER_GEOFENCE_DEFAULT_RADIUS = 300;
+
+export type UserGeofences = Record<string, GeofenceLocation[]>;
+
+/** Every user's own allowed locations. Fails open (none) if unreadable. */
+export async function getUserGeofences(): Promise<UserGeofences> {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: USER_GEOFENCE_KEY } });
+    return coerceUserGeofences(row?.value);
+  } catch {
+    return {};
+  }
+}
+
+export function coerceUserGeofences(v: unknown): UserGeofences {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+  const out: UserGeofences = {};
+  for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue;
+    const locs = (list as Record<string, unknown>[])
+      .map((l) => (l && typeof l === "object" ? normalizeLocation(l) : null))
+      .filter((l): l is GeofenceLocation => l != null);
+    if (locs.length) out[id] = locs;
+  }
+  return out;
+}
+
+/**
+ * Where this user may use the app, or null for anywhere:
+ *  - an admin — anywhere, always (nobody can be locked out of the settings);
+ *  - a user with their OWN locations — only within those;
+ *  - otherwise the company geofence, when it is on;
+ *  - otherwise anywhere.
+ */
+export function gateLocationsFor(
+  user: { id: string; admin: boolean },
+  company: GeofenceConfig,
+  perUser: UserGeofences,
+): GeofenceLocation[] | null {
+  if (user.admin) return null;
+  const own = perUser[user.id];
+  if (own && own.length > 0) return own;
+  if (company.enabled && company.locations.length > 0) return company.locations;
+  return null;
+}

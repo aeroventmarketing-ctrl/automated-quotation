@@ -6,7 +6,7 @@ import { GeofenceGate } from "@/components/geofence-gate";
 import { ApproverAlarm } from "@/components/approver-alarm";
 import { CalendarReminders } from "@/components/calendar-reminders";
 import { LiveClock } from "@/components/live-clock";
-import { getGeofence } from "@/lib/geofence";
+import { getGeofence, getUserGeofences, gateLocationsFor } from "@/lib/geofence";
 import { getDisabledRoles, isRoleEnabled } from "@/lib/role-access";
 import { getWorkflowRoles, userHasWorkflowRole, WORKFLOW_ROLE_KEYS, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { getSalesPersonnelIds } from "@/lib/sales-personnel";
@@ -63,9 +63,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Sales tab. SALES-role users are salespeople implicitly.
   const salesPersonnel = user.role === "SALES" || (await getSalesPersonnelIds()).includes(user.id);
 
-  // Location access: when enabled, non-admins are confined to the geofence(s).
-  const geofence = await getGeofence();
-  const gated = geofence.enabled && !isAdmin(user) && geofence.locations.length > 0;
+  // Location access: a user's own allowed locations when an admin set them, else
+  // the company geofence when it is on; admins are never confined (lib/geofence).
+  const [geofence, userGeofences] = await Promise.all([getGeofence(), getUserGeofences()]);
+  const gateLocations = gateLocationsFor({ id: user.id, admin: isAdmin(user) }, geofence, userGeofences);
+  const gated = gateLocations != null;
 
   // Alerts go-live gate: before the launch moment, every alert surface stays
   // silent. This flag blanks the presentational surfaces (inline "awaiting
@@ -132,6 +134,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     </div>
   );
 
-  const content = gated ? <GeofenceGate locations={geofence.locations}>{layout}</GeofenceGate> : layout;
+  const content = gated ? <GeofenceGate locations={gateLocations!}>{layout}</GeofenceGate> : layout;
   return <AlertSuppressionProvider suppressed={alertsSuppressed}>{content}</AlertSuppressionProvider>;
 }

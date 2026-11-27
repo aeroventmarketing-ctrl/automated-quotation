@@ -7,7 +7,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { deriveStoreSlug } from "@/lib/store-product";
-import { getGeofence, GEOFENCE_KEY } from "@/lib/geofence";
+import { getGeofence, GEOFENCE_KEY, USER_GEOFENCE_KEY, coerceUserGeofences } from "@/lib/geofence";
 import { setUserSignatureValue } from "@/lib/signature";
 import { getPropellerSpLock, setPropellerSpLock } from "@/lib/propeller-lock";
 import { getAxialSpLock, setAxialSpLock } from "@/lib/axial-lock";
@@ -568,6 +568,30 @@ export async function saveGeofenceSetting(input: z.infer<typeof geofenceSchema>)
   // The gate lives in the (app) layout — refresh everything.
   revalidatePath("/", "layout");
   return d;
+}
+
+/**
+ * One user's own allowed locations (lib/geofence `USER_GEOFENCE_KEY`). An empty
+ * list removes them — the user is then free to use the app anywhere (or within
+ * the company geofence, when it is on). Admins are always exempt, so an admin
+ * can't be given locations.
+ */
+export async function saveUserGeofence(userId: string, locations: z.infer<typeof geofenceLocationSchema>[]): Promise<void> {
+  await assertAdmin();
+  const list = z.array(geofenceLocationSchema).max(20).parse(locations ?? []);
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, name: true } });
+  if (!target) throw new Error("User not found.");
+  if (target.role === "ADMIN" && list.length > 0) throw new Error("Admins can use the app anywhere — they can't be limited to a location.");
+  const row = await prisma.appSetting.findUnique({ where: { key: USER_GEOFENCE_KEY } });
+  const all = coerceUserGeofences(row?.value);
+  if (list.length > 0) all[userId] = list;
+  else delete all[userId];
+  await prisma.appSetting.upsert({
+    where: { key: USER_GEOFENCE_KEY },
+    create: { key: USER_GEOFENCE_KEY, value: all as unknown as Prisma.InputJsonValue },
+    update: { value: all as unknown as Prisma.InputJsonValue },
+  });
+  revalidatePath("/", "layout");
 }
 
 // --- Propeller Type static-pressure lock ------------------------------------
