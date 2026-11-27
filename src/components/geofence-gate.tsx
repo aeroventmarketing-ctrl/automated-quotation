@@ -65,6 +65,33 @@ export function GeofenceGate({
     check();
   }, [check]);
 
+  // Moving away while the app is open: look again every few minutes, quietly.
+  // Only a reading that is clearly OUTSIDE blocks — a momentary loss of signal
+  // indoors must not throw someone out mid-work.
+  useEffect(() => {
+    if (status !== "ok" || typeof navigator === "undefined" || !navigator.geolocation) return;
+    const t = setInterval(() => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          let best: { distance: number; label: string } | null = null;
+          let inside = false;
+          for (const l of locations) {
+            const d = distanceMeters(pos.coords.latitude, pos.coords.longitude, l.latitude, l.longitude);
+            if (d <= l.radiusMeters) inside = true;
+            if (best == null || d < best.distance) best = { distance: d, label: l.label };
+          }
+          if (!inside) {
+            setNearest(best);
+            setStatus("outside");
+          }
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
+      );
+    }, 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [status, locations]);
+
   if (status === "ok") return <>{children}</>;
 
   const where = nearest?.label ? ` (nearest: ${nearest.label})` : "";

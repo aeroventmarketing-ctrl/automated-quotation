@@ -7,15 +7,19 @@ import { setUserWorkflowRolesAction } from "../actions";
 import { WorkflowRolesManager } from "../workflow-roles/workflow-roles-manager";
 import { UsersManager } from "./users-manager";
 import { LoginAuditCard } from "./login-audit";
+import { UserLocationsCard } from "./user-locations";
+import { getGeofence, getUserGeofences } from "@/lib/geofence";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminUsersPage() {
-  const [users, signatures, assignments, salesPersonnelIds] = await Promise.all([
+  const [users, signatures, assignments, salesPersonnelIds, userGeofences, companyGeofence] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "asc" } }),
     getSignatureMap(),
     getWorkflowRoles(),
     getSalesPersonnelIds(),
+    getUserGeofences(),
+    getGeofence(),
   ]);
   const workflowRoleOptions = WORKFLOW_ROLES.map((r) => ({ key: r.key, label: r.label, group: r.group }));
   const salesSet = new Set(salesPersonnelIds);
@@ -53,6 +57,12 @@ export default async function AdminUsersPage() {
           />
         </CardContent>
       </Card>
+
+      <UserLocationsCard
+        users={byName.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role }))}
+        initial={userGeofences}
+        companyOn={companyGeofence.enabled && companyGeofence.locations.length > 0}
+      />
 
       <LoginAuditCard />
     </div>

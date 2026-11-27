@@ -1,3 +1,30 @@
+## 2026-11-27 · Admin → Users: allowed locations per user
+
+The owner: *"add a geolocation in each user so I can limit in a specific location the usage of the app.
+Once no coordinate is set user can use it anywhere, once coordinate is set user can use it in the
+specific location."* Clarified: a **radius per user** (default 300 m), **several locations** per user,
+the **whole app blocked** outside them (or with location off), **admins always exempt**.
+
+- Admin → Users → **Allowed locations**: every user with where they can use the app. **Set location** /
+  **Edit locations** → name, latitude, longitude, radius (default 300 m), **Use my current location**,
+  add / remove rows → Save. **Remove** clears them. Admins show "Anywhere (admin)" with no button, and the
+  server refuses a location on an admin.
+- A user's own locations override the company geofence (Admin → Location); with none, the company
+  geofence applies when it is on, otherwise anywhere (`gateLocationsFor`, lib/geofence — tested).
+- It uses the existing location gate: outside every allowed radius, or with location denied /
+  unavailable, the app shows *Location restricted* with Retry / Sign out. The gate now also looks again
+  every 5 minutes while the app is open, and blocks if the user has clearly moved outside (a momentary
+  loss of signal does not block).
+- Stored in AppSetting `user-geofence` (`{ userId: locations[] }`) — no migration. `saveUserGeofence`
+  (admin/actions), `UserLocationsCard` (admin/users).
+- Like the company geofence, the check uses the device's reported location in the browser, so it can
+  be defeated by someone faking their GPS; it stops ordinary use away from the site.
+
+Verified on the role harness (Playwright faking positions): admin set Willy Ho (Warehouse) to "Plant",
+300 m, with Use my current location → Willy at the plant: app opens; 9 km away: *Location restricted*;
+location denied: blocked; Allan Ramos (no location) 600 km away: app opens; admin always opens; after
+**Remove**, Willy far away: app opens.
+
 ## 2026-11-27 · Inventory: the Motor Controller head presses Delivered — on Motor Controller's own lines only
 
 The owner, on the "Bought — in stock but not usable yet" box: *"allow motor controller head to press
