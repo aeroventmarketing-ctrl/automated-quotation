@@ -7,7 +7,9 @@ import { applyStockChange } from "@/lib/inventory";
 import { coercePurchaseOrder } from "@/lib/purchase-order";
 import { OFFICE_DEPT_KEY } from "@/lib/order-workflow";
 import { readEarlyReceive } from "@/lib/early-receive";
-import { AWAITING_NOTE, DELIVERED_MARK, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, remapToHeldRows, type CashReleaseMember } from "@/lib/awaiting-delivery";
+import { AWAITING_NOTE, DELIVERED_MARK, SHORT_DELIVERY_MARK, awaitingRef, planCashReleaseAdds, planConfirm, remapToHeldRows, holdRequestDepts, poRefOfAwaiting, type CashReleaseMember, type HoldPoRequest } from "@/lib/awaiting-delivery";
+import { prisma } from "@/lib/db";
+import { poMemberIds } from "@/lib/purchase-batch";
 
 type Tx = Prisma.TransactionClient;
 
@@ -134,3 +136,35 @@ export async function reverseAwaiting(tx: Tx, poRef: string, byName: string, why
   return holds.length;
 }
 
+/**
+ * For each held line, the departments that requested it (lib/awaiting-delivery
+ * `holdRequestDepts`): its PO → the request(s) carrying that PO (with a combined
+ * PO's members) → those whose lines carry the item's SKU. Two small reads.
+ */
+export async function holdDeptsFor(holds: readonly { id: string; forRef: string; stockItemId: string }[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (holds.length === 0) return out;
+  const refs = [...new Set(holds.map((h) => poRefOfAwaiting(h.forRef).trim()))];
+  type Row = { id: string; dept: string | null; itemSkus: unknown; po: unknown };
+  const anchors = await prisma.$queryRaw<(Row & { poNumber: string | null })[]>`
+    select "id", "dept", "itemSkus", "po", "po"->>'poNumber' as "poNumber"
+    from "PurchaseRequest"
+    where "po"->>'poNumber' = any(${refs}::text[]) or "id" = any(${refs}::text[])
+  `;
+  const memberIds = [...new Set(anchors.flatMap((a) => poMemberIds(a.po)))].filter((id) => !anchors.some((a) => a.id === id));
+  const [members, items] = await Promise.all([
+    memberIds.length ? prisma.purchaseRequest.findMany({ where: { id: { in: memberIds } }, select: { id: true, dept: true, itemSkus: true } }) : Promise.resolve([] as Row[]),
+    prisma.stockItem.findMany({ where: { id: { in: [...new Set(holds.map((h) => h.stockItemId))] } }, select: { id: true, sku: true } }),
+  ]);
+  const byId = new Map<string, Row>([...anchors, ...members].map((r) => [r.id, r as Row]));
+  const req = (r: Row): HoldPoRequest => ({ dept: r.dept, itemSkus: Array.isArray(r.itemSkus) ? (r.itemSkus as unknown[]).map((v) => String(v ?? "")) : [] });
+  for (const h of holds) {
+    const ref = poRefOfAwaiting(h.forRef).trim();
+    const anchor = anchors.find((a) => (a.poNumber ?? "").trim() === ref) ?? anchors.find((a) => a.id === ref);
+    if (!anchor) { out.set(h.id, []); continue; }
+    const ids = [...new Set([anchor.id, ...poMemberIds(anchor.po)])];
+    const prs = ids.map((id) => byId.get(id)).filter((r): r is Row => !!r).map(req);
+    out.set(h.id, holdRequestDepts(items.find((i) => i.id === h.stockItemId)?.sku, prs));
+  }
+  return out;
+}

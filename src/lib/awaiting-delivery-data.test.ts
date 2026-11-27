@@ -14,7 +14,7 @@ process.env.DIRECT_URL = TEST_DB;
 
 const { PrismaClient } = await import("@prisma/client");
 const prisma = new (PrismaClient as unknown as new () => import("@prisma/client").PrismaClient)();
-const { addAwaitingAtCashRelease, confirmAwaitingOnReceive, reverseAwaiting } = await import("./awaiting-delivery-data");
+const { addAwaitingAtCashRelease, confirmAwaitingOnReceive, reverseAwaiting, holdDeptsFor } = await import("./awaiting-delivery-data");
 const { applyStockChange } = await import("./inventory");
 const { DELIVERED_MARK } = await import("./awaiting-delivery");
 
@@ -55,6 +55,25 @@ run("bought stock: in at cash release, usable at Receive", () => {
     await expect(prisma.$transaction((tx) => applyStockChange(tx, { stockItemId: "plate", kind: "ISSUE", qty: 4, reason: "MRF #1" }, "WH"))).rejects.toThrow(/Only 3 pc .* usable — 10 pc not usable yet/);
     await prisma.$transaction((tx) => applyStockChange(tx, { stockItemId: "plate", kind: "ISSUE", qty: 3, reason: "MRF #1" }, "WH"));
     expect(await qty()).toBe(10);
+  });
+
+  it("finds who requested each held line — its own PO, and a combined PO's members", async () => {
+    await prisma.purchaseRequest.deleteMany({ where: { id: { in: ["d-mc", "d-anchor", "d-fans"] } } });
+    const base = { kind: "order", status: "CASH_RELEASED" as const, createdById: "x", createdByName: "x" };
+    await prisma.purchaseRequest.createMany({ data: [
+      { ...base, id: "d-mc", dept: "motor", items: ["10 pc · MS PLATE"], itemSkus: ["CON000755"], po: { poNumber: "PO-MC1" } },
+      { ...base, id: "d-anchor", dept: "motor", items: ["1 pc · X"], itemSkus: ["CON1"], po: { poNumber: "PO-COMB1", memberPrIds: ["d-anchor", "d-fans"] } },
+      { ...base, id: "d-fans", dept: "fans", items: ["5 pc · MS PLATE"], itemSkus: ["CON000755"], po: {} },
+    ] });
+    const m = await holdDeptsFor([
+      { id: "h1", forRef: "PO-MC1 · awaiting delivery confirmation", stockItemId: "plate" },
+      { id: "h2", forRef: "PO-COMB1 · awaiting delivery confirmation", stockItemId: "plate" },
+      { id: "h3", forRef: "PO-NOPE · awaiting delivery confirmation", stockItemId: "plate" },
+    ]);
+    expect(m.get("h1")).toEqual(["motor"]);
+    expect(m.get("h2")).toEqual(["fans"]); // the plate on the combined PO is the Fans member's line
+    expect(m.get("h3")).toEqual([]);
+    await prisma.purchaseRequest.deleteMany({ where: { id: { in: ["d-mc", "d-anchor", "d-fans"] } } });
   });
 
   it("a Motor line held on the Office row, received onto the Plant row: confirmed, not added twice", async () => {

@@ -18,6 +18,11 @@ export interface AwaitingHoldView {
   since: string;
   /** A short delivery left this behind — the PO itself is already received. */
   leftover: boolean;
+  /**
+   * This viewer may press Delivered on it — every line for the Warehouseman /
+   * admin, the Motor Controller head's own department's lines (lib/catalogue-access).
+   */
+  canConfirm: boolean;
 }
 
 const fmt = (n: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 3 }).format(n);
@@ -28,7 +33,7 @@ const when = (iso: string) =>
  * Bought stock that is in the inventory but not usable yet (lib/awaiting-delivery)
  * — shown to everyone on the Inventory tab, so anyone can remind the Warehouseman.
  */
-export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds: AwaitingHoldView[]; canConfirm: boolean; canRemove: boolean }) {
+export function AwaitingDeliveryPanel({ holds, canRemove }: { holds: AwaitingHoldView[]; canRemove: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -37,14 +42,19 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
   // delivered button and not delivered button".
   const [sel, setSel] = useState<Set<string>>(new Set());
   if (holds.length === 0) return null;
-  const canAct = canConfirm || canRemove;
-  const chosen = holds.filter((h) => sel.has(h.id));
-  const allOn = chosen.length === holds.length;
+  // What this viewer may tick: every line when they may remove stock (admin),
+  // otherwise the lines they may confirm.
+  const actionable = holds.filter((h) => canRemove || h.canConfirm);
+  const canAct = actionable.length > 0;
+  const canConfirm = holds.some((h) => h.canConfirm);
+  const chosen = actionable.filter((h) => sel.has(h.id));
+  const chosenConfirmable = chosen.filter((h) => h.canConfirm);
+  const allOn = chosen.length === actionable.length;
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   /** Tick every line of one PO (or untick them if all are ticked). */
   const togglePo = (po: string) =>
     setSel((s) => {
-      const ids = holds.filter((h) => h.poRef === po).map((h) => h.id);
+      const ids = actionable.filter((h) => h.poRef === po).map((h) => h.id);
       const n = new Set(s);
       const on = ids.every((id) => n.has(id));
       for (const id of ids) if (on) n.delete(id); else n.add(id);
@@ -52,18 +62,19 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
     });
 
   async function bulk(kind: "delivered" | "removed") {
-    if (chosen.length === 0) return;
-    const pos = [...new Set(chosen.map((h) => h.poRef))];
+    const lines = kind === "delivered" ? chosenConfirmable : chosen;
+    if (lines.length === 0) return;
+    const pos = [...new Set(lines.map((h) => h.poRef))];
     const text =
       kind === "delivered"
-        ? `Mark ${chosen.length} line${chosen.length === 1 ? "" : "s"} delivered (${pos.join(", ")})? They become usable now.`
-        : `Not delivered: take ${chosen.length} line${chosen.length === 1 ? "" : "s"} back out of stock (${pos.join(", ")})?`;
+        ? `Mark ${lines.length} line${lines.length === 1 ? "" : "s"} delivered (${pos.join(", ")})? They become usable now.`
+        : `Not delivered: take ${lines.length} line${lines.length === 1 ? "" : "s"} back out of stock (${pos.join(", ")})?`;
     if (!window.confirm(text)) return;
     setBusy("bulk");
     setErr(null);
     setMsg(null);
     try {
-      const ids = chosen.map((h) => h.id);
+      const ids = lines.map((h) => h.id);
       const r = kind === "delivered" ? await confirmAwaitingDeliveries(ids) : await removeUndeliveredStocks(ids);
       setMsg(
         `${r.done} line${r.done === 1 ? "" : "s"} ${kind === "delivered" ? "marked delivered" : "taken back out of stock"}` +
@@ -107,9 +118,9 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
           <span className="text-amber-900/80 dark:text-amber-200/80">
             {chosen.length > 0 ? `${chosen.length} selected` : "Tick lines (or a PO number) to act on several at once."}
           </span>
-          {chosen.length > 0 && canConfirm && (
+          {chosenConfirmable.length > 0 && canConfirm && (
             <Button size="sm" className="h-7 px-2 text-xs" disabled={busy === "bulk"} onClick={() => bulk("delivered")}>
-              {busy === "bulk" ? "…" : `Delivered (${chosen.length})`}
+              {busy === "bulk" ? "…" : `Delivered (${chosenConfirmable.length})`}
             </Button>
           )}
           {chosen.length > 0 && canRemove && (
@@ -133,7 +144,7 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
                     type="checkbox"
                     className="accent-amber-600"
                     checked={allOn}
-                    onChange={() => setSel(allOn ? new Set() : new Set(holds.map((h) => h.id)))}
+                    onChange={() => setSel(allOn ? new Set() : new Set(actionable.map((h) => h.id)))}
                     aria-label="Select all"
                     title="Select all"
                   />
@@ -151,7 +162,9 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
               <tr key={h.id} className={`border-b border-amber-200 last:border-0 ${sel.has(h.id) ? "bg-amber-100/70 dark:bg-amber-900/30" : ""}`}>
                 {canAct && (
                   <td className="py-1 pr-1">
-                    <input type="checkbox" className="accent-amber-600" checked={sel.has(h.id)} onChange={() => toggle(h.id)} aria-label={`Select ${h.itemName}`} />
+                    {(canRemove || h.canConfirm) && (
+                      <input type="checkbox" className="accent-amber-600" checked={sel.has(h.id)} onChange={() => toggle(h.id)} aria-label={`Select ${h.itemName}`} />
+                    )}
                   </td>
                 )}
                 <td className="py-1 pr-2">
@@ -176,7 +189,7 @@ export function AwaitingDeliveryPanel({ holds, canConfirm, canRemove }: { holds:
                   {/* The shortcut for the Warehouseman: the goods are here, make
                       them usable. The PO's own Receive later counts them as in
                       stock already — nothing is added twice. */}
-                  {canConfirm && (
+                  {h.canConfirm && (
                     <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]" disabled={busy === h.id}
                       onClick={() => run(h.id, () => confirmAwaitingDelivery(h.id), `Confirm ${h.leftover ? "the rest of " : ""}${h.itemName} arrived? ${fmt(h.qty)} ${h.unit} become usable.`)}>
                       Delivered

@@ -1,3 +1,25 @@
+## 2026-11-27 · Inventory: the Motor Controller head presses Delivered — on Motor Controller's own lines only
+
+The owner, on the "Bought — in stock but not usable yet" box: *"allow motor controller head to press
+the delivered button but limited to items requested by motor controller department only"*.
+
+- Each held line is traced to who asked for it: its PO → the request(s) carrying that PO (a combined
+  PO's members too) → those whose lines carry the item's SKU (every request on the PO when none
+  records it). `holdDeptsFor` (awaiting-delivery-data), `holdRequestDepts` / `canConfirmHold`
+  (lib/awaiting-delivery) — unit- and DB-tested.
+- The **Motor Controller head** sees **Delivered** (and a tick box for the bulk Delivered) only on lines
+  every one of whose requests is Motor Controller's. A line shared with another department, or whose
+  request can't be found, stays with the Warehouseman. **Not delivered** stays admin only.
+- The rule lives in `lib/catalogue-access` (`confirmDeliveryDepts`, `canConfirmAnyDelivery`,
+  `canRemoveUndelivered`) and the capability grid (new rows; the Motor Controller head added as a
+  person — the only moved cells are the new rows). The server action applies the same rule: other
+  lines are skipped, and a request for none of one's own is refused.
+- The role harness gains a Motor Controller head ("Marco Dela Cruz").
+
+Verified on the role harness: PO-MC0001 (Motor Controller, control box) and PO-FAN0001 (Fans, push
+button) both held — the Motor Controller head saw Delivered on the control box only and confirmed it
+(released by Marco Dela Cruz; the Fans line still held); the Warehouseman saw both; Sales neither.
+
 ## 2026-11-26 · Receive & Add Stock: a held Office line is added to stock only once
 
 From the owner's Stock value check (the jump itself was a THHN wire's cost; the owner found it):

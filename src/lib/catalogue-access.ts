@@ -61,6 +61,17 @@ export interface InventoryAccess {
   pendingFirst: boolean;
   /** The approval history — the record of decided requests, at /inventory/approvals. */
   canViewApprovalHistory: boolean;
+  /**
+   * "Delivered" on bought stock not usable yet (lib/awaiting-delivery): `"all"`
+   * for every line, or the departments whose requests this viewer may confirm —
+   * the owner: *"allow motor controller head to press the delivered button but
+   * limited to items requested by motor controller department only"*.
+   */
+  confirmDeliveryDepts: "all" | readonly string[];
+  /** Every line's Delivered — the Warehouseman and the admin. */
+  canConfirmAnyDelivery: boolean;
+  /** Not delivered (takes the bought quantity back out) — the admin. */
+  canRemoveUndelivered: boolean;
   /** Whose signature this viewer can give, and the sentence the panels show. */
   isPriceOwner: boolean;
   chainNote: string;
@@ -144,6 +155,9 @@ export function inventoryAccess(user: User | null | undefined, roles: WorkflowRo
     // it is decided. Anyone who never had a signature to give has no record to
     // read — and the record names people and quotes prices.
     canViewApprovalHistory: watchesCatalogueApprovals(user, roles),
+    confirmDeliveryDepts: admin || has("warehouse") ? "all" : has("prod_head_motor") ? ["motor"] : [],
+    canConfirmAnyDelivery: admin || has("warehouse"),
+    canRemoveUndelivered: admin,
     isPriceOwner: priceOwner,
     // The order of these tests mirrors `proposedRole` in stock-action-actions —
     // price owner, then Warehouse, then Purchaser — so a panel never promises a

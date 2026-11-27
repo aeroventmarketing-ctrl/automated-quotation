@@ -46,6 +46,9 @@ const CAST = [
   // them — which is exactly how the nav came to offer them Products while the
   // page refused it. A base role the harness cannot look as is a blind spot.
   { email: "harness-eng@test", name: "Elena Cruz", base: "ENGINEER", roles: [] },
+  // A department head: the Motor Controller head confirms Delivered on bought
+  // stock their own department requested, and nothing else (lib/catalogue-access).
+  { email: "harness-mc@test", name: "Marco Dela Cruz", base: "OTHER", roles: ["prod_head_motor"] },
 ];
 
 /**
