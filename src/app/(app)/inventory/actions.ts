@@ -16,7 +16,9 @@ import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/l
 import { logActivity } from "@/lib/activity-log";
 import { logPriceChange } from "@/lib/inventory-history-data";
 import { applyStockChange } from "@/lib/inventory";
-import { DELIVERED_MARK, isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
+import { holdDeptsFor } from "@/lib/awaiting-delivery-data";
+import { DELIVERED_MARK, canConfirmHold, isAwaitingRef, poRefOfAwaiting } from "@/lib/awaiting-delivery";
+import { inventoryAccess } from "@/lib/catalogue-access";
 
 async function requireInventoryManager() {
   const user = await getCurrentUser();
@@ -889,12 +891,21 @@ export async function confirmAwaitingDelivery(reservationId: string): Promise<vo
 export async function confirmAwaitingDeliveries(reservationIds: string[]): Promise<{ done: number; skipped: number }> {
   const user = await getCurrentUser();
   if (!user) throw new Error("Unauthorized");
-  if (!(isAdmin(user) || userHasWorkflowRole(await getWorkflowRoles(), user.id, "warehouse" as WorkflowRoleKey))) {
-    throw new Error("Only the Warehouseman or an admin can confirm a delivery.");
-  }
+  // The Warehouseman / admin: every line. The Motor Controller head: only lines
+  // requested by Motor Controller (lib/catalogue-access `confirmDeliveryDepts`).
+  const scope = inventoryAccess(user, await getWorkflowRoles()).confirmDeliveryDepts;
+  if (scope !== "all" && scope.length === 0) throw new Error("Only the Warehouseman or an admin can confirm a delivery.");
   const ids = [...new Set((reservationIds ?? []).filter((x) => typeof x === "string" && x))];
   const holds = await prisma.stockReservation.findMany({ where: { id: { in: ids } } });
-  const live = holds.filter((r) => r.active && isAwaitingRef(r.forRef));
+  let live = holds.filter((r) => r.active && isAwaitingRef(r.forRef));
+  if (scope !== "all") {
+    const depts = await holdDeptsFor(live);
+    const mine = live.filter((r) => canConfirmHold(scope, depts.get(r.id) ?? []));
+    if (live.length > 0 && mine.length === 0) {
+      throw new Error("You can confirm only items requested by your department — the Warehouseman confirms the rest.");
+    }
+    live = mine;
+  }
   // Marked, so the PO's own Receive later counts it as in stock already and
   // doesn't add it a second time (lib/awaiting-delivery — DELIVERED_MARK).
   const now = new Date();

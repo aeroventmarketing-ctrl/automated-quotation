@@ -35,6 +35,7 @@ const WHO = {
   plantManager: { base: "OTHER", roles: ["plant_manager"] },
   logistics: { base: "OTHER", roles: ["logistics"] },
   prodHead: { base: "OTHER", roles: ["prod_head_duct"] },
+  motorHead: { base: "OTHER", roles: ["prod_head_motor"] },
   nobody: { base: "OTHER", roles: [] },
 } as const;
 type Who = keyof typeof WHO;
@@ -57,7 +58,7 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
   // engineer role"* — closing the last of the nav-offers/page-refuses pairs the
   // grid found on its first run. Read only: every management cell below leaves
   // them false.
-  canView: only("admin", "sales", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
+  canView: only("admin", "sales", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead", "motorHead"),
   // Label / Reserve / Adjust: the people who hold the stock.
   canManageItems: only("admin", "warehouse"),
   // Wider than the item actions: the Plant Manager moves stock between locations.
@@ -80,7 +81,7 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
   // Money columns. The Warehouse manages stock without seeing its value.
   showPrices: only("admin", "engineer", "purchaser", "paymentApprover", "accounting"),
   // Sell price is narrower still — not for the people who buy or count.
-  showSellPrice: only("admin", "sales", "engineer", "paymentApprover", "plantManager", "logistics", "prodHead", "nobody"),
+  showSellPrice: only("admin", "sales", "engineer", "paymentApprover", "plantManager", "logistics", "prodHead", "motorHead", "nobody"),
   // Labels / Reorder: those target pages deny everyone else.
   showHeaderTools: only("admin", "engineer", "purchaser", "nobody"),
   // The four parties to a request see it float to the top.
@@ -89,6 +90,12 @@ const INVENTORY: Record<keyof ReturnType<typeof inventoryAccess> & string, Recor
   // people and quotes prices.
   canViewApprovalHistory: only("admin", "warehouse", "purchaser", "paymentApprover"),
   isPriceOwner: only("admin", "paymentApprover"),
+  // Delivered on every bought-not-usable line: the people who hold the stock.
+  // (The Motor Controller head confirms their OWN department's lines — see
+  // `confirmDeliveryDepts` below.)
+  canConfirmAnyDelivery: only("admin", "warehouse"),
+  // Not delivered lowers on hand: the admin alone.
+  canRemoveUndelivered: only("admin"),
 };
 
 // ---------------------------------------------------------------------------
@@ -107,7 +114,7 @@ const PRODUCTS: Record<string, Record<Who, boolean>> = {
   // as current truth, because the fix there is arguably the other way round —
   // stop offering the tab to someone with no configured role — and that is the
   // owner's call, not this file's.
-  canView: only("admin", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead"),
+  canView: only("admin", "engineer", "warehouse", "purchaser", "paymentApprover", "accounting", "plantManager", "logistics", "prodHead", "motorHead"),
   // Per-row Edit. The Purchaser's save is parked for the price owner.
   canManage: only("admin", "purchaser", "paymentApprover"),
   // The two list-shaping buttons the owner took off the Purchaser.
@@ -154,6 +161,13 @@ describe("the catalogue capability grid", () => {
 
   // The two regressions that reached the owner, pinned by name so a future
   // change to the surrounding rules has to confront them.
+  it("Delivered: every line for the Warehouseman / admin, Motor Controller lines for its head, none for anyone else", () => {
+    const depts = Object.fromEntries(EVERYONE.map((w) => [w, inventoryAccess(...as(w)).confirmDeliveryDepts]));
+    expect(depts).toEqual(
+      Object.fromEntries(EVERYONE.map((w) => [w, w === "admin" || w === "warehouse" ? "all" : w === "motorHead" ? ["motor"] : []])),
+    );
+  });
+
   describe("regressions", () => {
     it("the Payment Approver can open Inventory and see what they are signing", () => {
       const a = inventoryAccess(...as("paymentApprover"));

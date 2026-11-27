@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { AwaitingDeliveryPanel } from "./awaiting-delivery-panel";
-import { isAwaitingRef, isShortDeliveryLeftover, poRefOfAwaiting } from "@/lib/awaiting-delivery";
+import { canConfirmHold, isAwaitingRef, isShortDeliveryLeftover, poRefOfAwaiting } from "@/lib/awaiting-delivery";
 import { ShoppingCart, History, ScrollText } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { getCurrentUser, isAdmin } from "@/lib/auth";
 import { getWorkflowRoles, userHasWorkflowRole, type WorkflowRoleKey } from "@/lib/workflow-roles";
 import { inventoryAccess } from "@/lib/catalogue-access";
+import { holdDeptsFor } from "@/lib/awaiting-delivery-data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getStockLocations } from "@/lib/stock-locations";
 import { InventoryManager } from "./inventory-manager";
@@ -177,6 +178,18 @@ export default async function InventoryPage() {
   const stockValue = Math.round(items.reduce((a, i) => a + i.value, 0) * 100) / 100;
   const peso = (n: number) => "₱" + new Intl.NumberFormat("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
+  // Bought stock not usable yet (lib/awaiting-delivery), and who may press
+  // Delivered on each line: the Warehouseman / admin all of them; the Motor
+  // Controller head the lines Motor Controller requested (`confirmDeliveryDepts`).
+  const awaitingHolds = items.flatMap((i) =>
+    i.reservations
+      .filter((r) => isAwaitingRef(r.forRef))
+      .map((r) => ({ id: r.id, itemId: i.id, itemName: i.name, sku: i.sku, unit: i.unit, qty: r.qty, poRef: poRefOfAwaiting(r.forRef), since: r.createdAt, leftover: isShortDeliveryLeftover(r.note), forRef: r.forRef })),
+  );
+  const awaitingDepts =
+    Array.isArray(a.confirmDeliveryDepts) && a.confirmDeliveryDepts.length > 0
+      ? await holdDeptsFor(awaitingHolds.map((h) => ({ id: h.id, forRef: h.forRef, stockItemId: h.itemId }))).catch(() => new Map<string, string[]>())
+      : new Map<string, string[]>();
   const tiles: { label: string; value: string; href?: string }[] = [
     { label: "Items", value: String(items.length) },
     // Low / out tiles drill into the item list, filtered to that status.
@@ -240,13 +253,8 @@ export default async function InventoryPage() {
           {admin && dupeGroups.length > 0 && <DuplicateItemsPanel groups={dupeGroups} />}
 
           <AwaitingDeliveryPanel
-            holds={items.flatMap((i) =>
-              i.reservations
-                .filter((r) => isAwaitingRef(r.forRef))
-                .map((r) => ({ id: r.id, itemId: i.id, itemName: i.name, sku: i.sku, unit: i.unit, qty: r.qty, poRef: poRefOfAwaiting(r.forRef), since: r.createdAt, leftover: isShortDeliveryLeftover(r.note) })),
-            )}
-            canConfirm={viewerIsWarehouse}
-            canRemove={admin}
+            holds={awaitingHolds.map((h) => ({ ...h, canConfirm: canConfirmHold(a.confirmDeliveryDepts, awaitingDepts.get(h.id) ?? []) }))}
+            canRemove={a.canRemoveUndelivered}
           />
 
           <Card id="inv-items" className="scroll-mt-20">

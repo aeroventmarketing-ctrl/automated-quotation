@@ -216,3 +216,34 @@ export function remapToHeldRows<M extends { stockItemId: string }>(
     return held ? { ...m, stockItemId: held } : m;
   });
 }
+
+// --- Who may press Delivered on a line ------------------------------------------
+
+export interface HoldPoRequest {
+  dept: string | null;
+  itemSkus: readonly string[];
+}
+
+/**
+ * The departments that asked for this held item on its PO: the requests on the
+ * PO whose lines carry the item's SKU, or — when none can be told apart (no SKU
+ * recorded) — every request on the PO. "" stands for a request with no department.
+ */
+export function holdRequestDepts(sku: string | null | undefined, prs: readonly HoldPoRequest[]): string[] {
+  const code = (sku ?? "").trim().toUpperCase();
+  const hit = code ? prs.filter((p) => p.itemSkus.some((s) => (s ?? "").trim().toUpperCase() === code)) : [];
+  return [...new Set((hit.length ? hit : prs).map((p) => p.dept ?? ""))];
+}
+
+/**
+ * May this viewer press Delivered on a line? `"all"` — the Warehouseman, the
+ * admin. A list of departments — only a line every one of whose requests is
+ * from those departments (the owner: the Motor Controller head, *"limited to
+ * items requested by motor controller department only"*). A line shared with
+ * another department, or one whose request can't be found, stays with the
+ * Warehouseman.
+ */
+export function canConfirmHold(scope: "all" | readonly string[], depts: readonly string[]): boolean {
+  if (scope === "all") return true;
+  return depts.length > 0 && depts.every((d) => !!d && scope.includes(d));
+}
